@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from backend.api.v1.endpoints import auth, devices, notification, users
+from backend.api.v1.endpoints import auth, devices, notification, realtime, users
 
 # Router central de la version 1 de la API.
 api_router = APIRouter()
@@ -9,6 +9,7 @@ api_router = APIRouter()
 api_router.include_router(auth.router)
 api_router.include_router(devices.router)
 api_router.include_router(notification.router)
+api_router.include_router(realtime.router)
 api_router.include_router(users.router)
 
 
