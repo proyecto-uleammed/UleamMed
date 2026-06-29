@@ -8,6 +8,11 @@ build/
 
 requirements.txt
 
+# Python local files
+venv/
+__pycache__/
+*.py[cod]
+
 # Local configuration file (sdk path, etc)
 local.properties
 
@@ -35,6 +40,11 @@ render.experimental.xml
 
 # Google Services (e.g. APIs or Firebase)
 google-services.json
+firebase-credentials.json
+
+# Local backend secrets and generated documentation
+.env
+docu_archive.md
 
 # Android Profiling
 *.hprof
