@@ -12,15 +12,18 @@ from backend.schemas.user import TokenPair, UserCreate
 
 
 def obtener_usuario_por_email(db: Session, email: str) -> User | None:
+    """Busca un usuario por correo, normalizando a minusculas."""
     statement = select(User).where(User.email == email.lower())
     return db.scalar(statement)
 
 
 def obtener_usuario_por_id(db: Session, user_id: int) -> User | None:
+    """Busca un usuario por su identificador primario."""
     return db.get(User, user_id)
 
 
 def crear_usuario(db: Session, datos: UserCreate) -> User:
+    """Crea un usuario con contrasena hasheada y lo guarda en la BD."""
     usuario = User(
         email=datos.email.lower(),
         full_name=datos.full_name,
@@ -33,6 +36,7 @@ def crear_usuario(db: Session, datos: UserCreate) -> User:
 
 
 def autenticar_usuario(db: Session, email: str, password: str) -> User | None:
+    """Valida correo y contrasena; devuelve None si las credenciales fallan."""
     usuario = obtener_usuario_por_email(db, email)
     if usuario is None:
         return None
@@ -42,6 +46,7 @@ def autenticar_usuario(db: Session, email: str, password: str) -> User | None:
 
 
 def crear_tokens_para_usuario(usuario: User) -> TokenPair:
+    """Genera access token y refresh token para un usuario valido."""
     subject = str(usuario.id)
     return TokenPair(
         access_token=crear_access_token(subject),

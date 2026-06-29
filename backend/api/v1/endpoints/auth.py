@@ -13,11 +13,13 @@ from backend.services.auth_service import (
 )
 
 
+# Todas las rutas de este archivo quedan bajo /api/v1/auth.
 router = APIRouter(prefix="/auth", tags=["autenticacion"])
 
 
 @router.post("/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)
 def registrar_usuario(datos: UserCreate, db: Session = Depends(get_db)) -> UserRead:
+    """Registra un usuario nuevo si el correo aun no existe."""
     if obtener_usuario_por_email(db, datos.email) is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -29,6 +31,7 @@ def registrar_usuario(datos: UserCreate, db: Session = Depends(get_db)) -> UserR
 
 @router.post("/login", response_model=TokenPair)
 def iniciar_sesion(datos: LoginRequest, db: Session = Depends(get_db)) -> TokenPair:
+    """Valida credenciales y devuelve access token mas refresh token."""
     usuario = autenticar_usuario(db, datos.email, datos.password)
     if usuario is None or not usuario.is_active:
         raise HTTPException(
@@ -42,7 +45,9 @@ def iniciar_sesion(datos: LoginRequest, db: Session = Depends(get_db)) -> TokenP
 
 @router.post("/refresh", response_model=AccessToken)
 def renovar_access_token(datos: RefreshRequest, db: Session = Depends(get_db)) -> AccessToken:
+    """Usa un refresh token valido para entregar un nuevo access token."""
     try:
+        # Solo se aceptan tokens creados como refresh, no access tokens.
         payload = decodificar_token(datos.refresh_token)
         user_id = payload.get("sub")
         token_type = payload.get("type")
@@ -55,6 +60,7 @@ def renovar_access_token(datos: RefreshRequest, db: Session = Depends(get_db)) -
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
 
+    # Antes de renovar, confirma que el usuario sigue existiendo y activo.
     usuario = obtener_usuario_por_id(db, int(user_id))
     if usuario is None or not usuario.is_active:
         raise HTTPException(

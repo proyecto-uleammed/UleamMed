@@ -8,6 +8,7 @@ from backend.models.user import User
 from backend.services.auth_service import obtener_usuario_por_id
 
 
+# FastAPI usa esta configuracion para leer el token Bearer del header Authorization.
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 
@@ -15,6 +16,7 @@ def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
 ) -> User:
+    """Obtiene el usuario autenticado desde el access token."""
     credenciales_invalidas = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="No se pudieron validar las credenciales",
@@ -22,6 +24,7 @@ def get_current_user(
     )
 
     try:
+        # El token debe estar firmado correctamente y ser de tipo access.
         payload = decodificar_token(token)
         user_id = payload.get("sub")
         token_type = payload.get("type")
@@ -30,6 +33,7 @@ def get_current_user(
     except ValueError as exc:
         raise credenciales_invalidas from exc
 
+    # Si el usuario no existe o esta inactivo, la ruta se considera no autorizada.
     usuario = obtener_usuario_por_id(db, int(user_id))
     if usuario is None or not usuario.is_active:
         raise credenciales_invalidas
