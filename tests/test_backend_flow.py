@@ -7,6 +7,7 @@ from sqlalchemy.pool import StaticPool
 
 from backend.app.main import app
 from backend.core.database import Base, get_db
+from backend.core.security import crear_access_token
 from backend.models.user import User
 
 
@@ -69,6 +70,14 @@ class BackendIntegratedFlowTest(unittest.TestCase):
         self.assertEqual(perfil.status_code, 200)
         self.assertEqual(perfil.json()["email"], "persona@uleam.edu.ec")
 
+        actualizar_vacio = self.client.patch(
+            "/api/v1/users/me",
+            headers=headers,
+            json={},
+        )
+        self.assertEqual(actualizar_vacio.status_code, 200)
+        self.assertEqual(actualizar_vacio.json()["full_name"], "Persona Demo")
+
         actualizar = self.client.patch(
             "/api/v1/users/me",
             headers=headers,
@@ -112,6 +121,30 @@ class BackendIntegratedFlowTest(unittest.TestCase):
         self.assertEqual(conectado["type"], "conexion_establecida")
         self.assertEqual(eco["type"], "eco")
         self.assertEqual(eco["message"], "hola tiempo real")
+
+    def test_token_con_subject_invalido_devuelve_401(self) -> None:
+        """Un token firmado pero con subject no numerico no debe generar 500."""
+        token = crear_access_token("usuario-invalido")
+
+        respuesta = self.client.get(
+            "/api/v1/users/me",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        self.assertEqual(respuesta.status_code, 401)
+
+    def test_cors_permite_preflight_de_flutter_web(self) -> None:
+        """Valida que un frontend web pueda llamar a la API desde otro origen."""
+        respuesta = self.client.options(
+            "/api/v1/health",
+            headers={
+                "Origin": "http://localhost:5173",
+                "Access-Control-Request-Method": "GET",
+            },
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.headers["access-control-allow-origin"], "http://localhost:5173")
 
 
 if __name__ == "__main__":

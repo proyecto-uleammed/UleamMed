@@ -29,19 +29,37 @@ Variables principales:
 - `ACCESS_TOKEN_EXPIRE_MINUTES`: duracion del access token.
 - `REFRESH_TOKEN_EXPIRE_DAYS`: duracion del refresh token.
 - `FIREBASE_CREDENTIALS`: ruta al JSON de Firebase Admin SDK.
+- `CORS_ORIGINS`: origenes permitidos para Flutter Web separados por coma; en desarrollo puede usarse `*`.
 - `ENVIRONMENT`: entorno de ejecucion.
 
 ## Instalacion
+
+Windows:
 
 ```powershell
 python -m venv venv
 venv\Scripts\pip.exe install -r requirements.txt
 ```
 
+Linux/macOS:
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+```
+
 ## Ejecutar el backend
+
+Windows:
 
 ```powershell
 venv\Scripts\uvicorn.exe backend.app.main:app --reload
+```
+
+Linux/macOS:
+
+```bash
+.venv/bin/python -m uvicorn backend.app.main:app --reload
 ```
 
 Luego abrir:
