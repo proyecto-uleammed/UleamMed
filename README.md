@@ -88,3 +88,9 @@ Luego abrir:
 - El WebSocket administra conexiones activas en memoria y no persiste eventos.
 - `docu_archive.md` es una bitacora local ignorada por Git.
 - Las credenciales Firebase deben quedar fuera del repositorio.
+
+## Integracion continua (CI) con AWS
+
+- Documentacion general del flujo CI: `docs/ci_aws_largo_plazo.md`
+- Politica de confianza OIDC (plantilla): `infra/aws/politica-confianza-oidc-github.json`
+- Politica de permisos para CI y ECR (plantilla): `infra/aws/politica-permisos-ci-ecr.json`
