@@ -45,3 +45,13 @@ __pycache__/
 firebase-credentials.json
 docu_archive.md
 
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+mobile/build/
+mobile/coverage/
+mobile/.idea/
+mobile/*.iml
+
