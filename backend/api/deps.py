@@ -33,8 +33,13 @@ def get_current_user(
     except ValueError as exc:
         raise credenciales_invalidas from exc
 
+    try:
+        user_id_int = int(user_id)
+    except (TypeError, ValueError) as exc:
+        raise credenciales_invalidas from exc
+
     # Si el usuario no existe o esta inactivo, la ruta se considera no autorizada.
-    usuario = obtener_usuario_por_id(db, int(user_id))
+    usuario = obtener_usuario_por_id(db, user_id_int)
     if usuario is None or not usuario.is_active:
         raise credenciales_invalidas
 

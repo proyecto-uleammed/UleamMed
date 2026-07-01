@@ -60,8 +60,17 @@ def renovar_access_token(datos: RefreshRequest, db: Session = Depends(get_db)) -
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
 
+    try:
+        user_id_int = int(user_id)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token invalido o expirado",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
+
     # Antes de renovar, confirma que el usuario sigue existiendo y activo.
-    usuario = obtener_usuario_por_id(db, int(user_id))
+    usuario = obtener_usuario_por_id(db, user_id_int)
     if usuario is None or not usuario.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

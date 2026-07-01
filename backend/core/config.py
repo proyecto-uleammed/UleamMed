@@ -28,7 +28,15 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     FIREBASE_CREDENTIALS: str | None = None
+    CORS_ORIGINS: str = "*"
     ENVIRONMENT: str = "development"
+
+    def get_cors_origins(self) -> list[str]:
+        """Devuelve origenes CORS separados por coma o comodin para desarrollo."""
+        origins = self.CORS_ORIGINS.strip()
+        if origins == "*":
+            return ["*"]
+        return [origin.strip() for origin in origins.split(",") if origin.strip()]
 
     # Pydantic Settings lee el archivo .env local, que no se sube a Git.
     model_config = SettingsConfigDict(

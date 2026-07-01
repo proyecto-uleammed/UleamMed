@@ -35,12 +35,13 @@ google-services.json
 
 # Python local files
 venv/
+.venv/
 __pycache__/
 *.py[cod]
+.pytest_cache/
 
 # Local backend secrets and generated documentation
 .env
 firebase-credentials.json
 docu_archive.md
-
 

@@ -24,7 +24,8 @@ def actualizar_mi_perfil(
     db: Session = Depends(get_db),
 ) -> UserRead:
     """Actualiza campos permitidos del perfil propio."""
-    usuario_actual.full_name = datos.full_name
+    if "full_name" in datos.model_fields_set:
+        usuario_actual.full_name = datos.full_name
     db.add(usuario_actual)
     db.commit()
     db.refresh(usuario_actual)
