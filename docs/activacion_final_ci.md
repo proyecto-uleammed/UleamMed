@@ -6,11 +6,11 @@ Este proyecto ya tiene el CI implementado en codigo. Solo faltan pasos de activa
 
 Rama:
 
-- `feature/ci-aws-largo-plazo`
+- `feature/ci-aws`
 
 URL directa:
 
-- <https://github.com/proyecto-uleammed/UleamMed/pull/new/feature/ci-aws-largo-plazo>
+- <https://github.com/proyecto-uleammed/UleamMed/pull/new/feature/ci-aws>
 
 Titulo sugerido:
 
@@ -56,7 +56,7 @@ Check requerido sugerido:
 
 ## 5) Prueba de punta a punta
 
-1. Abrir PR desde `feature/ci-aws-largo-plazo` a `main`.
+1. Abrir PR desde `feature/ci-aws` a `main`.
 2. Confirmar que corre `CI Validacion PR`.
 3. Hacer merge.
 4. Confirmar que corre `CI AWS ECR Main` y publica imagen en ECR.
