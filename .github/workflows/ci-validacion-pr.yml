@@ -1,0 +1,22 @@
+name: CI Validacion PR
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-validacion-pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validacion_backend_pr:
+    name: Validacion continua en pull request
+    uses: ./.github/workflows/reutilizable-validacion-backend.yml
+    with:
+      version_python: "3.12"
