@@ -8,7 +8,6 @@ from sqlalchemy.pool import StaticPool
 from backend.app.main import app
 from backend.core.database import Base, get_db
 from backend.core.security import crear_access_token
-from backend.models.user import User
 
 
 class BackendIntegratedFlowTest(unittest.TestCase):
@@ -108,6 +107,26 @@ class BackendIntegratedFlowTest(unittest.TestCase):
         listado = self.client.get("/api/v1/notifications", headers=headers)
         self.assertEqual(listado.status_code, 200)
         self.assertGreaterEqual(len(listado.json()["items"]), 1)
+
+    def test_modulo_medicamentos_permite_marcar_toma(self) -> None:
+        """Valida listado y marcado de medicamentos del usuario."""
+        access_token = self._crear_usuario_y_token()
+        headers = {"Authorization": f"Bearer {access_token}"}
+
+        listado = self.client.get("/api/v1/medications", headers=headers)
+        self.assertEqual(listado.status_code, 200)
+        medicamentos = listado.json()["items"]
+        self.assertEqual(len(medicamentos), 4)
+        self.assertEqual(sum(1 for medicamento in medicamentos if medicamento["taken"]), 2)
+
+        marcado = self.client.post("/api/v1/medications/omeprazol/take", headers=headers)
+        self.assertEqual(marcado.status_code, 200)
+        self.assertTrue(marcado.json()["medication"]["taken"])
+        self.assertEqual(marcado.json()["taken_count"], 3)
+        self.assertEqual(marcado.json()["total_count"], 4)
+
+        actualizado = self.client.get("/api/v1/medications", headers=headers)
+        self.assertEqual(sum(1 for medicamento in actualizado.json()["items"] if medicamento["taken"]), 3)
 
     def test_websocket_autenticado(self) -> None:
         """Valida conexion WebSocket con access token y respuesta eco."""
