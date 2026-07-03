@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/action_card.dart';
 import 'activities_screen.dart';
@@ -6,8 +7,31 @@ import 'appointments_screen.dart';
 import 'emergency_screen.dart';
 import 'medications_screen.dart';
 
-class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key});
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key, this.api});
+
+  final UleamMedApi? api;
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  late final UleamMedApi _api = widget.api ?? ApiService();
+  late Future<DemoSession> _demoSession = _api.loadDemoSession();
+  late Future<List<MedicationItem>> _medicationSummary = _api.listMedications();
+
+  void _refreshSession() {
+    setState(() {
+      _demoSession = _api.loadDemoSession();
+    });
+  }
+
+  void _refreshMedicationSummary() {
+    setState(() {
+      _medicationSummary = _api.listMedications();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -15,7 +39,7 @@ class HomeScreen extends StatelessWidget {
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
-            expandedHeight: 160,
+            expandedHeight: 210,
             pinned: true,
             flexibleSpace: FlexibleSpaceBar(
               background: Container(
@@ -71,18 +95,38 @@ class HomeScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _MoodSelector(),
+                  const SizedBox(height: 16),
+                  _BackendStatusCard(
+                    session: _demoSession,
+                    onRefresh: _refreshSession,
+                  ),
                   const SizedBox(height: 24),
-                  Text('Acciones rápidas', style: Theme.of(context).textTheme.headlineMedium),
+                  Text(
+                    'Acciones rápidas',
+                    style: Theme.of(context).textTheme.headlineMedium,
+                  ),
                   const SizedBox(height: 12),
-                  ActionCard(
-                    icon: Icons.medication,
-                    title: 'Medicamentos',
-                    subtitle: '2 de 4 tomados hoy',
-                    color: AppColors.primary,
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const MedicationsScreen()),
-                    ),
+                  FutureBuilder<List<MedicationItem>>(
+                    future: _medicationSummary,
+                    builder: (context, snapshot) {
+                      return ActionCard(
+                        icon: Icons.medication,
+                        title: 'Medicamentos',
+                        subtitle: _medicationSubtitle(snapshot),
+                        color: AppColors.primary,
+                        onTap: () async {
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => MedicationsScreen(api: _api),
+                            ),
+                          );
+                          if (mounted) {
+                            _refreshMedicationSummary();
+                          }
+                        },
+                      );
+                    },
                   ),
                   ActionCard(
                     icon: Icons.calendar_month,
@@ -91,7 +135,9 @@ class HomeScreen extends StatelessWidget {
                     color: AppColors.primaryLight,
                     onTap: () => Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => const AppointmentsScreen()),
+                      MaterialPageRoute(
+                        builder: (_) => const AppointmentsScreen(),
+                      ),
                     ),
                   ),
                   ActionCard(
@@ -101,7 +147,9 @@ class HomeScreen extends StatelessWidget {
                     color: AppColors.primaryDark,
                     onTap: () => Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => const ActivitiesScreen()),
+                      MaterialPageRoute(
+                        builder: (_) => const ActivitiesScreen(),
+                      ),
                     ),
                   ),
                   ActionCard(
@@ -111,15 +159,203 @@ class HomeScreen extends StatelessWidget {
                     color: const Color(0xFFC62828),
                     onTap: () => Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => const EmergencyScreen()),
+                      MaterialPageRoute(
+                        builder: (_) => const EmergencyScreen(),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 24),
-                  Text('Resumen de hoy', style: Theme.of(context).textTheme.headlineMedium),
+                  Text(
+                    'Resumen de hoy',
+                    style: Theme.of(context).textTheme.headlineMedium,
+                  ),
                   const SizedBox(height: 12),
-                  const _SummaryRow(),
+                  FutureBuilder<List<MedicationItem>>(
+                    future: _medicationSummary,
+                    builder: (context, snapshot) {
+                      return _SummaryRow(
+                        medicationValue: _medicationPercent(snapshot),
+                      );
+                    },
+                  ),
                 ],
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _medicationSubtitle(AsyncSnapshot<List<MedicationItem>> snapshot) {
+    final medications = snapshot.data;
+    if (medications == null || medications.isEmpty) {
+      if (snapshot.hasError) {
+        return 'Backend no disponible';
+      }
+      return 'Cargando medicamentos';
+    }
+
+    final takenCount = medications
+        .where((medication) => medication.taken)
+        .length;
+    return '$takenCount de ${medications.length} tomados hoy';
+  }
+
+  String _medicationPercent(AsyncSnapshot<List<MedicationItem>> snapshot) {
+    final medications = snapshot.data;
+    if (medications == null || medications.isEmpty) {
+      return '--';
+    }
+
+    final takenCount = medications
+        .where((medication) => medication.taken)
+        .length;
+    return '${((takenCount / medications.length) * 100).round()}%';
+  }
+}
+
+class _BackendStatusCard extends StatelessWidget {
+  const _BackendStatusCard({required this.session, required this.onRefresh});
+
+  final Future<DemoSession> session;
+  final VoidCallback onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<DemoSession>(
+      future: session,
+      builder: (context, snapshot) {
+        final isLoading = snapshot.connectionState == ConnectionState.waiting;
+        final hasError = snapshot.hasError;
+        final demo = snapshot.data;
+
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: hasError ? const Color(0xFFFFF3E0) : Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: hasError
+                  ? const Color(0xFFFFB74D)
+                  : AppColors.accent.withValues(alpha: 0.7),
+            ),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: hasError ? const Color(0xFFFFE0B2) : AppColors.surface,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  hasError ? Icons.cloud_off : Icons.cloud_done,
+                  color: hasError ? const Color(0xFFE65100) : AppColors.primary,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isLoading
+                          ? 'Conectando backend...'
+                          : hasError
+                          ? 'Backend no disponible'
+                          : 'Backend conectado',
+                      style: Theme.of(
+                        context,
+                      ).textTheme.titleLarge?.copyWith(fontSize: 18),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _statusText(snapshot),
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodyMedium?.copyWith(fontSize: 14),
+                    ),
+                    if (demo != null) ...[
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _StatusChip(
+                            icon: Icons.person,
+                            label: demo.user.fullName,
+                          ),
+                          _StatusChip(
+                            icon: Icons.email,
+                            label: demo.user.email,
+                          ),
+                          _StatusChip(icon: Icons.api, label: demo.environment),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: 'Actualizar conexion',
+                onPressed: isLoading ? null : onRefresh,
+                icon: const Icon(Icons.refresh),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  String _statusText(AsyncSnapshot<DemoSession> snapshot) {
+    if (snapshot.connectionState == ConnectionState.waiting) {
+      return 'Validando /health, login demo y perfil del usuario.';
+    }
+
+    if (snapshot.hasError) {
+      return 'Levanta FastAPI en el puerto 8000 y vuelve a intentar.';
+    }
+
+    final demo = snapshot.data;
+    if (demo == null) {
+      return 'Sin datos del backend todavia.';
+    }
+
+    return 'Sesion demo activa desde ${demo.apiUrl}.';
+  }
+}
+
+class _StatusChip extends StatelessWidget {
+  const _StatusChip({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: AppColors.primary),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              label,
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(fontSize: 13),
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -153,14 +389,19 @@ class _MoodSelectorState extends State<_MoodSelector> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Tu estado de ánimo', style: Theme.of(context).textTheme.titleLarge),
+          Text(
+            'Tu estado de ánimo',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
           const SizedBox(height: 12),
           Row(
             children: List.generate(_moods.length, (index) {
               final isSelected = _selectedMood == index;
               return Expanded(
                 child: Padding(
-                  padding: EdgeInsets.only(right: index < _moods.length - 1 ? 8 : 0),
+                  padding: EdgeInsets.only(
+                    right: index < _moods.length - 1 ? 8 : 0,
+                  ),
                   child: InkWell(
                     onTap: () => setState(() => _selectedMood = index),
                     borderRadius: BorderRadius.circular(12),
@@ -170,21 +411,27 @@ class _MoodSelectorState extends State<_MoodSelector> {
                         color: isSelected ? AppColors.primary : Colors.white,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: isSelected ? AppColors.primary : AppColors.accent,
+                          color: isSelected
+                              ? AppColors.primary
+                              : AppColors.accent,
                         ),
                       ),
                       child: Column(
                         children: [
                           Icon(
                             _moods[index].$1,
-                            color: isSelected ? Colors.white : AppColors.primary,
+                            color: isSelected
+                                ? Colors.white
+                                : AppColors.primary,
                             size: 32,
                           ),
                           const SizedBox(height: 4),
                           Text(
                             _moods[index].$2,
                             style: TextStyle(
-                              color: isSelected ? Colors.white : AppColors.textPrimary,
+                              color: isSelected
+                                  ? Colors.white
+                                  : AppColors.textPrimary,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -203,17 +450,37 @@ class _MoodSelectorState extends State<_MoodSelector> {
 }
 
 class _SummaryRow extends StatelessWidget {
-  const _SummaryRow();
+  const _SummaryRow({required this.medicationValue});
+
+  final String medicationValue;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Expanded(child: _SummaryCard(icon: Icons.medication, label: 'Medicamentos', value: '50%')),
+        Expanded(
+          child: _SummaryCard(
+            icon: Icons.medication,
+            label: 'Medicamentos',
+            value: medicationValue,
+          ),
+        ),
         const SizedBox(width: 12),
-        Expanded(child: _SummaryCard(icon: Icons.directions_walk, label: 'Actividad', value: '25%')),
+        Expanded(
+          child: _SummaryCard(
+            icon: Icons.directions_walk,
+            label: 'Actividad',
+            value: '25%',
+          ),
+        ),
         const SizedBox(width: 12),
-        Expanded(child: _SummaryCard(icon: Icons.water_drop, label: 'Agua', value: '4/8')),
+        Expanded(
+          child: _SummaryCard(
+            icon: Icons.water_drop,
+            label: 'Agua',
+            value: '4/8',
+          ),
+        ),
       ],
     );
   }
@@ -251,7 +518,11 @@ class _SummaryCard extends StatelessWidget {
               color: AppColors.textPrimary,
             ),
           ),
-          Text(label, style: Theme.of(context).textTheme.bodyMedium, textAlign: TextAlign.center),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.bodyMedium,
+            textAlign: TextAlign.center,
+          ),
         ],
       ),
     );
