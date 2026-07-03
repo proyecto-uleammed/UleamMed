@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'screens/home_screen.dart';
+import 'services/api_service.dart';
 import 'theme/app_theme.dart';
 
 void main() {
@@ -7,7 +8,9 @@ void main() {
 }
 
 class UleamMedApp extends StatelessWidget {
-  const UleamMedApp({super.key});
+  const UleamMedApp({super.key, this.api});
+
+  final UleamMedApi? api;
 
   @override
   Widget build(BuildContext context) {
@@ -15,7 +18,7 @@ class UleamMedApp extends StatelessWidget {
       title: 'UleamMed',
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(),
-      home: const HomeScreen(),
+      home: HomeScreen(api: api),
     );
   }
 }
