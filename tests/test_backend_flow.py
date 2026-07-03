@@ -8,7 +8,6 @@ from sqlalchemy.pool import StaticPool
 from backend.app.main import app
 from backend.core.database import Base, get_db
 from backend.core.security import crear_access_token
-from backend.models.user import User
 
 
 class BackendIntegratedFlowTest(unittest.TestCase):

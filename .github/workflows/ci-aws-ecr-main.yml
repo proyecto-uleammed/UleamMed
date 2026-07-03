@@ -1,0 +1,83 @@
+name: CI AWS ECR Main
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: ci-aws-ecr-main
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  REPOSITORIO_ECR: ${{ vars.AWS_ECR_REPOSITORY }}
+  ROL_IAM_OIDC: ${{ secrets.AWS_ROLE_ARN }}
+
+jobs:
+  validacion_previa:
+    name: Validacion previa a publicacion
+    uses: ./.github/workflows/reutilizable-validacion-backend.yml
+    with:
+      version_python: "3.12"
+
+  publicar_imagen_ecr:
+    name: Publicar imagen backend en ECR
+    runs-on: ubuntu-latest
+    needs: validacion_previa
+
+    steps:
+      - name: Descargar codigo
+        uses: actions/checkout@v4
+
+      - name: Validar variables requeridas
+        run: |
+          test -n "${AWS_REGION}" || (echo "Falta variable AWS_REGION (Actions > Variables)." && exit 1)
+          test -n "${REPOSITORIO_ECR}" || (echo "Falta variable AWS_ECR_REPOSITORY (Actions > Variables)." && exit 1)
+          test -n "${ROL_IAM_OIDC}" || (echo "Falta secreto AWS_ROLE_ARN (Actions > Secrets)." && exit 1)
+
+      - name: Configurar credenciales AWS por OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.ROL_IAM_OIDC }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Iniciar sesion en Amazon ECR
+        id: login_ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Crear repositorio ECR si no existe
+        run: |
+          if aws ecr describe-repositories --repository-names "${REPOSITORIO_ECR}" --region "${AWS_REGION}" > /dev/null 2>&1; then
+            echo "Repositorio ECR ya existe."
+          else
+            aws ecr create-repository \
+              --repository-name "${REPOSITORIO_ECR}" \
+              --image-scanning-configuration scanOnPush=true \
+              --image-tag-mutability MUTABLE \
+              --region "${AWS_REGION}"
+          fi
+
+      - name: Construir y publicar imagen Docker
+        env:
+          REGISTRY_ECR: ${{ steps.login_ecr.outputs.registry }}
+          SHA_COMMIT: ${{ github.sha }}
+        run: |
+          IMAGEN="${REGISTRY_ECR}/${REPOSITORIO_ECR}"
+          docker build -t "${IMAGEN}:${SHA_COMMIT}" -t "${IMAGEN}:latest" .
+          docker push "${IMAGEN}:${SHA_COMMIT}"
+          docker push "${IMAGEN}:latest"
+
+      - name: Publicar resumen
+        env:
+          REGISTRY_ECR: ${{ steps.login_ecr.outputs.registry }}
+          SHA_COMMIT: ${{ github.sha }}
+        run: |
+          IMAGEN="${REGISTRY_ECR}/${REPOSITORIO_ECR}"
+          echo "Imagen publicada: ${IMAGEN}:${SHA_COMMIT}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Imagen publicada: ${IMAGEN}:latest" >> "$GITHUB_STEP_SUMMARY"

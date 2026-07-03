@@ -1,0 +1,43 @@
+name: Reutilizable Validacion Backend
+
+on:
+  workflow_call:
+    inputs:
+      version_python:
+        required: false
+        type: string
+        default: "3.12"
+
+permissions:
+  contents: read
+
+jobs:
+  validar_backend:
+    name: Validar backend (Python ${{ inputs.version_python }})
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar codigo
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.version_python }}
+          cache: pip
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install ruff pip-audit
+
+      - name: Revisar calidad de codigo
+        run: ruff check backend tests
+
+      - name: Ejecutar pruebas integradas
+        run: python -m unittest discover -s tests -v
+
+      - name: Revisar vulnerabilidades de dependencias (informativo)
+        continue-on-error: true
+        run: pip-audit --progress-spinner off
