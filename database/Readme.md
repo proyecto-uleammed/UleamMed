@@ -1,0 +1,164 @@
+# Base de Datos - UleamMed
+
+## Responsable del módulo
+
+Este módulo fue actualizado para dejar implementada la estructura principal de base de datos del proyecto en PostgreSQL, junto con su sincronización por migraciones usando Alembic.
+
+## Stack utilizado
+
+- PostgreSQL
+- SQLAlchemy
+- Alembic
+- psycopg
+- DBeaver para validación visual de tablas, claves primarias y claves foráneas
+
+## Configuración local usada
+
+```env
+DATABASE_URL=postgresql+psycopg://uleammed_user:123@localhost:5432/uleammed_db
+```
+
+## Trabajo realizado
+
+Se implementaron los modelos ORM en `backend/models` y se generaron las migraciones necesarias para sincronizar la estructura de la base de datos con Alembic.
+
+### Tablas implementadas del MER
+
+- `usuario`
+- `encargado`
+- `cuidador`
+- `adulto_mayor`
+- `cuidador_adulto_mayor`
+- `perfil_medico`
+- `historial_medico`
+- `examen_medico`
+- `detalle_examen`
+- `parametro_examen`
+- `medicamento`
+- `tratamiento`
+- `tratamiento_medicamento`
+- `cumplimiento_medicacion`
+- `notificacion`
+- `destinatario_notificacion`
+- `token_fcm`
+
+### Tabla heredada del prototipo inicial
+
+- `users`
+
+La tabla `users` pertenece al backend inicial de prueba. La tabla real del MER aprobada para usuarios del sistema es `usuario`.
+
+## Migraciones Alembic creadas
+
+La secuencia de migraciones quedó organizada de la siguiente forma:
+
+1. `899125d0bafd` - creación de la tabla inicial `users`
+2. `6cf37e2123ce` - creación de la tabla `usuario`
+3. `20b3513cc0dc` - creación de la tabla `encargado`
+4. `34c12292dadd` - creación de la tabla `cuidador`
+5. `4d76158bf7bf` - creación de las tablas principales restantes del MER
+
+## Estado validado
+
+La base de datos quedó sincronizada con Alembic y la revisión actual validada es:
+
+```powershell
+alembic current
+```
+
+Resultado esperado:
+
+```text
+4d76158bf7bf (head)
+```
+
+## Relaciones validadas en PostgreSQL
+
+De acuerdo con la verificación realizada en DBeaver, las claves foráneas principales quedaron registradas correctamente:
+
+- `adulto_mayor.id_encargado -> encargado.id_encargado`
+- `adulto_mayor.id_usuario -> usuario.id_usuario`
+- `cuidador.id_usuario -> usuario.id_usuario`
+- `cuidador_adulto_mayor.id_adulto_mayor -> adulto_mayor.id_adulto_mayor`
+- `cuidador_adulto_mayor.id_cuidador -> cuidador.id_cuidador`
+- `cumplimiento_medicacion.id_tratamiento_medicamento -> tratamiento_medicamento.id_tratamiento_medicamento`
+- `destinatario_notificacion.id_notificacion -> notificacion.id_notificacion`
+- `destinatario_notificacion.id_usuario -> usuario.id_usuario`
+- `detalle_examen.id_examen -> examen_medico.id_examen`
+- `encargado.id_usuario -> usuario.id_usuario`
+- `examen_medico.id_historial -> historial_medico.id_historial`
+- `historial_medico.id_adulto_mayor -> adulto_mayor.id_adulto_mayor`
+- `parametro_examen.id_detalle -> detalle_examen.id_detalle`
+- `perfil_medico.id_adulto_mayor -> adulto_mayor.id_adulto_mayor`
+- `token_fcm.id_usuario -> usuario.id_usuario`
+- `tratamiento.id_adulto_mayor -> adulto_mayor.id_adulto_mayor`
+- `tratamiento_medicamento.id_medicamento -> medicamento.id_medicamento`
+- `tratamiento_medicamento.id_tratamiento -> tratamiento.id_tratamiento`
+
+## Claves primarias verificadas
+
+En DBeaver también se verificó la existencia de claves primarias para las tablas principales:
+
+- `adulto_mayor.id_adulto_mayor`
+- `cuidador.id_cuidador`
+- `cuidador_adulto_mayor.id_relacion`
+- `cumplimiento_medicacion.id_cumplimiento`
+- `destinatario_notificacion.id_destinatario`
+- `detalle_examen.id_detalle`
+- `encargado.id_encargado`
+- `examen_medico.id_examen`
+- `historial_medico.id_historial`
+- `medicamento.id_medicamento`
+- `notificacion.id_notificacion`
+- `parametro_examen.id_parametro`
+- `perfil_medico.id_perfil`
+- `token_fcm.id_token`
+- `tratamiento.id_tratamiento`
+- `tratamiento_medicamento.id_tratamiento_medicamento`
+- `users.id`
+- `usuario.id_usuario`
+
+## Prueba de datos
+
+Se validó también inserción y visualización de datos en la tabla `cumplimiento_medicacion`. En la revisión mostrada en DBeaver aparece al menos un registro de prueba con:
+
+- `id_cumplimiento = 1`
+- `id_tratamiento_medicamento = 1`
+- `fecha_programada = 2026-07-04`
+- `hora_programada = 08:00:00`
+- `fecha_hora_real = NULL`
+- `estado = pendiente`
+
+## Evidencias visuales
+
+Las capturas revisadas muestran:
+
+1. La lista de claves foráneas entre tablas del MER.
+2. La lista de claves primarias registradas en PostgreSQL.
+3. Una consulta de prueba sobre `cumplimiento_medicacion` con datos visibles.
+
+Nota: las capturas fueron compartidas durante la revisión, pero todavía no existen como archivos dentro del repositorio. Si luego se guardan en una carpeta del proyecto, este README puede enlazarlas directamente.
+
+## Comandos útiles
+
+Crear una migración nueva:
+
+```powershell
+alembic revision --autogenerate -m "descripcion de la migracion"
+```
+
+Aplicar migraciones:
+
+```powershell
+alembic upgrade head
+```
+
+Ver la revisión actual:
+
+```powershell
+alembic current
+```
+
+## Pendiente para integración completa
+
+La estructura de base de datos ya está implementada y sincronizada. Lo que queda pendiente del lado de backend es adaptar los endpoints y servicios que todavía usan la tabla temporal `users`, para que trabajen con la tabla `usuario` y con las relaciones reales del MER.
