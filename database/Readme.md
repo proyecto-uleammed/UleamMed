@@ -45,11 +45,19 @@ Se implementaron los modelos ORM en `backend/models` y se generaron las migracio
 - `destinatario_notificacion`
 - `token_fcm`
 
-### Tabla heredada del prototipo inicial
+### Tabla oficial de autenticación del backend actual
 
 - `users`
 
-La tabla `users` pertenece al backend inicial de prueba. La tabla real del MER aprobada para usuarios del sistema es `usuario`.
+La tabla `users` es el contrato actual de autenticación del backend: registro,
+inicio de sesión, perfil básico, refresh token y recuperación de contraseña.
+Cuando `DATABASE_URL` apunta a Supabase, los usuarios quedan registrados en esta
+tabla dentro de PostgreSQL/Supabase.
+
+La tabla `usuario` se mantiene por compatibilidad con el MER de base de datos,
+porque varias relaciones (`encargado`, `cuidador`, `adulto_mayor`,
+`token_fcm`, etc.) dependen de `usuario.id_usuario`. No debe eliminarse hasta
+que exista una migración formal que actualice esas llaves foráneas.
 
 ## Migraciones Alembic creadas
 
@@ -146,8 +154,14 @@ Nota: las capturas fueron compartidas durante la revisión, pero todavía no exi
 
 La estructura del MER ya fue desplegada en el proyecto de **Supabase** aplicando
 las mismas migraciones de Alembic. La configuración ya está lista: `alembic/env.py`
-toma la conexión desde `DATABASE_URL` (entorno o archivo `.env`) cuando `alembic.ini`
-mantiene el valor de ejemplo, así que **no** se escriben credenciales reales en Git.
+toma siempre la conexión desde `DATABASE_URL` (entorno o archivo `.env`), así que
+**no** se escriben credenciales reales en Git.
+
+Cuando `DATABASE_URL` apunta a Supabase, el backend de FastAPI guarda los
+registros de autenticación en PostgreSQL/Supabase usando la tabla `users`. Esa
+tabla sigue siendo el contrato actual de login, registro, perfil y recuperación
+de contraseña. La tabla `usuario` pertenece al MER y queda disponible para la
+integración funcional completa, pero todavía no reemplaza al flujo de auth.
 
 ### 1. Obtener la cadena de conexión de Supabase
 
@@ -214,6 +228,12 @@ Ver la revisión actual:
 alembic current
 ```
 
-## Pendiente para integración completa
+## Decisión actual de integración
 
-La estructura de base de datos ya está implementada y sincronizada. Lo que queda pendiente del lado de backend es adaptar los endpoints y servicios que todavía usan la tabla temporal `users`, para que trabajen con la tabla `usuario` y con las relaciones reales del MER.
+El backend queda conectado a Supabase/PostgreSQL usando `DATABASE_URL`.
+Para autenticación se usará `users` como tabla oficial del MVP.
+
+Pendiente para fases posteriores: conectar los módulos médicos reales
+medicamentos, cuidadores, historial, notificaciones y cumplimiento con las
+tablas del MER. Esa integración debe hacerse con migraciones nuevas y sin borrar
+tablas que actualmente tengan llaves foráneas.
