@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'screens/auth_screen.dart';
 import 'screens/lock_screen.dart';
 import 'screens/main_shell.dart';
+import 'screens/onboarding_screen.dart';
 import 'services/api_service.dart';
 import 'services/app_settings.dart';
 import 'services/lock_service.dart';
@@ -157,6 +158,11 @@ class _UleamMedAppState extends State<UleamMedApp> with WidgetsBindingObserver {
       return const _SessionLoadingScreen();
     }
     if (_session == null) {
+      if (!_settings.value.onboardingSeen) {
+        return OnboardingScreen(
+          onDone: () => _settings.markOnboardingSeen(),
+        );
+      }
       return AuthScreen(api: _api, onAuthenticated: _handleAuthenticated);
     }
     if (_locked) {
