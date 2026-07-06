@@ -132,7 +132,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Mi perfil')),
+      appBar: AppBar(
+        title: const Text('Mi perfil'),
+        actions: [
+          IconButton(
+            tooltip: 'Guardar perfil medico',
+            onPressed: _isSaving ? null : _save,
+            icon: const Icon(Icons.save),
+          ),
+        ],
+      ),
       body: SafeArea(
         child: FutureBuilder<_ProfileData>(
           future: _profileData,
