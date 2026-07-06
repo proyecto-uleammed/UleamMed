@@ -52,6 +52,7 @@ class AppSettings {
     this.termsAcceptedVersion = '',
     this.appLockEnabled = false,
     this.autoLockMinutes = 2,
+    this.remindersEnabled = true,
   });
 
   factory AppSettings.fromJson(Map<String, dynamic> json) {
@@ -62,6 +63,7 @@ class AppSettings {
       termsAcceptedVersion: json['termsAcceptedVersion']?.toString() ?? '',
       appLockEnabled: json['appLockEnabled'] == true,
       autoLockMinutes: (json['autoLockMinutes'] as num?)?.toInt() ?? 2,
+      remindersEnabled: json['remindersEnabled'] != false,
     );
   }
 
@@ -71,6 +73,7 @@ class AppSettings {
   final String termsAcceptedVersion;
   final bool appLockEnabled;
   final int autoLockMinutes;
+  final bool remindersEnabled;
 
   double get textScaleFactor => fontScale.factor;
 
@@ -83,6 +86,7 @@ class AppSettings {
     String? termsAcceptedVersion,
     bool? appLockEnabled,
     int? autoLockMinutes,
+    bool? remindersEnabled,
   }) {
     return AppSettings(
       fontScale: fontScale ?? this.fontScale,
@@ -91,6 +95,7 @@ class AppSettings {
       termsAcceptedVersion: termsAcceptedVersion ?? this.termsAcceptedVersion,
       appLockEnabled: appLockEnabled ?? this.appLockEnabled,
       autoLockMinutes: autoLockMinutes ?? this.autoLockMinutes,
+      remindersEnabled: remindersEnabled ?? this.remindersEnabled,
     );
   }
 
@@ -102,6 +107,7 @@ class AppSettings {
       'termsAcceptedVersion': termsAcceptedVersion,
       'appLockEnabled': appLockEnabled,
       'autoLockMinutes': autoLockMinutes,
+      'remindersEnabled': remindersEnabled,
     };
   }
 }
@@ -185,5 +191,9 @@ class AppSettingsController extends ChangeNotifier {
         autoLockMinutes: autoLockMinutes,
       ),
     );
+  }
+
+  Future<void> setRemindersEnabled(bool enabled) {
+    return update(_settings.copyWith(remindersEnabled: enabled));
   }
 }
