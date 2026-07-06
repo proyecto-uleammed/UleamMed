@@ -142,6 +142,33 @@ class LocalStore {
     );
   }
 
+  Future<EmergencyContact> upsertEmergencyContact(
+    EmergencyContact contact,
+  ) async {
+    final normalized = contact.copyWith(syncStatus: SyncStatus.pending);
+    var contacts = await readEmergencyContacts();
+    if (normalized.isPrimary) {
+      contacts = contacts
+          .map((item) => item.copyWith(isPrimary: false))
+          .toList();
+    }
+    final index = contacts.indexWhere((item) => item.id == normalized.id);
+    if (index >= 0) {
+      contacts[index] = normalized;
+    } else {
+      contacts.add(normalized);
+    }
+    await saveEmergencyContacts(contacts);
+    return normalized;
+  }
+
+  Future<void> deleteEmergencyContact(String id) async {
+    final contacts = await readEmergencyContacts();
+    await saveEmergencyContacts(
+      contacts.where((item) => item.id != id).toList(),
+    );
+  }
+
   Future<List<CaregiverPermission>> readCaregiverPermissions() {
     return _readList(
       _caregiverPermissionsKey,

@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'screens/auth_screen.dart';
-import 'screens/home_screen.dart';
+import 'screens/main_shell.dart';
 import 'services/api_service.dart';
+import 'services/app_settings.dart';
 import 'theme/app_theme.dart';
 
 void main() {
@@ -9,9 +10,10 @@ void main() {
 }
 
 class UleamMedApp extends StatefulWidget {
-  const UleamMedApp({super.key, this.api});
+  const UleamMedApp({super.key, this.api, this.settingsController});
 
   final UleamMedApi? api;
+  final AppSettingsController? settingsController;
 
   @override
   State<UleamMedApp> createState() => _UleamMedAppState();
@@ -19,13 +21,20 @@ class UleamMedApp extends StatefulWidget {
 
 class _UleamMedAppState extends State<UleamMedApp> {
   late final UleamMedApi _api = widget.api ?? ApiService();
+  late final AppSettingsController _settings =
+      widget.settingsController ?? AppSettingsController(AppSettingsService());
   DemoSession? _session;
   bool _isRestoringSession = true;
 
   @override
   void initState() {
     super.initState();
-    _restoreSession();
+    _bootstrap();
+  }
+
+  Future<void> _bootstrap() async {
+    await _settings.load();
+    await _restoreSession();
   }
 
   Future<void> _restoreSession() async {
@@ -67,15 +76,33 @@ class _UleamMedAppState extends State<UleamMedApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'UleamMed',
-      debugShowCheckedModeBanner: false,
-      theme: buildAppTheme(),
-      home: _isRestoringSession
-          ? const _SessionLoadingScreen()
-          : _session == null
-          ? AuthScreen(api: _api, onAuthenticated: _handleAuthenticated)
-          : HomeScreen(api: _api, onLogout: _handleLogout),
+    return AnimatedBuilder(
+      animation: _settings,
+      builder: (context, _) {
+        return MaterialApp(
+          title: 'UleamMed',
+          debugShowCheckedModeBanner: false,
+          theme: buildAppTheme(),
+          builder: (context, child) {
+            final mediaQuery = MediaQuery.of(context);
+            return MediaQuery(
+              data: mediaQuery.copyWith(
+                textScaler: TextScaler.linear(_settings.value.textScaleFactor),
+              ),
+              child: child ?? const SizedBox.shrink(),
+            );
+          },
+          home: _isRestoringSession
+              ? const _SessionLoadingScreen()
+              : _session == null
+              ? AuthScreen(api: _api, onAuthenticated: _handleAuthenticated)
+              : MainShell(
+                  api: _api,
+                  onLogout: _handleLogout,
+                  settings: _settings,
+                ),
+        );
+      },
     );
   }
 }
