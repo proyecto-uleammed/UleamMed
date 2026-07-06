@@ -107,7 +107,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _didHydrateForm = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Perfil medico guardado sin conexion')),
+        const SnackBar(content: Text('Perfil medico guardado')),
       );
     } on ApiException catch (error) {
       if (!mounted) {
@@ -272,7 +272,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       style: Theme.of(context).textTheme.bodyLarge,
                     ),
                     subtitle: const Text(
-                      'Se guardara como consentimiento local para sincronizarlo luego.',
+                      'Autorizas a tus cuidadores a ver la informacion que elijas compartir.',
                     ),
                     value: _shareWithCaregivers,
                     onChanged: (value) {
@@ -321,7 +321,6 @@ class _ProfileHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isPending = data.medicalProfile.syncStatus == SyncStatus.pending;
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -343,14 +342,6 @@ class _ProfileHeader extends StatelessWidget {
                 Text(
                   data.session.user.email,
                   style: Theme.of(context).textTheme.bodyMedium,
-                ),
-                const SizedBox(height: 8),
-                Chip(
-                  label: Text(isPending ? 'Pendiente de sincronizar' : 'Local'),
-                  avatar: Icon(
-                    isPending ? Icons.sync_problem : Icons.verified,
-                    size: 18,
-                  ),
                 ),
               ],
             ),

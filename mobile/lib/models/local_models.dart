@@ -211,43 +211,6 @@ class MedicationItem {
       'photoPath': photoPath,
     };
   }
-
-  static List<MedicationItem> demoList() {
-    return const [
-      MedicationItem(
-        id: 'metformina',
-        name: 'Metformina',
-        dose: '500 mg',
-        time: '08:00',
-        taken: true,
-        instructions: 'Tomar con el desayuno.',
-      ),
-      MedicationItem(
-        id: 'losartan',
-        name: 'Losartan',
-        dose: '50 mg',
-        time: '08:00',
-        taken: true,
-        instructions: 'Tomar con agua.',
-      ),
-      MedicationItem(
-        id: 'omeprazol',
-        name: 'Omeprazol',
-        dose: '20 mg',
-        time: '14:00',
-        taken: false,
-        instructions: 'Tomar antes de comer.',
-      ),
-      MedicationItem(
-        id: 'atorvastatina',
-        name: 'Atorvastatina',
-        dose: '10 mg',
-        time: '20:00',
-        taken: false,
-        instructions: 'Tomar en la noche.',
-      ),
-    ];
-  }
 }
 
 class MedicationSchedule {

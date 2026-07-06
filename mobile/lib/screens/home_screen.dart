@@ -6,12 +6,10 @@ import '../services/app_settings.dart';
 import '../theme/app_theme.dart';
 import '../widgets/action_card.dart';
 import '../widgets/upcoming_doses.dart';
-import 'activities_screen.dart';
 import 'caregivers_screen.dart';
 import 'conditions_screen.dart';
 import 'emergency_screen.dart';
 import 'medications_screen.dart';
-import 'pending_sync_screen.dart';
 import 'profile_screen.dart';
 import 'settings_screen.dart';
 
@@ -37,7 +35,6 @@ class _HomeScreenState extends State<HomeScreen> {
   late final UleamMedApi _api = widget.api ?? ApiService();
   late Future<DemoSession> _demoSession = _api.loadDemoSession();
   late Future<List<MedicationItem>> _medicationSummary = _api.listMedications();
-  late Future<int> _pendingSync = _api.pendingSyncCount();
 
   void _refreshSession() {
     setState(() {
@@ -48,25 +45,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _refreshMedicationSummary() {
     setState(() {
       _medicationSummary = _api.listMedications();
-      _pendingSync = _api.pendingSyncCount();
     });
-  }
-
-  void _refreshSyncStatus() {
-    setState(() {
-      _pendingSync = _api.pendingSyncCount();
-    });
-  }
-
-  Future<void> _synchronizePendingChanges() async {
-    final result = await _api.synchronizePendingChanges();
-    if (!mounted) {
-      return;
-    }
-    _refreshSyncStatus();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(result.message)),
-    );
   }
 
   @override
@@ -166,23 +145,13 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  FutureBuilder<int>(
-                    future: _pendingSync,
-                    builder: (context, snapshot) {
-                      return _OfflineStatusCard(
-                        pendingCount: snapshot.data ?? 0,
-                        onSync: _synchronizePendingChanges,
-                      );
-                    },
-                  ),
                   if (widget.settings?.value.remindersEnabled ?? true) ...[
-                    const SizedBox(height: 24),
                     UpcomingDoses(
                       api: _api,
                       onChanged: _refreshMedicationSummary,
                     ),
+                    const SizedBox(height: 24),
                   ],
-                  const SizedBox(height: 24),
                   Text(
                     'Acciones rápidas',
                     style: Theme.of(context).textTheme.headlineMedium,
@@ -228,7 +197,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       );
                       if (mounted) {
                         _refreshSession();
-                        _refreshSyncStatus();
+                        _refreshMedicationSummary();
                       }
                     },
                   ),
@@ -271,30 +240,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   ActionCard(
-                    icon: Icons.sync,
-                    title: 'Sincronización',
-                    subtitle: 'Revisa los cambios pendientes',
-                    color: AppColors.primary,
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => PendingSyncScreen(api: _api),
-                      ),
-                    ),
-                  ),
-                  ActionCard(
-                    icon: Icons.fitness_center,
-                    title: 'Actividades del día',
-                    subtitle: 'Caminata, estiramientos y más',
-                    color: AppColors.primaryDark,
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const ActivitiesScreen(),
-                      ),
-                    ),
-                  ),
-                  ActionCard(
                     icon: Icons.emergency,
                     title: 'Emergencias',
                     subtitle: 'Contactos y llamada al 911',
@@ -315,8 +260,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   FutureBuilder<List<MedicationItem>>(
                     future: _medicationSummary,
                     builder: (context, snapshot) {
-                      return _SummaryRow(
-                        medicationValue: _medicationPercent(snapshot),
+                      return _SummaryCard(
+                        icon: Icons.medication,
+                        label: 'Cumplimiento de medicamentos hoy',
+                        value: _medicationPercent(snapshot),
                       );
                     },
                   ),
@@ -331,11 +278,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   String _medicationSubtitle(AsyncSnapshot<List<MedicationItem>> snapshot) {
     final medications = snapshot.data;
-    if (medications == null || medications.isEmpty) {
-      if (snapshot.hasError) {
-        return 'Backend no disponible';
-      }
-      return 'Cargando medicamentos';
+    if (medications == null) {
+      return 'Cargando...';
+    }
+    if (medications.isEmpty) {
+      return 'Toca para agregar tus medicamentos';
     }
 
     final takenCount = medications
@@ -468,117 +415,6 @@ class _DeviceDateTimeState extends State<_DeviceDateTime> {
         Text(
           _timeZoneLabel,
           style: TextStyle(color: subtitleColor, fontSize: 12),
-        ),
-      ],
-    );
-  }
-}
-
-class _OfflineStatusCard extends StatelessWidget {
-  const _OfflineStatusCard({required this.pendingCount, required this.onSync});
-
-  final int pendingCount;
-  final Future<void> Function() onSync;
-
-  @override
-  Widget build(BuildContext context) {
-    final hasPending = pendingCount > 0;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: hasPending ? const Color(0xFFFFF8E1) : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: hasPending
-              ? const Color(0xFFFFCA28)
-              : AppColors.accent.withValues(alpha: 0.7),
-        ),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: hasPending ? const Color(0xFFFFECB3) : AppColors.surface,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(
-              hasPending ? Icons.sync_problem : Icons.offline_pin,
-              color: hasPending ? const Color(0xFFF57F17) : AppColors.primary,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  hasPending
-                      ? '$pendingCount cambios pendientes'
-                      : 'Datos listos sin conexion',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleLarge
-                      ?.copyWith(fontSize: 18),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  hasPending
-                      ? 'Se guardaron en este dispositivo y se enviaran cuando exista contrato de sincronizacion.'
-                      : 'Puedes consultar perfil, medicamentos y tomas guardadas.',
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodyMedium
-                      ?.copyWith(fontSize: 14),
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            tooltip: 'Sincronizar',
-            onPressed: onSync,
-            icon: const Icon(Icons.sync),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SummaryRow extends StatelessWidget {
-  const _SummaryRow({required this.medicationValue});
-
-  final String medicationValue;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: _SummaryCard(
-            icon: Icons.medication,
-            label: 'Medicamentos',
-            value: medicationValue,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _SummaryCard(
-            icon: Icons.directions_walk,
-            label: 'Actividad',
-            value: '25%',
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _SummaryCard(
-            icon: Icons.water_drop,
-            label: 'Agua',
-            value: '4/8',
-          ),
         ),
       ],
     );

@@ -12,15 +12,24 @@ Historial, Consultas y Perfil. Emergencia queda como acceso rapido desde Inicio.
 
 Pantallas y flujos incluidos:
 
+Las cuentas nuevas empiezan sin datos de ejemplo: cada seccion muestra un
+estado vacio que explica que apareceria ahi y como agregar el primer registro.
+La sincronizacion es automatica y silenciosa: la app funciona sin conexion y,
+cuando la conexion vuelve, envia los cambios pendientes sin mostrar estados de
+red al usuario final.
+
+Pantallas y flujos incluidos:
+
 - Onboarding accesible de 3 pasos con opcion de omitir en el primer inicio.
-- Inicio con saludo, resumen del dia, proximas 3 tomas accionables
-  (tomado / posponer 10-15-30-60 min / omitir) y accesos rapidos.
+- Inicio con saludo, fecha y hora del dispositivo (con zona horaria local),
+  proximas 3 tomas accionables (tomado / posponer 10-15-30-60 min / omitir),
+  accesos rapidos y cumplimiento de medicamentos del dia.
 - Inicio de sesion y registro con confirmacion de contrasena, requisitos y
   aceptacion de terminos; recuperacion de contrasena por codigo de 6 digitos.
 - Perfil medico editable y ajustes de accesibilidad (escala de fuente),
-  rol, recordatorios, bloqueo por PIN y terminos.
-- Medicamentos local-first con CRUD, horarios, instrucciones y confirmacion de
-  toma como tomado, omitido o pospuesto.
+  recordatorios, bloqueo por PIN y terminos.
+- Medicamentos local-first con CRUD, horarios, instrucciones, foto del
+  medicamento y confirmacion de toma como tomado, omitido o pospuesto.
 - Historial cronologico de tomas con cumplimiento semanal y filtros.
 - Condiciones y alergias estructuradas con nivel de severidad (color + texto).
 - Consultas CRUD con pestañas de proximas y pasadas, date/time picker, detalle,
@@ -28,8 +37,6 @@ Pantallas y flujos incluidos:
 - Cuidadores: invitacion por correo o telefono y permisos por tipo de dato con
   resumen de informacion compartida.
 - Emergencia con datos clave, contactos de emergencia y llamada directa.
-- Banner global de conexion online/offline y pantalla de cola de pendientes de
-  sincronizacion con reintento.
 - Bloqueo local por PIN con timeout de sesion en segundo plano.
 - Pantallas legales de terminos, privacidad y consentimiento.
 

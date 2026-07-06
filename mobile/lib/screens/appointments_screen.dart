@@ -221,7 +221,6 @@ class _AppointmentCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isPending = appointment.syncStatus == SyncStatus.pending;
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: InkWell(
@@ -279,8 +278,7 @@ class _AppointmentCard extends StatelessWidget {
                     : appointment.location,
               ),
               if (appointment.completed ||
-                  appointment.reminder != AppointmentReminder.none ||
-                  isPending) ...[
+                  appointment.reminder != AppointmentReminder.none) ...[
                 const SizedBox(height: 10),
                 Wrap(
                   spacing: 8,
@@ -295,11 +293,6 @@ class _AppointmentCard extends StatelessWidget {
                       Chip(
                         label: Text(appointment.reminder.label),
                         avatar: const Icon(Icons.notifications, size: 18),
-                      ),
-                    if (isPending)
-                      const Chip(
-                        label: Text('Sin sincronizar'),
-                        avatar: Icon(Icons.sync_problem, size: 18),
                       ),
                   ],
                 ),
