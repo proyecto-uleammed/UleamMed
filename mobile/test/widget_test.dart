@@ -23,8 +23,11 @@ class _MemoryJsonStore implements JsonStore {
   }
 }
 
-AppSettingsController _testSettings() =>
-    AppSettingsController(AppSettingsService(store: _MemoryJsonStore()));
+AppSettingsController _testSettings() {
+  final store = _MemoryJsonStore();
+  store.values['uleammed_app_settings'] = '{"onboardingSeen":true}';
+  return AppSettingsController(AppSettingsService(store: store));
+}
 
 class _FakeApi implements UleamMedApi {
   _FakeApi({this.restoredSession});

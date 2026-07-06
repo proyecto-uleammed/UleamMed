@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
+import 'legal_screen.dart';
 import 'password_recovery_screen.dart';
 
 class AuthScreen extends StatefulWidget {
@@ -23,10 +24,12 @@ class _AuthScreenState extends State<AuthScreen> {
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _confirmController = TextEditingController();
 
   bool _isRegisterMode = false;
   bool _isLoading = false;
   bool _obscurePassword = true;
+  bool _acceptedTerms = false;
   String? _error;
 
   @override
@@ -34,11 +37,18 @@ class _AuthScreenState extends State<AuthScreen> {
     _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
+    _confirmController.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) {
+      return;
+    }
+    if (_isRegisterMode && !_acceptedTerms) {
+      setState(() {
+        _error = 'Debes aceptar los terminos para crear tu cuenta';
+      });
       return;
     }
 
@@ -203,8 +213,69 @@ class _AuthScreenState extends State<AuthScreen> {
                       }
                       return null;
                     },
+                    onChanged: (_) {
+                      if (_isRegisterMode) {
+                        setState(() {});
+                      }
+                    },
                     onFieldSubmitted: (_) => _isLoading ? null : _submit(),
                   ),
+                  if (_isRegisterMode) ...[
+                    const SizedBox(height: 12),
+                    _PasswordRequirements(password: _passwordController.text),
+                    const SizedBox(height: 14),
+                    TextFormField(
+                      controller: _confirmController,
+                      obscureText: _obscurePassword,
+                      textInputAction: TextInputAction.done,
+                      decoration: const InputDecoration(
+                        labelText: 'Confirmar contraseña',
+                        prefixIcon: Icon(Icons.lock_outline),
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (value) {
+                        if (!_isRegisterMode) {
+                          return null;
+                        }
+                        if (value != _passwordController.text) {
+                          return 'Las contraseñas no coinciden';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 6),
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      value: _acceptedTerms,
+                      onChanged: (value) {
+                        setState(() => _acceptedTerms = value ?? false);
+                      },
+                      title: Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          const Text('Acepto los '),
+                          GestureDetector(
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    const LegalScreen(showAccept: false),
+                              ),
+                            ),
+                            child: const Text(
+                              'terminos y privacidad',
+                              style: TextStyle(
+                                color: AppColors.primary,
+                                fontWeight: FontWeight.w600,
+                                decoration: TextDecoration.underline,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -272,6 +343,53 @@ class _AuthScreenState extends State<AuthScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _PasswordRequirements extends StatelessWidget {
+  const _PasswordRequirements({required this.password});
+
+  final String password;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasLength = password.length >= 8;
+    final hasLetter = password.contains(RegExp(r'[A-Za-z]'));
+    final hasNumber = password.contains(RegExp(r'[0-9]'));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _RequirementRow(ok: hasLength, text: 'Al menos 8 caracteres'),
+        _RequirementRow(ok: hasLetter, text: 'Incluye una letra'),
+        _RequirementRow(ok: hasNumber, text: 'Incluye un numero'),
+      ],
+    );
+  }
+}
+
+class _RequirementRow extends StatelessWidget {
+  const _RequirementRow({required this.ok, required this.text});
+
+  final bool ok;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = ok ? const Color(0xFF2E7D32) : AppColors.textSecondary;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Icon(
+            ok ? Icons.check_circle : Icons.radio_button_unchecked,
+            size: 18,
+            color: color,
+          ),
+          const SizedBox(width: 8),
+          Text(text, style: TextStyle(color: color)),
+        ],
       ),
     );
   }
