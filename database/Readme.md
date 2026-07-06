@@ -142,6 +142,58 @@ Las capturas revisadas muestran:
 
 Nota: las capturas fueron compartidas durante la revisión, pero todavía no existen como archivos dentro del repositorio. Si luego se guardan en una carpeta del proyecto, este README puede enlazarlas directamente.
 
+## Despliegue en Supabase (base compartida del equipo)
+
+La estructura del MER ya fue desplegada en el proyecto de **Supabase** aplicando
+las mismas migraciones de Alembic. La configuración ya está lista: `alembic/env.py`
+toma la conexión desde `DATABASE_URL` (entorno o archivo `.env`) cuando `alembic.ini`
+mantiene el valor de ejemplo, así que **no** se escriben credenciales reales en Git.
+
+### 1. Obtener la cadena de conexión de Supabase
+
+1. Entra al proyecto en Supabase.
+2. Ve a `Project Settings` -> `Database` -> `Connection string`.
+3. Usa la pestaña **Session pooler** (puerto `5432`): funciona por IPv4 y admite
+   las transacciones DDL de las migraciones. Evita el *Transaction pooler* (`6543`).
+4. Adáptala al driver `psycopg` del proyecto (`postgresql+psycopg://`).
+
+Formato final (reemplaza `PROJECT_REF`, `REGION` y `CONTRASENA`):
+
+```env
+DATABASE_URL=postgresql+psycopg://postgres.PROJECT_REF:CONTRASENA@aws-1-REGION.pooler.supabase.com:5432/postgres?sslmode=require
+```
+
+Notas:
+
+- `sslmode=require` es obligatorio: Supabase solo acepta conexiones cifradas.
+- La contraseña es la de la base definida al crear el proyecto (o la reseteada en
+  `Database` -> `Reset database password`). Nunca la subas al repositorio.
+
+### 2. Configurar `.env` local (no se sube a Git)
+
+```env
+DATABASE_URL=postgresql+psycopg://postgres.PROJECT_REF:CONTRASENA@aws-1-REGION.pooler.supabase.com:5432/postgres?sslmode=require
+```
+
+### 3. Aplicar las migraciones sobre Supabase
+
+```bash
+alembic current       # revision actual en Supabase
+alembic upgrade head  # crea/actualiza toda la estructura
+alembic current       # debe quedar en la ultima revision (head)
+```
+
+### 4. Verificar
+
+En Supabase, `Table Editor` o `SQL Editor`, deben verse todas las tablas del MER
+más la tabla de control `alembic_version` con el número de la última revisión.
+
+### 5. Uso por el resto del equipo
+
+Cada integrante solo pone la misma `DATABASE_URL` de Supabase en su `.env`. No
+necesitan volver a correr `alembic upgrade head`, salvo que se agreguen migraciones
+nuevas; en ese caso, quien tenga la conexión ejecuta `alembic upgrade head` una vez.
+
 ## Comandos útiles
 
 Crear una migración nueva:
