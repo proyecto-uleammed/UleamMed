@@ -127,6 +127,7 @@ class MedicationItem {
     this.syncStatus = SyncStatus.synced,
     this.createdAt,
     this.updatedAt,
+    this.photoPath = '',
   });
 
   factory MedicationItem.fromJson(Map<String, dynamic> json) {
@@ -143,6 +144,7 @@ class MedicationItem {
       syncStatus: SyncStatus.fromJson(json['syncStatus']),
       createdAt: _parseDate(json['createdAt']),
       updatedAt: _parseDate(json['updatedAt']),
+      photoPath: json['photoPath']?.toString() ?? '',
     );
   }
 
@@ -158,6 +160,7 @@ class MedicationItem {
   final SyncStatus syncStatus;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+  final String photoPath;
 
   MedicationItem copyWith({
     String? id,
@@ -172,6 +175,7 @@ class MedicationItem {
     SyncStatus? syncStatus,
     DateTime? createdAt,
     DateTime? updatedAt,
+    String? photoPath,
   }) {
     return MedicationItem(
       id: id ?? this.id,
@@ -186,6 +190,7 @@ class MedicationItem {
       syncStatus: syncStatus ?? this.syncStatus,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      photoPath: photoPath ?? this.photoPath,
     );
   }
 
@@ -203,6 +208,7 @@ class MedicationItem {
       'syncStatus': syncStatus.name,
       'createdAt': createdAt?.toIso8601String(),
       'updatedAt': updatedAt?.toIso8601String(),
+      'photoPath': photoPath,
     };
   }
 

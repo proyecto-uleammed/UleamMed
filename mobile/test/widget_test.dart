@@ -367,7 +367,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Hola, Roberto 👋'), findsOneWidget);
-    expect(find.text('Backend conectado'), findsOneWidget);
     expect(find.text('Medicamentos'), findsWidgets);
   });
 

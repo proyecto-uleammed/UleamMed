@@ -62,39 +62,6 @@ class SettingsScreen extends StatelessWidget {
               ),
               const Divider(height: 32),
               _SectionTitle(
-                icon: Icons.badge_outlined,
-                title: 'Rol dentro de la app',
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Adapta el menu visible. Los permisos reales se validan en el '
-                'servidor.',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<AppRole>(
-                initialValue: current.role,
-                decoration: const InputDecoration(
-                  labelText: 'Rol actual',
-                  prefixIcon: Icon(Icons.person_pin),
-                  border: OutlineInputBorder(),
-                ),
-                items: AppRole.values
-                    .map(
-                      (role) => DropdownMenuItem(
-                        value: role,
-                        child: Text(role.label),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (role) {
-                  if (role != null) {
-                    settings.setRole(role);
-                  }
-                },
-              ),
-              const Divider(height: 32),
-              _SectionTitle(
                 icon: Icons.notifications_active_outlined,
                 title: 'Recordatorios',
               ),

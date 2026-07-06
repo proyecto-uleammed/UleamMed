@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../services/app_settings.dart';
@@ -149,14 +151,8 @@ class _HomeScreenState extends State<HomeScreen> {
                             );
                           },
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '¿Cómo te sientes hoy?',
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.85),
-                            fontSize: 18,
-                          ),
-                        ),
+                        const SizedBox(height: 6),
+                        const _DeviceDateTime(),
                       ],
                     ),
                   ),
@@ -170,13 +166,6 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _MoodSelector(),
-                  const SizedBox(height: 16),
-                  _BackendStatusCard(
-                    session: _demoSession,
-                    onRefresh: _refreshSession,
-                  ),
-                  const SizedBox(height: 12),
                   FutureBuilder<int>(
                     future: _pendingSync,
                     builder: (context, snapshot) {
@@ -368,118 +357,120 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-class _BackendStatusCard extends StatelessWidget {
-  const _BackendStatusCard({required this.session, required this.onRefresh});
+/// Muestra la fecha y hora actuales tomadas del dispositivo (zona horaria
+/// local incluida), actualizandose cada segundo.
+class _DeviceDateTime extends StatefulWidget {
+  const _DeviceDateTime();
 
-  final Future<DemoSession> session;
-  final VoidCallback onRefresh;
+  @override
+  State<_DeviceDateTime> createState() => _DeviceDateTimeState();
+}
+
+class _DeviceDateTimeState extends State<_DeviceDateTime> {
+  DateTime _now = DateTime.now();
+  Timer? _timer;
+
+  static const _weekdays = [
+    'lunes',
+    'martes',
+    'miércoles',
+    'jueves',
+    'viernes',
+    'sábado',
+    'domingo',
+  ];
+
+  static const _months = [
+    'enero',
+    'febrero',
+    'marzo',
+    'abril',
+    'mayo',
+    'junio',
+    'julio',
+    'agosto',
+    'septiembre',
+    'octubre',
+    'noviembre',
+    'diciembre',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) {
+        setState(() => _now = DateTime.now());
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  String get _dateLabel {
+    final weekday = _weekdays[_now.weekday - 1];
+    final month = _months[_now.month - 1];
+    return '${_capitalize(weekday)}, ${_now.day} de $month de ${_now.year}';
+  }
+
+  String get _timeLabel {
+    final hour = _now.hour.toString().padLeft(2, '0');
+    final minute = _now.minute.toString().padLeft(2, '0');
+    final second = _now.second.toString().padLeft(2, '0');
+    return '$hour:$minute:$second';
+  }
+
+  String get _timeZoneLabel {
+    final offset = _now.timeZoneOffset;
+    final sign = offset.isNegative ? '-' : '+';
+    final hours = offset.inHours.abs().toString().padLeft(2, '0');
+    final minutes = (offset.inMinutes.abs() % 60).toString().padLeft(2, '0');
+    final name = _now.timeZoneName;
+    return '$name (UTC$sign$hours:$minutes)';
+  }
+
+  String _capitalize(String value) {
+    if (value.isEmpty) {
+      return value;
+    }
+    return value[0].toUpperCase() + value.substring(1);
+  }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<DemoSession>(
-      future: session,
-      builder: (context, snapshot) {
-        final isLoading = snapshot.connectionState == ConnectionState.waiting;
-        final hasError = snapshot.hasError;
-        final demo = snapshot.data;
-
-        return Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: hasError ? const Color(0xFFFFF3E0) : Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: hasError
-                  ? const Color(0xFFFFB74D)
-                  : AppColors.accent.withValues(alpha: 0.7),
+    final subtitleColor = Colors.white.withValues(alpha: 0.85);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.schedule, size: 18, color: subtitleColor),
+            const SizedBox(width: 6),
+            Text(
+              _timeLabel,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+              ),
             ),
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: hasError ? const Color(0xFFFFE0B2) : AppColors.surface,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  hasError ? Icons.cloud_off : Icons.cloud_done,
-                  color: hasError ? const Color(0xFFE65100) : AppColors.primary,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      isLoading
-                          ? 'Conectando backend...'
-                          : hasError
-                          ? 'Backend no disponible'
-                          : 'Backend conectado',
-                      style: Theme.of(
-                        context,
-                      ).textTheme.titleLarge?.copyWith(fontSize: 18),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      _statusText(snapshot),
-                      style: Theme.of(
-                        context,
-                      ).textTheme.bodyMedium?.copyWith(fontSize: 14),
-                    ),
-                    if (demo != null) ...[
-                      const SizedBox(height: 10),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          _StatusChip(
-                            icon: Icons.person,
-                            label: demo.user.fullName,
-                          ),
-                          _StatusChip(
-                            icon: Icons.email,
-                            label: demo.user.email,
-                          ),
-                          _StatusChip(icon: Icons.api, label: demo.environment),
-                        ],
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              IconButton(
-                tooltip: 'Actualizar conexion',
-                onPressed: isLoading ? null : onRefresh,
-                icon: const Icon(Icons.refresh),
-              ),
-            ],
-          ),
-        );
-      },
+          ],
+        ),
+        const SizedBox(height: 2),
+        Text(
+          _dateLabel,
+          style: TextStyle(color: subtitleColor, fontSize: 15),
+        ),
+        Text(
+          _timeZoneLabel,
+          style: TextStyle(color: subtitleColor, fontSize: 12),
+        ),
+      ],
     );
-  }
-
-  String _statusText(AsyncSnapshot<DemoSession> snapshot) {
-    if (snapshot.connectionState == ConnectionState.waiting) {
-      return 'Validando conexion y perfil del usuario.';
-    }
-
-    if (snapshot.hasError) {
-      return 'Levanta FastAPI en el puerto 8000 y vuelve a intentar.';
-    }
-
-    final demo = snapshot.data;
-    if (demo == null) {
-      return 'Sin datos del backend todavia.';
-    }
-
-    return 'Sesion activa desde ${demo.apiUrl}.';
   }
 }
 
@@ -550,125 +541,6 @@ class _OfflineStatusCard extends StatelessWidget {
             tooltip: 'Sincronizar',
             onPressed: onSync,
             icon: const Icon(Icons.sync),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StatusChip extends StatelessWidget {
-  const _StatusChip({required this.icon, required this.label});
-
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 16, color: AppColors.primary),
-          const SizedBox(width: 6),
-          Flexible(
-            child: Text(
-              label,
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(fontSize: 13),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MoodSelector extends StatefulWidget {
-  @override
-  State<_MoodSelector> createState() => _MoodSelectorState();
-}
-
-class _MoodSelectorState extends State<_MoodSelector> {
-  int? _selectedMood;
-
-  static const _moods = [
-    (Icons.sentiment_very_satisfied, 'Bien'),
-    (Icons.sentiment_neutral, 'Regular'),
-    (Icons.sentiment_dissatisfied, 'Mal'),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Tu estado de ánimo',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: List.generate(_moods.length, (index) {
-              final isSelected = _selectedMood == index;
-              return Expanded(
-                child: Padding(
-                  padding: EdgeInsets.only(
-                    right: index < _moods.length - 1 ? 8 : 0,
-                  ),
-                  child: InkWell(
-                    onTap: () => setState(() => _selectedMood = index),
-                    borderRadius: BorderRadius.circular(12),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      decoration: BoxDecoration(
-                        color: isSelected ? AppColors.primary : Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: isSelected
-                              ? AppColors.primary
-                              : AppColors.accent,
-                        ),
-                      ),
-                      child: Column(
-                        children: [
-                          Icon(
-                            _moods[index].$1,
-                            color: isSelected
-                                ? Colors.white
-                                : AppColors.primary,
-                            size: 32,
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            _moods[index].$2,
-                            style: TextStyle(
-                              color: isSelected
-                                  ? Colors.white
-                                  : AppColors.textPrimary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            }),
           ),
         ],
       ),
