@@ -435,6 +435,33 @@ void main() {
     expect(find.text('Roberto Nuevo'), findsWidgets);
   });
 
+  testWidgets('home shows upcoming doses and marks one as taken', (
+    WidgetTester tester,
+  ) async {
+    final api = _FakeApi();
+
+    await tester.pumpWidget(
+      UleamMedApp(api: api, settingsController: _testSettings()),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Entrar en modo demo'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Proximas tomas'), findsOneWidget);
+    expect(find.text('Omeprazol - 20 mg'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Tomado'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Omeprazol: marcado como tomado'), findsOneWidget);
+    expect(
+      api.confirmations.any(
+        (c) => c.medicationId == 'omeprazol' && c.status == DoseStatus.taken,
+      ),
+      isTrue,
+    );
+  });
+
   testWidgets('password recovery requests code and resets password', (
     WidgetTester tester,
   ) async {
