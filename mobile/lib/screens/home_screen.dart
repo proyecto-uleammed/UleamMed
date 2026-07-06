@@ -8,6 +8,7 @@ import 'caregivers_screen.dart';
 import 'conditions_screen.dart';
 import 'emergency_screen.dart';
 import 'medications_screen.dart';
+import 'pending_sync_screen.dart';
 import 'profile_screen.dart';
 import 'settings_screen.dart';
 
@@ -269,6 +270,18 @@ class _HomeScreenState extends State<HomeScreen> {
                       context,
                       MaterialPageRoute(
                         builder: (_) => CaregiversScreen(api: _api),
+                      ),
+                    ),
+                  ),
+                  ActionCard(
+                    icon: Icons.sync,
+                    title: 'Sincronización',
+                    subtitle: 'Revisa los cambios pendientes',
+                    color: AppColors.primary,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => PendingSyncScreen(api: _api),
                       ),
                     ),
                   ),
