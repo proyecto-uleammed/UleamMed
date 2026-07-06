@@ -258,6 +258,29 @@ class _FakeApi implements UleamMedApi {
     emergencyContacts.removeWhere((c) => c.id == contactId);
   }
 
+  final List<HealthEntry> healthEntries = [];
+
+  @override
+  Future<List<HealthEntry>> listHealthEntries() async {
+    return healthEntries;
+  }
+
+  @override
+  Future<HealthEntry> saveHealthEntry(HealthEntry entry) async {
+    final index = healthEntries.indexWhere((e) => e.id == entry.id);
+    if (index >= 0) {
+      healthEntries[index] = entry;
+    } else {
+      healthEntries.add(entry);
+    }
+    return entry;
+  }
+
+  @override
+  Future<void> deleteHealthEntry(String entryId) async {
+    healthEntries.removeWhere((e) => e.id == entryId);
+  }
+
   @override
   Future<int> pendingSyncCount() async {
     return medicalProfile.syncStatus == SyncStatus.pending ? 1 : 0;

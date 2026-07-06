@@ -43,6 +43,9 @@ abstract class UleamMedApi {
   Future<List<EmergencyContact>> listEmergencyContacts();
   Future<EmergencyContact> saveEmergencyContact(EmergencyContact contact);
   Future<void> deleteEmergencyContact(String contactId);
+  Future<List<HealthEntry>> listHealthEntries();
+  Future<HealthEntry> saveHealthEntry(HealthEntry entry);
+  Future<void> deleteHealthEntry(String entryId);
   Future<int> pendingSyncCount();
   Future<SyncSummary> synchronizePendingChanges();
 }
@@ -386,6 +389,21 @@ class ApiService implements UleamMedApi {
   @override
   Future<void> deleteEmergencyContact(String contactId) {
     return _localStore.deleteEmergencyContact(contactId);
+  }
+
+  @override
+  Future<List<HealthEntry>> listHealthEntries() {
+    return _localStore.readHealthEntries();
+  }
+
+  @override
+  Future<HealthEntry> saveHealthEntry(HealthEntry entry) {
+    return _localStore.upsertHealthEntry(entry);
+  }
+
+  @override
+  Future<void> deleteHealthEntry(String entryId) {
+    return _localStore.deleteHealthEntry(entryId);
   }
 
   @override
