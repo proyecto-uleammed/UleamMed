@@ -44,6 +44,32 @@ class LocalStore {
   static const _emergencyContactsKey = 'uleammed_emergency_contacts';
   static const _caregiverPermissionsKey = 'uleammed_caregiver_permissions';
   static const _healthEntriesKey = 'uleammed_health_entries';
+  static const _activeUserKey = 'uleammed_active_user';
+
+  /// Borra los datos locales del usuario al cambiar de cuenta o registrarse.
+  Future<void> clearUserData() async {
+    await Future.wait([
+      _jsonStore.delete(_medicalProfileKey),
+      _jsonStore.delete(_medicationsKey),
+      _jsonStore.delete(_confirmationsKey),
+      _jsonStore.delete(_appointmentsKey),
+      _jsonStore.delete(_emergencyContactsKey),
+      _jsonStore.delete(_caregiverPermissionsKey),
+      _jsonStore.delete(_healthEntriesKey),
+    ]);
+  }
+
+  Future<String?> readActiveUserId() {
+    return _jsonStore.read(_activeUserKey);
+  }
+
+  Future<void> saveActiveUserId(String userId) {
+    return _jsonStore.write(_activeUserKey, userId);
+  }
+
+  Future<void> clearActiveUserId() {
+    return _jsonStore.delete(_activeUserKey);
+  }
 
   Future<MedicalProfile> readMedicalProfile() async {
     final data = await _readObject(_medicalProfileKey);

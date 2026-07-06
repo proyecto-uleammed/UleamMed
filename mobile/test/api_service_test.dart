@@ -153,8 +153,17 @@ void main() {
   });
 
   group('ApiService offline data', () {
-    test('seeds medications and records a pending local confirmation', () async {
+    test('records a pending local confirmation without backend', () async {
       final localStore = LocalStore(jsonStore: _MemoryJsonStore());
+      await localStore.upsertMedication(
+        const MedicationItem(
+          id: 'omeprazol',
+          name: 'Omeprazol',
+          dose: '20 mg',
+          time: '14:00',
+          taken: false,
+        ),
+      );
       final api = ApiService(
         baseUrl: 'http://localhost:8000',
         tokenStore: _MemoryTokenStore(),
@@ -165,7 +174,7 @@ void main() {
       );
 
       final medications = await api.listMedications();
-      expect(medications, isNotEmpty);
+      expect(medications, hasLength(1));
 
       final result = await api.recordMedicationStatus(
         'omeprazol',
@@ -177,6 +186,37 @@ void main() {
       expect(confirmations, hasLength(1));
       expect(confirmations.first.status, DoseStatus.taken);
       expect(await api.pendingSyncCount(), greaterThanOrEqualTo(1));
+    });
+
+    test('does not auto-seed medications for new accounts', () async {
+      final localStore = LocalStore(jsonStore: _MemoryJsonStore());
+      final api = ApiService(
+        baseUrl: 'http://localhost:8000',
+        tokenStore: _MemoryTokenStore(
+          const AuthTokens(accessToken: 'access-ok', refreshToken: 'refresh-ok'),
+        ),
+        localStore: localStore,
+        client: MockClient((request) async {
+          if (request.url.path == '/api/v1/medications') {
+            return _jsonResponse({
+              'items': [
+                {
+                  'id': 'omeprazol',
+                  'name': 'Omeprazol',
+                  'dose': '20 mg',
+                  'time': '14:00',
+                  'taken': false,
+                },
+              ],
+            });
+          }
+          return _jsonResponse({'detail': 'No autorizado'}, statusCode: 401);
+        }),
+      );
+
+      final medications = await api.listMedications();
+
+      expect(medications, isEmpty);
     });
   });
 }

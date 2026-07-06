@@ -80,6 +80,12 @@ class ApiService implements UleamMedApi {
   static const _demoEmail = 'roberto@uleammed.demo';
   static const _demoPassword = 'clave-segura-123';
   static const _demoName = 'Roberto Andrade';
+  static const _backendDemoMedicationIds = {
+    'metformina',
+    'losartan',
+    'omeprazol',
+    'atorvastatina',
+  };
 
   static String get _defaultBaseUrl {
     const configuredUrl = String.fromEnvironment('ULEAMMED_API_URL');
@@ -108,7 +114,8 @@ class ApiService implements UleamMedApi {
 
     _setTokensInMemory(tokens);
     try {
-      return await loadDemoSession();
+      final session = await loadDemoSession();
+      return _finalizeSession(session);
     } on ApiException catch (error) {
       if (error.statusCode == 401) {
         await logout();
@@ -125,7 +132,8 @@ class ApiService implements UleamMedApi {
   }) async {
     final tokens = await _loginUser(email: email, password: password);
     await _persistTokens(tokens);
-    return loadDemoSession();
+    final session = await loadDemoSession();
+    return _finalizeSession(session);
   }
 
   @override
@@ -151,6 +159,7 @@ class ApiService implements UleamMedApi {
       );
     }
 
+    await _localStore.clearUserData();
     return login(email: email, password: password);
   }
 
@@ -159,7 +168,10 @@ class ApiService implements UleamMedApi {
     await _ensureDemoUser();
     final tokens = await _loginUser(email: _demoEmail, password: _demoPassword);
     await _persistTokens(tokens);
-    return loadDemoSession();
+    final session = await loadDemoSession();
+    final finalized = await _finalizeSession(session);
+    await _seedDemoMedicationsIfNeeded();
+    return finalized;
   }
 
   @override
@@ -223,6 +235,7 @@ class ApiService implements UleamMedApi {
     _accessToken = null;
     _refreshToken = null;
     await _tokenStore.clear();
+    await _localStore.clearActiveUserId();
   }
 
   @override
@@ -240,12 +253,12 @@ class ApiService implements UleamMedApi {
   Future<List<MedicationItem>> listMedications() async {
     final localItems = await _localStore.readMedications();
 
+    if (localItems.isEmpty) {
+      return localItems;
+    }
+
     try {
       final backendItems = await _loadBackendMedications();
-      if (localItems.isEmpty) {
-        await _localStore.saveMedications(backendItems);
-        return backendItems;
-      }
       final merged = _mergeMedications(localItems, backendItems);
       await _localStore.saveMedications(merged);
       return merged;
@@ -389,6 +402,47 @@ class ApiService implements UleamMedApi {
   @override
   Future<SyncSummary> synchronizePendingChanges() {
     return _syncService.synchronizePending();
+  }
+
+  Future<DemoSession> _finalizeSession(DemoSession session) async {
+    final userId = session.user.id.toString();
+    final previousUserId = await _localStore.readActiveUserId();
+    if (previousUserId != null && previousUserId != userId) {
+      await _localStore.clearUserData();
+    }
+    await _localStore.saveActiveUserId(userId);
+
+    if (session.user.email != _demoEmail) {
+      await _clearBackendDemoSeedIfNeeded();
+    }
+
+    return session;
+  }
+
+  Future<void> _clearBackendDemoSeedIfNeeded() async {
+    final meds = await _localStore.readMedications();
+    if (meds.isEmpty) {
+      return;
+    }
+    final onlyBackendDemo = meds.every(
+      (item) => _backendDemoMedicationIds.contains(item.id),
+    );
+    if (onlyBackendDemo) {
+      await _localStore.saveMedications([]);
+    }
+  }
+
+  Future<void> _seedDemoMedicationsIfNeeded() async {
+    final localItems = await _localStore.readMedications();
+    if (localItems.isNotEmpty) {
+      return;
+    }
+    try {
+      final backendItems = await _loadBackendMedications();
+      await _localStore.saveMedications(backendItems);
+    } catch (_) {
+      // El modo demo puede funcionar sin datos precargados.
+    }
   }
 
   Future<List<MedicationItem>> _loadBackendMedications() async {

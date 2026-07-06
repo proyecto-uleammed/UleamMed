@@ -260,6 +260,46 @@ class _HomeScreenState extends State<HomeScreen> {
                   FutureBuilder<List<MedicationItem>>(
                     future: _medicationSummary,
                     builder: (context, snapshot) {
+                      final medications = snapshot.data;
+                      if (medications == null) {
+                        return const SizedBox.shrink();
+                      }
+                      if (medications.isEmpty) {
+                        return Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: AppColors.surface,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: AppColors.accent.withValues(alpha: 0.5),
+                            ),
+                          ),
+                          child: Column(
+                            children: [
+                              const Icon(
+                                Icons.insights_outlined,
+                                color: AppColors.primary,
+                                size: 28,
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Tu cumplimiento aparecera aqui',
+                                style: Theme.of(context).textTheme.titleLarge,
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Cuando registres medicamentos y confirmes tus '
+                                'tomas, veras el porcentaje de cumplimiento '
+                                'del dia.',
+                                style: Theme.of(context).textTheme.bodyMedium,
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          ),
+                        );
+                      }
                       return _SummaryCard(
                         icon: Icons.medication,
                         label: 'Cumplimiento de medicamentos hoy',
