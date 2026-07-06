@@ -5,12 +5,57 @@ from sqlalchemy import pool
 
 from alembic import context
 from backend.core.config import settings
+from backend.core.database import Base
+from backend.models import adulto_mayor as adulto_mayor_model
+from backend.models import cuidador as cuidador_model
+from backend.models import cuidador_adulto_mayor as cuidador_adulto_mayor_model
+from backend.models import cumplimiento_medicacion as cumplimiento_medicacion_model
+from backend.models import destinatario_notificacion as destinatario_notificacion_model
+from backend.models import detalle_examen as detalle_examen_model
+from backend.models import encargado as encargado_model
+from backend.models import examen_medico as examen_medico_model
+from backend.models import historial_medico as historial_medico_model
+from backend.models import medicamento as medicamento_model
+from backend.models import notificacion as notificacion_model
+from backend.models import parametro_examen as parametro_examen_model
+from backend.models import password_reset_token as password_reset_token_model
+from backend.models import perfil_medico as perfil_medico_model
+from backend.models import token_fcm as token_fcm_model
+from backend.models import tratamiento as tratamiento_model
+from backend.models import tratamiento_medicamento as tratamiento_medicamento_model
+from backend.models import user as user_model
+from backend.models import usuario as usuario_model
+
+_MODEL_MODULES = (
+    adulto_mayor_model,
+    cuidador_model,
+    cuidador_adulto_mayor_model,
+    cumplimiento_medicacion_model,
+    destinatario_notificacion_model,
+    detalle_examen_model,
+    encargado_model,
+    examen_medico_model,
+    historial_medico_model,
+    medicamento_model,
+    notificacion_model,
+    parametro_examen_model,
+    password_reset_token_model,
+    perfil_medico_model,
+    token_fcm_model,
+    tratamiento_model,
+    tratamiento_medicamento_model,
+    user_model,
+    usuario_model,
+)
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
-_placeholder_url = "postgresql+psycopg://user:pass@localhost:5432/uleammed"
-if config.get_main_option("sqlalchemy.url") == _placeholder_url:
+
+# Alembic debe apuntar a la misma base que usa FastAPI.
+# En desarrollo puede ser PostgreSQL local; para el equipo debe ser la cadena
+# de Supabase definida en DATABASE_URL dentro del entorno o archivo .env.
+if settings.DATABASE_URL:
     config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
 
 # Interpret the config file for Python logging.
@@ -18,31 +63,8 @@ if config.get_main_option("sqlalchemy.url") == _placeholder_url:
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# add your model's MetaData object here
-# for 'autogenerate' support
-# from myapp import mymodel
-# target_metadata = mymodel.Base.metadata
-from backend.core.database import Base
-from backend.models.user import User as _User
-from backend.models.password_reset_token import PasswordResetToken as _PasswordResetToken
-from backend.models.usuario import Usuario as _Usuario
-from backend.models.encargado import Encargado as _Encargado
-from backend.models.cuidador import Cuidador as _Cuidador
-from backend.models.adulto_mayor import AdultoMayor as _AdultoMayor
-from backend.models.perfil_medico import PerfilMedico as _PerfilMedico
-from backend.models.historial_medico import HistorialMedico as _HistorialMedico
-from backend.models.examen_medico import ExamenMedico as _ExamenMedico
-from backend.models.detalle_examen import DetalleExamen as _DetalleExamen
-from backend.models.parametro_examen import ParametroExamen as _ParametroExamen
-from backend.models.medicamento import Medicamento as _Medicamento
-from backend.models.tratamiento import Tratamiento as _Tratamiento
-from backend.models.tratamiento_medicamento import TratamientoMedicamento as _TratamientoMedicamento
-from backend.models.cumplimiento_medicacion import CumplimientoMedicacion as _CumplimientoMedicacion
-from backend.models.notificacion import Notificacion as _Notificacion
-from backend.models.destinatario_notificacion import DestinatarioNotificacion as _DestinatarioNotificacion
-from backend.models.token_fcm import TokenFcm as _TokenFcm
-from backend.models.cuidador_adulto_mayor import CuidadorAdultoMayor as _CuidadorAdultoMayor
-
+# Los imports de _MODEL_MODULES registran todos los modelos en Base.metadata
+# para que Alembic pueda autogenerar migraciones correctamente.
 target_metadata = Base.metadata
 
 # other values from the config, defined by the needs of env.py,
