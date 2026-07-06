@@ -52,6 +52,50 @@ class RefreshRequest(BaseModel):
     refresh_token: str
 
 
+class PasswordResetRequest(BaseModel):
+    """Solicitud para enviar codigo de recuperacion."""
+
+    email: str = Field(..., examples=["usuario@uleam.edu.ec"])
+
+    @field_validator("email")
+    @classmethod
+    def validar_email(cls, value: str) -> str:
+        email = value.strip().lower()
+        if "@" not in email or "." not in email.rsplit("@", maxsplit=1)[-1]:
+            raise ValueError("Debe ingresar un correo electronico valido")
+        return email
+
+
+class PasswordResetConfirm(BaseModel):
+    """Datos necesarios para cambiar contrasena con codigo temporal."""
+
+    email: str = Field(..., examples=["usuario@uleam.edu.ec"])
+    code: str = Field(..., min_length=6, max_length=6, examples=["123456"])
+    new_password: str = Field(..., min_length=8, max_length=128, examples=["nueva-clave-segura-123"])
+
+    @field_validator("email")
+    @classmethod
+    def validar_email(cls, value: str) -> str:
+        email = value.strip().lower()
+        if "@" not in email or "." not in email.rsplit("@", maxsplit=1)[-1]:
+            raise ValueError("Debe ingresar un correo electronico valido")
+        return email
+
+    @field_validator("code")
+    @classmethod
+    def validar_codigo(cls, value: str) -> str:
+        code = value.strip()
+        if not code.isdigit():
+            raise ValueError("El codigo debe tener 6 digitos")
+        return code
+
+
+class MessageResponse(BaseModel):
+    """Respuesta generica para acciones sin datos sensibles."""
+
+    message: str
+
+
 class TokenPair(BaseModel):
     """Respuesta del login con tokens de acceso y renovacion."""
 

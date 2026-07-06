@@ -24,6 +24,7 @@ if config.config_file_name is not None:
 # target_metadata = mymodel.Base.metadata
 from backend.core.database import Base
 from backend.models.user import User as _User
+from backend.models.password_reset_token import PasswordResetToken as _PasswordResetToken
 from backend.models.usuario import Usuario as _Usuario
 from backend.models.encargado import Encargado as _Encargado
 from backend.models.cuidador import Cuidador as _Cuidador

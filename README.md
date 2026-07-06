@@ -9,8 +9,11 @@ Ya esta integrado en `main`:
 - Backend FastAPI con API REST versionada en `/api/v1`.
 - Autenticacion con JWT: registro, login, refresh y perfil.
 - Frontend Flutter dentro de `mobile/`.
+- Pantalla inicial Flutter para iniciar sesion, crear cuenta o recuperar contrasena de forma preparada.
+- Sesion movil persistida con almacenamiento seguro, restauracion automatica, refresh token y logout.
+- Perfil basico editable desde Flutter usando `/api/v1/users/me`.
 - Conexion Flutter -> FastAPI mediante `mobile/lib/services/api_service.dart`.
-- Demo de usuario automatico: `roberto@uleammed.demo`.
+- Modo demo disponible manualmente para desarrollo: `roberto@uleammed.demo`.
 - Modulo de medicamentos conectado al backend:
   - `GET /api/v1/medications`
   - `POST /api/v1/medications/{medication_id}/take`
@@ -72,6 +75,8 @@ El backend esta construido con FastAPI y expone:
 - `POST /api/v1/auth/register`: registrar usuario.
 - `POST /api/v1/auth/login`: iniciar sesion.
 - `POST /api/v1/auth/refresh`: renovar access token.
+- `POST /api/v1/auth/forgot-password`: solicitar codigo de recuperacion por correo.
+- `POST /api/v1/auth/reset-password`: cambiar contrasena usando codigo temporal.
 - `GET /api/v1/users/me`: ver perfil autenticado.
 - `PATCH /api/v1/users/me`: actualizar perfil autenticado.
 - `GET /api/v1/medications`: listar medicamentos demo del usuario.
@@ -158,9 +163,14 @@ Variables principales:
 - `ALGORITHM`: algoritmo JWT, por defecto `HS256`.
 - `ACCESS_TOKEN_EXPIRE_MINUTES`: duracion del access token.
 - `REFRESH_TOKEN_EXPIRE_DAYS`: duracion del refresh token.
+- `PASSWORD_RESET_CODE_EXPIRE_MINUTES`: duracion del codigo de recuperacion.
 - `FIREBASE_CREDENTIALS`: ruta al JSON de Firebase Admin SDK.
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`: credenciales SMTP para correos reales.
+- `SMTP_FROM_EMAIL`, `SMTP_FROM_NAME`, `SMTP_USE_TLS`: remitente y seguridad SMTP.
 - `CORS_ORIGINS`: origenes permitidos para Flutter Web; en desarrollo puede usarse `*`.
 - `ENVIRONMENT`: entorno de ejecucion.
+
+Si `SMTP_HOST` queda vacio, el backend registra los correos en logs para desarrollo local. Para enviar correos reales se puede usar un proveedor SMTP con capa gratis como Brevo, Resend o Mailtrap.
 
 ## Instalacion backend
 
@@ -304,9 +314,9 @@ Documentacion:
 
 - Adaptar autenticacion desde `users` hacia `usuario` cuando el equipo lo acuerde.
 - Reemplazar almacenamiento en memoria por persistencia real usando el MER.
-- Login visual real en Flutter; hoy la app usa usuario demo automatico.
 - Refactorizar datos estaticos de citas, actividades y emergencias.
 - Conectar citas, actividades y emergencias al backend cuando existan endpoints.
+- Configurar un proveedor SMTP real para enviar correos fuera del modo logs.
 - Mejorar validaciones de UX y accesibilidad.
 - Agregar CI para Flutter.
 - Definir despliegue real del backend despues de ECR.

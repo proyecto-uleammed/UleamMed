@@ -5,88 +5,88 @@ class ActivitiesScreen extends StatelessWidget {
   const ActivitiesScreen({super.key});
 
   static const _activities = [
-  _Activity(
-    title: 'Caminata ligera',
-    duration: '20 min',
-    time: '09:00',
-    completed: true,
-    icon: Icons.directions_walk,
-  ),
-  _Activity(
-    title: 'Ejercicios de estiramiento',
-    duration: '15 min',
-    time: '11:00',
-    completed: false,
-    icon: Icons.self_improvement,
-  ),
-  _Activity(
-    title: 'Lectura / pasatiempo',
-    duration: '30 min',
-    time: '15:00',
-    completed: false,
-    icon: Icons.menu_book,
-  ),
-  _Activity(
-    title: 'Hidratación',
-    duration: '8 vasos de agua',
-    time: 'Todo el día',
-    completed: false,
-    icon: Icons.water_drop,
-  ),
-];
+    _Activity(
+      title: 'Caminata ligera',
+      duration: '20 min',
+      time: '09:00',
+      completed: true,
+      icon: Icons.directions_walk,
+    ),
+    _Activity(
+      title: 'Ejercicios de estiramiento',
+      duration: '15 min',
+      time: '11:00',
+      completed: false,
+      icon: Icons.self_improvement,
+    ),
+    _Activity(
+      title: 'Lectura / pasatiempo',
+      duration: '30 min',
+      time: '15:00',
+      completed: false,
+      icon: Icons.menu_book,
+    ),
+    _Activity(
+      title: 'Hidratación',
+      duration: '8 vasos de agua',
+      time: 'Todo el día',
+      completed: false,
+      icon: Icons.water_drop,
+    ),
+  ];
 
   @override
   Widget build(BuildContext context) {
-  return Scaffold(
-    appBar: AppBar(title: const Text('Actividades del Día')),
-    body: ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                AppColors.primaryLight,
-                AppColors.primary,
-              ],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.wb_sunny, color: Colors.white, size: 40),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      '¡Buen día, Roberto!',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '1 de 4 actividades completadas',
-                      style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontSize: 16),
-                    ),
-                  ],
-                ),
+    return Scaffold(
+      appBar: AppBar(title: const Text('Actividades del Día')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [AppColors.primaryLight, AppColors.primary],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
-            ],
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.wb_sunny, color: Colors.white, size: 40),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        '¡Buen día, Roberto!',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '1 de 4 actividades completadas',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.9),
+                          fontSize: 16,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-        const SizedBox(height: 16),
-        ..._activities.map((activity) => _ActivityCard(activity: activity)),
-      ],
-    ),
-  );
+          const SizedBox(height: 16),
+          ..._activities.map((activity) => _ActivityCard(activity: activity)),
+        ],
+      ),
+    );
   }
 }
 
@@ -130,7 +130,9 @@ class _ActivityCard extends StatelessWidget {
               ),
               child: Icon(
                 activity.icon,
-                color: activity.completed ? AppColors.primary : AppColors.textSecondary,
+                color: activity.completed
+                    ? AppColors.primary
+                    : AppColors.textSecondary,
               ),
             ),
             const SizedBox(width: 16),
@@ -138,7 +140,10 @@ class _ActivityCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(activity.title, style: Theme.of(context).textTheme.titleLarge),
+                  Text(
+                    activity.title,
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
                   Text(
                     '${activity.duration} · ${activity.time}',
                     style: Theme.of(context).textTheme.bodyMedium,
@@ -147,8 +152,12 @@ class _ActivityCard extends StatelessWidget {
               ),
             ),
             Icon(
-              activity.completed ? Icons.check_circle : Icons.radio_button_unchecked,
-              color: activity.completed ? AppColors.primary : AppColors.textSecondary,
+              activity.completed
+                  ? Icons.check_circle
+                  : Icons.radio_button_unchecked,
+              color: activity.completed
+                  ? AppColors.primary
+                  : AppColors.textSecondary,
               size: 28,
             ),
           ],

@@ -27,9 +27,20 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    PASSWORD_RESET_CODE_EXPIRE_MINUTES: int = 15
     FIREBASE_CREDENTIALS: str | None = None
     CORS_ORIGINS: str = "*"
     ENVIRONMENT: str = "development"
+
+    # Configuracion SMTP opcional. Si no se configura SMTP_HOST, los correos
+    # se registran en logs para desarrollo local.
+    SMTP_HOST: str | None = None
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str | None = None
+    SMTP_PASSWORD: str | None = None
+    SMTP_FROM_EMAIL: str = "no-reply@uleammed.local"
+    SMTP_FROM_NAME: str = "UleamMed"
+    SMTP_USE_TLS: bool = True
 
     def get_cors_origins(self) -> list[str]:
         """Devuelve origenes CORS separados por coma o comodin para desarrollo."""
