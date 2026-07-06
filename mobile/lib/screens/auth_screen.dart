@@ -1,0 +1,278 @@
+import 'package:flutter/material.dart';
+
+import '../services/api_service.dart';
+import '../theme/app_theme.dart';
+import 'password_recovery_screen.dart';
+
+class AuthScreen extends StatefulWidget {
+  const AuthScreen({
+    super.key,
+    required this.api,
+    required this.onAuthenticated,
+  });
+
+  final UleamMedApi api;
+  final ValueChanged<DemoSession> onAuthenticated;
+
+  @override
+  State<AuthScreen> createState() => _AuthScreenState();
+}
+
+class _AuthScreenState extends State<AuthScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+
+  bool _isRegisterMode = false;
+  bool _isLoading = false;
+  bool _obscurePassword = true;
+  String? _error;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    await _runAuthAction(() {
+      if (_isRegisterMode) {
+        return widget.api.register(
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
+          fullName: _nameController.text.trim(),
+        );
+      }
+
+      return widget.api.login(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+      );
+    });
+  }
+
+  Future<void> _startDemo() async {
+    await _runAuthAction(widget.api.startDemoSession);
+  }
+
+  Future<void> _runAuthAction(Future<DemoSession> Function() action) async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      final session = await action();
+      if (!mounted) {
+        return;
+      }
+      widget.onAuthenticated(session);
+    } on ApiException catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _error = error.message;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _error = 'No se pudo conectar con el backend';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  void _toggleMode() {
+    setState(() {
+      _isRegisterMode = !_isRegisterMode;
+      _error = null;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(24),
+          children: [
+            const SizedBox(height: 24),
+            const Icon(
+              Icons.health_and_safety,
+              color: AppColors.primary,
+              size: 64,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'UleamMed',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.headlineLarge,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _isRegisterMode ? 'Crear cuenta' : 'Iniciar sesión',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 28),
+            Form(
+              key: _formKey,
+              child: Column(
+                children: [
+                  if (_isRegisterMode) ...[
+                    TextFormField(
+                      controller: _nameController,
+                      textInputAction: TextInputAction.next,
+                      decoration: const InputDecoration(
+                        labelText: 'Nombre completo',
+                        prefixIcon: Icon(Icons.person),
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (value) {
+                        if (!_isRegisterMode) {
+                          return null;
+                        }
+                        if ((value ?? '').trim().length < 3) {
+                          return 'Ingresa tu nombre';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 14),
+                  ],
+                  TextFormField(
+                    controller: _emailController,
+                    keyboardType: TextInputType.emailAddress,
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                      labelText: 'Correo electrónico',
+                      prefixIcon: Icon(Icons.email),
+                      border: OutlineInputBorder(),
+                    ),
+                    validator: (value) {
+                      final email = (value ?? '').trim();
+                      if (!email.contains('@') || !email.contains('.')) {
+                        return 'Ingresa un correo válido';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 14),
+                  TextFormField(
+                    controller: _passwordController,
+                    obscureText: _obscurePassword,
+                    textInputAction: TextInputAction.done,
+                    decoration: InputDecoration(
+                      labelText: 'Contraseña',
+                      prefixIcon: const Icon(Icons.lock),
+                      suffixIcon: IconButton(
+                        tooltip: _obscurePassword
+                            ? 'Mostrar contraseña'
+                            : 'Ocultar contraseña',
+                        onPressed: () {
+                          setState(() {
+                            _obscurePassword = !_obscurePassword;
+                          });
+                        },
+                        icon: Icon(
+                          _obscurePassword
+                              ? Icons.visibility
+                              : Icons.visibility_off,
+                        ),
+                      ),
+                      border: const OutlineInputBorder(),
+                    ),
+                    validator: (value) {
+                      if ((value ?? '').length < 8) {
+                        return 'Mínimo 8 caracteres';
+                      }
+                      return null;
+                    },
+                    onFieldSubmitted: (_) => _isLoading ? null : _submit(),
+                  ),
+                ],
+              ),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFEBEE),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFE57373)),
+                ),
+                child: Text(
+                  _error!,
+                  style: const TextStyle(
+                    color: Color(0xFFC62828),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+            const SizedBox(height: 20),
+            FilledButton.icon(
+              onPressed: _isLoading ? null : _submit,
+              icon: _isLoading
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Icon(_isRegisterMode ? Icons.person_add : Icons.login),
+              label: Text(_isRegisterMode ? 'Crear cuenta' : 'Entrar'),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: _isLoading ? null : _toggleMode,
+              icon: Icon(_isRegisterMode ? Icons.login : Icons.person_add),
+              label: Text(
+                _isRegisterMode
+                    ? 'Ya tengo cuenta'
+                    : 'Necesito crear una cuenta',
+              ),
+            ),
+            if (!_isRegisterMode) ...[
+              const SizedBox(height: 10),
+              TextButton.icon(
+                onPressed: _isLoading
+                    ? null
+                    : () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              PasswordRecoveryScreen(api: widget.api),
+                        ),
+                      ),
+                icon: const Icon(Icons.lock_reset),
+                label: const Text('Olvide mi contrasena'),
+              ),
+            ],
+            const SizedBox(height: 10),
+            TextButton.icon(
+              onPressed: _isLoading ? null : _startDemo,
+              icon: const Icon(Icons.science),
+              label: const Text('Entrar en modo demo'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

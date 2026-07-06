@@ -6,11 +6,13 @@ import 'activities_screen.dart';
 import 'appointments_screen.dart';
 import 'emergency_screen.dart';
 import 'medications_screen.dart';
+import 'profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, this.api});
+  const HomeScreen({super.key, this.api, required this.onLogout});
 
   final UleamMedApi? api;
+  final Future<void> Function() onLogout;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -41,6 +43,26 @@ class _HomeScreenState extends State<HomeScreen> {
           SliverAppBar(
             expandedHeight: 210,
             pinned: true,
+            actions: [
+              IconButton(
+                tooltip: 'Mi perfil',
+                onPressed: () async {
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => ProfileScreen(api: _api)),
+                  );
+                  if (mounted) {
+                    _refreshSession();
+                  }
+                },
+                icon: const Icon(Icons.account_circle),
+              ),
+              IconButton(
+                tooltip: 'Cerrar sesion',
+                onPressed: widget.onLogout,
+                icon: const Icon(Icons.logout),
+              ),
+            ],
             flexibleSpace: FlexibleSpaceBar(
               background: Container(
                 decoration: const BoxDecoration(
@@ -65,13 +87,21 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        const Text(
-                          'Hola, Roberto 👋',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                          ),
+                        FutureBuilder<DemoSession>(
+                          future: _demoSession,
+                          builder: (context, snapshot) {
+                            final name =
+                                snapshot.data?.user.fullName.split(' ').first ??
+                                'Paciente';
+                            return Text(
+                              'Hola, $name 👋',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 28,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            );
+                          },
                         ),
                         const SizedBox(height: 4),
                         Text(
@@ -314,7 +344,7 @@ class _BackendStatusCard extends StatelessWidget {
 
   String _statusText(AsyncSnapshot<DemoSession> snapshot) {
     if (snapshot.connectionState == ConnectionState.waiting) {
-      return 'Validando /health, login demo y perfil del usuario.';
+      return 'Validando conexion y perfil del usuario.';
     }
 
     if (snapshot.hasError) {
@@ -326,7 +356,7 @@ class _BackendStatusCard extends StatelessWidget {
       return 'Sin datos del backend todavia.';
     }
 
-    return 'Sesion demo activa desde ${demo.apiUrl}.';
+    return 'Sesion activa desde ${demo.apiUrl}.';
   }
 }
 

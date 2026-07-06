@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -107,6 +108,80 @@ class BackendIntegratedFlowTest(unittest.TestCase):
         listado = self.client.get("/api/v1/notifications", headers=headers)
         self.assertEqual(listado.status_code, 200)
         self.assertGreaterEqual(len(listado.json()["items"]), 1)
+
+    def test_registro_envia_correo_bienvenida(self) -> None:
+        """Valida que el registro dispare el correo de bienvenida."""
+        with patch("backend.api.v1.endpoints.auth.enviar_correo_bienvenida") as enviar:
+            respuesta = self.client.post(
+                "/api/v1/auth/register",
+                json={
+                    "email": "bienvenida@uleam.edu.ec",
+                    "full_name": "Usuario Bienvenida",
+                    "password": "clave-segura-123",
+                },
+            )
+
+        self.assertEqual(respuesta.status_code, 201)
+        enviar.assert_called_once()
+        self.assertEqual(enviar.call_args.args[0].email, "bienvenida@uleam.edu.ec")
+
+    def test_recuperacion_password_con_codigo(self) -> None:
+        """Valida solicitud de codigo y cambio de contrasena."""
+        registro = self.client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": "recupera@uleam.edu.ec",
+                "full_name": "Usuario Recupera",
+                "password": "clave-vieja-123",
+            },
+        )
+        self.assertEqual(registro.status_code, 201)
+
+        with (
+            patch("backend.services.auth_service.secrets.randbelow", return_value=123456),
+            patch("backend.api.v1.endpoints.auth.enviar_correo_recuperacion") as enviar,
+        ):
+            solicitud = self.client.post(
+                "/api/v1/auth/forgot-password",
+                json={"email": "recupera@uleam.edu.ec"},
+            )
+
+        self.assertEqual(solicitud.status_code, 200)
+        self.assertIn("instrucciones", solicitud.json()["message"])
+        enviar.assert_called_once()
+        self.assertEqual(enviar.call_args.kwargs["codigo"], "123456")
+
+        invalido = self.client.post(
+            "/api/v1/auth/reset-password",
+            json={
+                "email": "recupera@uleam.edu.ec",
+                "code": "000000",
+                "new_password": "clave-nueva-123",
+            },
+        )
+        self.assertEqual(invalido.status_code, 400)
+
+        reset = self.client.post(
+            "/api/v1/auth/reset-password",
+            json={
+                "email": "recupera@uleam.edu.ec",
+                "code": "123456",
+                "new_password": "clave-nueva-123",
+            },
+        )
+        self.assertEqual(reset.status_code, 200)
+
+        login_viejo = self.client.post(
+            "/api/v1/auth/login",
+            json={"email": "recupera@uleam.edu.ec", "password": "clave-vieja-123"},
+        )
+        self.assertEqual(login_viejo.status_code, 401)
+
+        login_nuevo = self.client.post(
+            "/api/v1/auth/login",
+            json={"email": "recupera@uleam.edu.ec", "password": "clave-nueva-123"},
+        )
+        self.assertEqual(login_nuevo.status_code, 200)
 
     def test_modulo_medicamentos_permite_marcar_toma(self) -> None:
         """Valida listado y marcado de medicamentos del usuario."""

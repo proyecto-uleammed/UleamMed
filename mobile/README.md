@@ -9,6 +9,9 @@ La app ya esta conectada al backend FastAPI para el flujo demo principal.
 Pantallas incluidas:
 
 - Inicio con saludo, estado de animo, estado de conexion backend y resumen del dia.
+- Pantalla inicial para iniciar sesion o crear cuenta.
+- Recuperacion de contrasena preparada; valida correo, pero aun no envia email real.
+- Perfil basico editable con nombre y correo del usuario autenticado.
 - Medicamentos conectado al backend.
 - Citas medicas demo.
 - Actividades del dia demo.
@@ -27,11 +30,15 @@ Endpoints usados actualmente:
 - `GET /health`
 - `POST /api/v1/auth/register`
 - `POST /api/v1/auth/login`
+- `POST /api/v1/auth/refresh`
+- `POST /api/v1/auth/forgot-password`
+- `POST /api/v1/auth/reset-password`
 - `GET /api/v1/users/me`
+- `PATCH /api/v1/users/me`
 - `GET /api/v1/medications`
 - `POST /api/v1/medications/{medication_id}/take`
 
-La app crea/inicia sesion con un usuario demo para poder presentar el prototipo sin pantalla de login todavia:
+La app guarda `access_token` y `refresh_token` con `flutter_secure_storage`, restaura la sesion al abrir, renueva el access token cuando recibe `401` y limpia la sesion al cerrar sesion. La recuperacion de contrasena solicita un codigo de 6 digitos y permite guardar una nueva contrasena. Tambien conserva un modo demo manual para desarrollo:
 
 ```text
 roberto@uleammed.demo
