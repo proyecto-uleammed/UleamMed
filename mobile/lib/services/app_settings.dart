@@ -141,11 +141,10 @@ class AppSettingsService {
 
 /// Controlador reactivo para propagar cambios de ajustes a toda la app.
 class AppSettingsController extends ChangeNotifier {
-  AppSettingsController({
-    required AppSettingsService service,
+  AppSettingsController(
+    this._service, {
     AppSettings initial = const AppSettings(),
-  }) : _service = service,
-       _settings = initial;
+  }) : _settings = initial;
 
   final AppSettingsService _service;
   AppSettings _settings;

@@ -22,8 +22,7 @@ class UleamMedApp extends StatefulWidget {
 class _UleamMedAppState extends State<UleamMedApp> {
   late final UleamMedApi _api = widget.api ?? ApiService();
   late final AppSettingsController _settings =
-      widget.settingsController ??
-      AppSettingsController(service: AppSettingsService());
+      widget.settingsController ?? AppSettingsController(AppSettingsService());
   DemoSession? _session;
   bool _isRestoringSession = true;
 

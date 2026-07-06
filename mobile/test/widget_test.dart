@@ -204,16 +204,36 @@ class _FakeApi implements UleamMedApi {
     ];
   }
 
+  final List<EmergencyContact> emergencyContacts = [
+    const EmergencyContact(
+      id: '911',
+      name: 'Emergencias',
+      phone: '911',
+      isPrimary: true,
+    ),
+  ];
+
   @override
   Future<List<EmergencyContact>> listEmergencyContacts() async {
-    return const [
-      EmergencyContact(
-        id: '911',
-        name: 'Emergencias',
-        phone: '911',
-        isPrimary: true,
-      ),
-    ];
+    return emergencyContacts;
+  }
+
+  @override
+  Future<EmergencyContact> saveEmergencyContact(
+    EmergencyContact contact,
+  ) async {
+    final index = emergencyContacts.indexWhere((c) => c.id == contact.id);
+    if (index >= 0) {
+      emergencyContacts[index] = contact;
+    } else {
+      emergencyContacts.add(contact);
+    }
+    return contact;
+  }
+
+  @override
+  Future<void> deleteEmergencyContact(String contactId) async {
+    emergencyContacts.removeWhere((c) => c.id == contactId);
   }
 
   @override
