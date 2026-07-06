@@ -404,6 +404,24 @@ class EmergencyContact {
   final bool isPrimary;
   final SyncStatus syncStatus;
 
+  EmergencyContact copyWith({
+    String? id,
+    String? name,
+    String? phone,
+    String? relationship,
+    bool? isPrimary,
+    SyncStatus? syncStatus,
+  }) {
+    return EmergencyContact(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      phone: phone ?? this.phone,
+      relationship: relationship ?? this.relationship,
+      isPrimary: isPrimary ?? this.isPrimary,
+      syncStatus: syncStatus ?? this.syncStatus,
+    );
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,

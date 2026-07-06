@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/app_states.dart';
 
+/// Pantalla de emergencia con datos clave, contactos y llamada rapida.
+/// Disponible offline (PB-046/047/048/013).
 class EmergencyScreen extends StatefulWidget {
   const EmergencyScreen({super.key, this.api});
 
@@ -14,45 +18,177 @@ class EmergencyScreen extends StatefulWidget {
 
 class _EmergencyScreenState extends State<EmergencyScreen> {
   late final UleamMedApi _api = widget.api ?? ApiService();
-  late Future<List<EmergencyContact>> _contacts = _api.listEmergencyContacts();
+  late Future<_EmergencyData> _data = _loadData();
+
+  Future<_EmergencyData> _loadData() async {
+    final contacts = await _api.listEmergencyContacts();
+    final profile = await _api.loadMedicalProfile();
+    List<MedicationItem> medications;
+    try {
+      medications = await _api.listMedications();
+    } catch (_) {
+      medications = const [];
+    }
+    return _EmergencyData(
+      contacts: contacts,
+      profile: profile,
+      medications: medications,
+    );
+  }
 
   void _reload() {
     setState(() {
-      _contacts = _api.listEmergencyContacts();
+      _data = _loadData();
     });
+  }
+
+  Future<void> _call(String rawPhone) async {
+    final phone = rawPhone.trim();
+    if (phone.isEmpty) {
+      showAppSnackBar(
+        context,
+        'Este contacto no tiene numero. Agrega uno para poder llamar.',
+        isError: true,
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Llamar ahora'),
+        content: Text('Se iniciara una llamada a $phone. Deseas continuar?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(context, true),
+            icon: const Icon(Icons.phone),
+            label: const Text('Llamar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    try {
+      final uri = Uri(scheme: 'tel', path: phone);
+      final launched = await launchUrl(uri);
+      if (!launched && mounted) {
+        showAppSnackBar(context, 'No se pudo iniciar la llamada', isError: true);
+      }
+    } catch (_) {
+      if (mounted) {
+        showAppSnackBar(context, 'No se pudo iniciar la llamada', isError: true);
+      }
+    }
+  }
+
+  Future<void> _openContactForm([EmergencyContact? contact]) async {
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (context) => _ContactForm(
+        contact: contact,
+        onSave: (item) => _api.saveEmergencyContact(item),
+        onDelete: contact == null
+            ? null
+            : () => _api.deleteEmergencyContact(contact.id),
+      ),
+    );
+
+    if (saved == true && mounted) {
+      _reload();
+      showAppSnackBar(context, 'Contacto guardado');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Contactos de emergencia')),
-      body: FutureBuilder<List<EmergencyContact>>(
-        future: _contacts,
+      appBar: AppBar(title: const Text('Emergencia')),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _openContactForm(),
+        icon: const Icon(Icons.person_add),
+        label: const Text('Contacto'),
+      ),
+      body: FutureBuilder<_EmergencyData>(
+        future: _data,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return const LoadingView(message: 'Cargando datos de emergencia...');
           }
           if (snapshot.hasError) {
-            return _EmergencyError(onRetry: _reload);
+            return ErrorStateView(
+              title: 'No se pudieron cargar los datos',
+              onRetry: _reload,
+            );
           }
-          final contacts = snapshot.data ?? [];
-          final primaryContact = _primaryContact(contacts);
+
+          final data = snapshot.data!;
+          final primary = data.primaryContact;
           return ListView(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
             children: [
-              _EmergencyBanner(primaryContact: primaryContact),
+              _EmergencyHeader(
+                primaryContact: primary,
+                onCall911: () => _call('911'),
+                onCallPrimary: primary == null ? null : () => _call(primary.phone),
+              ),
               const SizedBox(height: 20),
-              Text('Contactos frecuentes', style: Theme.of(context).textTheme.headlineMedium),
-              const SizedBox(height: 12),
-              ...contacts.map((contact) => _ContactCard(contact: contact)),
+              _MedicalKeyData(data: data),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Contactos',
+                      style: Theme.of(context).textTheme.headlineMedium,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              if (data.contacts.isEmpty)
+                const EmptyStateView(
+                  icon: Icons.contact_phone,
+                  title: 'Sin contactos guardados',
+                  message: 'Agrega contactos para llamarlos con un toque.',
+                )
+              else
+                ...data.contacts.map(
+                  (contact) => _ContactCard(
+                    contact: contact,
+                    onCall: () => _call(contact.phone),
+                    onEdit: () => _openContactForm(contact),
+                  ),
+                ),
             ],
           );
         },
       ),
     );
   }
+}
 
-  EmergencyContact? _primaryContact(List<EmergencyContact> contacts) {
+class _EmergencyData {
+  const _EmergencyData({
+    required this.contacts,
+    required this.profile,
+    required this.medications,
+  });
+
+  final List<EmergencyContact> contacts;
+  final MedicalProfile profile;
+  final List<MedicationItem> medications;
+
+  EmergencyContact? get primaryContact {
     for (final contact in contacts) {
       if (contact.isPrimary) {
         return contact;
@@ -62,10 +198,16 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
   }
 }
 
-class _EmergencyBanner extends StatelessWidget {
-  const _EmergencyBanner({required this.primaryContact});
+class _EmergencyHeader extends StatelessWidget {
+  const _EmergencyHeader({
+    required this.primaryContact,
+    required this.onCall911,
+    required this.onCallPrimary,
+  });
 
   final EmergencyContact? primaryContact;
+  final VoidCallback onCall911;
+  final VoidCallback? onCallPrimary;
 
   @override
   Widget build(BuildContext context) {
@@ -73,15 +215,15 @@ class _EmergencyBanner extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppColors.primary,
+        color: const Color(0xFFC62828),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
         children: [
-          const Icon(Icons.emergency, color: Colors.white, size: 48),
-          const SizedBox(height: 12),
+          const Icon(Icons.emergency, color: Colors.white, size: 52),
+          const SizedBox(height: 10),
           const Text(
-            'Datos clave disponibles offline',
+            'Datos clave disponibles sin internet',
             style: TextStyle(
               color: Colors.white,
               fontSize: 20,
@@ -89,25 +231,201 @@ class _EmergencyBanner extends StatelessWidget {
             ),
             textAlign: TextAlign.center,
           ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: onCall911,
+              icon: const Icon(Icons.phone, color: Color(0xFFC62828)),
+              label: const Text(
+                'Llamar al 911',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFFC62828),
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
+            ),
+          ),
+          if (primaryContact != null) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: onCallPrimary,
+                icon: const Icon(Icons.call, color: Colors.white),
+                label: Text(
+                  'Llamar a ${primaryContact!.name}',
+                  style: const TextStyle(fontSize: 18, color: Colors.white),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Colors.white),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _MedicalKeyData extends StatelessWidget {
+  const _MedicalKeyData({required this.data});
+
+  final _EmergencyData data;
+
+  @override
+  Widget build(BuildContext context) {
+    final profile = data.profile;
+    final activeMeds = data.medications;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Informacion medica',
+            style: Theme.of(context).textTheme.headlineMedium,
+          ),
+          const SizedBox(height: 12),
+          _KeyRow(
+            icon: Icons.bloodtype,
+            label: 'Tipo de sangre',
+            value: profile.bloodType.isEmpty ? 'No registrado' : profile.bloodType,
+          ),
+          _KeyRow(
+            icon: Icons.warning_amber,
+            label: 'Alergias',
+            value: profile.allergies.isEmpty ? 'Ninguna registrada' : profile.allergies,
+            highlight: profile.allergies.isNotEmpty,
+          ),
+          _KeyRow(
+            icon: Icons.monitor_heart,
+            label: 'Enfermedades',
+            value: profile.conditions.isEmpty
+                ? 'Ninguna registrada'
+                : profile.conditions,
+          ),
+          if (profile.importantNotes.isNotEmpty)
+            _KeyRow(
+              icon: Icons.notes,
+              label: 'Indicaciones',
+              value: profile.importantNotes,
+            ),
           const SizedBox(height: 8),
           Text(
-            primaryContact == null
-                ? 'Guarda contactos para emergencias.'
-                : 'Contacto principal: ${primaryContact!.name} - ${primaryContact!.phone}',
-            style: const TextStyle(color: Colors.white70, fontSize: 16),
-            textAlign: TextAlign.center,
+            'Medicamentos actuales',
+            style: Theme.of(context).textTheme.titleLarge,
           ),
-          const SizedBox(height: 16),
-          ElevatedButton.icon(
-            onPressed: () {},
-            icon: const Icon(Icons.phone, color: AppColors.primary),
-            label: const Text(
-              'Llamar al 911',
-              style: TextStyle(fontSize: 18, color: AppColors.primary),
+          const SizedBox(height: 6),
+          if (activeMeds.isEmpty)
+            Text(
+              'Sin medicamentos registrados.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            )
+          else
+            ...activeMeds.map(
+              (med) => Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.medication,
+                      size: 18,
+                      color: AppColors.primary,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '${med.name} - ${med.dose} (${med.time})',
+                        style: Theme.of(context).textTheme.bodyLarge,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              const Icon(Icons.update, size: 16, color: AppColors.textSecondary),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Ultima actualizacion: ${_lastUpdate(profile)}',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _lastUpdate(MedicalProfile profile) {
+    final date = profile.updatedAt ?? profile.createdAt;
+    if (date == null) {
+      return 'Sin cambios guardados';
+    }
+    final d = date.toLocal();
+    final day = d.day.toString().padLeft(2, '0');
+    final month = d.month.toString().padLeft(2, '0');
+    final hour = d.hour.toString().padLeft(2, '0');
+    final minute = d.minute.toString().padLeft(2, '0');
+    return '$day/$month/${d.year} $hour:$minute';
+  }
+}
+
+class _KeyRow extends StatelessWidget {
+  const _KeyRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.highlight = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final bool highlight;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            icon,
+            size: 20,
+            color: highlight ? const Color(0xFFC62828) : AppColors.primary,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: Theme.of(context).textTheme.bodyMedium),
+                Text(
+                  value,
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: highlight ? const Color(0xFFC62828) : null,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -117,9 +435,15 @@ class _EmergencyBanner extends StatelessWidget {
 }
 
 class _ContactCard extends StatelessWidget {
-  const _ContactCard({required this.contact});
+  const _ContactCard({
+    required this.contact,
+    required this.onCall,
+    required this.onEdit,
+  });
 
   final EmergencyContact contact;
+  final VoidCallback onCall;
+  final VoidCallback onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -129,11 +453,11 @@ class _ContactCard extends StatelessWidget {
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         leading: CircleAvatar(
           backgroundColor: contact.isPrimary
-              ? Colors.red.withValues(alpha: 0.15)
+              ? const Color(0xFFC62828).withValues(alpha: 0.15)
               : AppColors.primary.withValues(alpha: 0.15),
           child: Icon(
-            contact.isPrimary ? Icons.emergency : Icons.person,
-            color: contact.isPrimary ? Colors.red : AppColors.primary,
+            contact.isPrimary ? Icons.star : Icons.person,
+            color: contact.isPrimary ? const Color(0xFFC62828) : AppColors.primary,
           ),
         ),
         title: Text(
@@ -143,42 +467,166 @@ class _ContactCard extends StatelessWidget {
           style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
         ),
         subtitle: Text(contact.phone, style: const TextStyle(fontSize: 16)),
-        trailing: IconButton(
-          onPressed: () {},
-          icon: const Icon(Icons.phone, color: AppColors.primary, size: 28),
-          style: IconButton.styleFrom(backgroundColor: AppColors.surface),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              tooltip: 'Editar',
+              onPressed: onEdit,
+              icon: const Icon(Icons.edit),
+            ),
+            IconButton(
+              tooltip: 'Llamar',
+              onPressed: onCall,
+              icon: const Icon(Icons.phone, color: AppColors.primary, size: 28),
+              style: IconButton.styleFrom(backgroundColor: AppColors.surface),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-class _EmergencyError extends StatelessWidget {
-  const _EmergencyError({required this.onRetry});
+class _ContactForm extends StatefulWidget {
+  const _ContactForm({required this.onSave, this.contact, this.onDelete});
 
-  final VoidCallback onRetry;
+  final EmergencyContact? contact;
+  final Future<void> Function(EmergencyContact contact) onSave;
+  final Future<void> Function()? onDelete;
+
+  @override
+  State<_ContactForm> createState() => _ContactFormState();
+}
+
+class _ContactFormState extends State<_ContactForm> {
+  final _formKey = GlobalKey<FormState>();
+  late final _nameController = TextEditingController(
+    text: widget.contact?.name ?? '',
+  );
+  late final _relationshipController = TextEditingController(
+    text: widget.contact?.relationship ?? '',
+  );
+  late final _phoneController = TextEditingController(
+    text: widget.contact?.phone ?? '',
+  );
+  late bool _isPrimary = widget.contact?.isPrimary ?? false;
+  bool _isSaving = false;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _relationshipController.dispose();
+    _phoneController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+    setState(() => _isSaving = true);
+    final id =
+        widget.contact?.id ??
+        'contacto-${DateTime.now().millisecondsSinceEpoch}';
+    final contact = EmergencyContact(
+      id: id,
+      name: _nameController.text.trim(),
+      phone: _phoneController.text.trim(),
+      relationship: _relationshipController.text.trim(),
+      isPrimary: _isPrimary,
+    );
+    await widget.onSave(contact);
+    if (mounted) {
+      Navigator.pop(context, true);
+    }
+  }
+
+  Future<void> _delete() async {
+    setState(() => _isSaving = true);
+    await widget.onDelete?.call();
+    if (mounted) {
+      Navigator.pop(context, true);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        top: 20,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+      ),
+      child: Form(
+        key: _formKey,
+        child: ListView(
+          shrinkWrap: true,
           children: [
-            const Icon(Icons.cloud_off, color: AppColors.primary, size: 48),
-            const SizedBox(height: 12),
             Text(
-              'No se pudieron cargar los contactos',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.titleLarge,
+              widget.contact == null ? 'Agregar contacto' : 'Editar contacto',
+              style: Theme.of(context).textTheme.headlineMedium,
             ),
             const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: onRetry,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Reintentar'),
+            TextFormField(
+              controller: _nameController,
+              decoration: const InputDecoration(
+                labelText: 'Nombre',
+                prefixIcon: Icon(Icons.person),
+                border: OutlineInputBorder(),
+              ),
+              validator: (value) =>
+                  (value ?? '').trim().isEmpty ? 'Ingresa el nombre' : null,
             ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _relationshipController,
+              decoration: const InputDecoration(
+                labelText: 'Relacion',
+                hintText: 'Hija, medico, vecino...',
+                prefixIcon: Icon(Icons.group),
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _phoneController,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(
+                labelText: 'Telefono',
+                prefixIcon: Icon(Icons.phone),
+                border: OutlineInputBorder(),
+              ),
+              validator: (value) {
+                final phone = (value ?? '').trim();
+                if (phone.length < 3) {
+                  return 'Ingresa un telefono valido';
+                }
+                return null;
+              },
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Contacto principal'),
+              subtitle: const Text('Se mostrara primero en emergencias.'),
+              value: _isPrimary,
+              onChanged: (value) => setState(() => _isPrimary = value),
+            ),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: _isSaving ? null : _save,
+              icon: const Icon(Icons.save),
+              label: const Text('Guardar'),
+            ),
+            if (widget.onDelete != null) ...[
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: _isSaving ? null : _delete,
+                icon: const Icon(Icons.delete),
+                label: const Text('Eliminar'),
+              ),
+            ],
           ],
         ),
       ),

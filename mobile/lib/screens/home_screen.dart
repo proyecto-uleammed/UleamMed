@@ -1,18 +1,27 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
+import '../services/app_settings.dart';
 import '../theme/app_theme.dart';
 import '../widgets/action_card.dart';
 import 'activities_screen.dart';
-import 'appointments_screen.dart';
 import 'emergency_screen.dart';
 import 'medications_screen.dart';
 import 'profile_screen.dart';
+import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, this.api, required this.onLogout});
+  const HomeScreen({
+    super.key,
+    this.api,
+    required this.onLogout,
+    this.settings,
+    this.onOpenTab,
+  });
 
   final UleamMedApi? api;
   final Future<void> Function() onLogout;
+  final AppSettingsController? settings;
+  final ValueChanged<int>? onOpenTab;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -63,6 +72,20 @@ class _HomeScreenState extends State<HomeScreen> {
             expandedHeight: 210,
             pinned: true,
             actions: [
+              if (widget.settings != null)
+                IconButton(
+                  tooltip: 'Ajustes y accesibilidad',
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            SettingsScreen(settings: widget.settings!),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.settings),
+                ),
               IconButton(
                 tooltip: 'Mi perfil',
                 onPressed: () async {
@@ -174,6 +197,10 @@ class _HomeScreenState extends State<HomeScreen> {
                         subtitle: _medicationSubtitle(snapshot),
                         color: AppColors.primary,
                         onTap: () async {
+                          if (widget.onOpenTab != null) {
+                            widget.onOpenTab!(1);
+                            return;
+                          }
                           await Navigator.push(
                             context,
                             MaterialPageRoute(
@@ -208,14 +235,16 @@ class _HomeScreenState extends State<HomeScreen> {
                   ActionCard(
                     icon: Icons.calendar_month,
                     title: 'Citas médicas',
-                    subtitle: 'Próxima: 28 Jun con Dra. González',
+                    subtitle: 'Consulta y agenda tus citas',
                     color: AppColors.primaryLight,
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => AppointmentsScreen(api: _api),
-                      ),
-                    ),
+                    onTap: () => widget.onOpenTab?.call(3),
+                  ),
+                  ActionCard(
+                    icon: Icons.history,
+                    title: 'Historial y cumplimiento',
+                    subtitle: 'Revisa tus tomas de la semana',
+                    color: AppColors.primary,
+                    onTap: () => widget.onOpenTab?.call(2),
                   ),
                   ActionCard(
                     icon: Icons.fitness_center,

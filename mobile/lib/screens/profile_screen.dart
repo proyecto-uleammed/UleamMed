@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 
 import '../services/api_service.dart';
+import '../services/app_settings.dart';
 import '../theme/app_theme.dart';
+import 'settings_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key, required this.api});
+  const ProfileScreen({super.key, required this.api, this.settings});
 
   final UleamMedApi api;
+  final AppSettingsController? settings;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -135,6 +138,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
       appBar: AppBar(
         title: const Text('Mi perfil'),
         actions: [
+          if (widget.settings != null)
+            IconButton(
+              tooltip: 'Ajustes y accesibilidad',
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => SettingsScreen(settings: widget.settings!),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.settings),
+            ),
           IconButton(
             tooltip: 'Guardar perfil medico',
             onPressed: _isSaving ? null : _save,

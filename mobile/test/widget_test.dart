@@ -3,6 +3,28 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:uleam_med/main.dart';
 import 'package:uleam_med/services/api_service.dart';
+import 'package:uleam_med/services/app_settings.dart';
+import 'package:uleam_med/services/local_store.dart';
+
+class _MemoryJsonStore implements JsonStore {
+  final Map<String, String> values = {};
+
+  @override
+  Future<String?> read(String key) async => values[key];
+
+  @override
+  Future<void> write(String key, String value) async {
+    values[key] = value;
+  }
+
+  @override
+  Future<void> delete(String key) async {
+    values.remove(key);
+  }
+}
+
+AppSettingsController _testSettings() =>
+    AppSettingsController(AppSettingsService(store: _MemoryJsonStore()));
 
 class _FakeApi implements UleamMedApi {
   _FakeApi({this.restoredSession});
@@ -204,16 +226,36 @@ class _FakeApi implements UleamMedApi {
     ];
   }
 
+  final List<EmergencyContact> emergencyContacts = [
+    const EmergencyContact(
+      id: '911',
+      name: 'Emergencias',
+      phone: '911',
+      isPrimary: true,
+    ),
+  ];
+
   @override
   Future<List<EmergencyContact>> listEmergencyContacts() async {
-    return const [
-      EmergencyContact(
-        id: '911',
-        name: 'Emergencias',
-        phone: '911',
-        isPrimary: true,
-      ),
-    ];
+    return emergencyContacts;
+  }
+
+  @override
+  Future<EmergencyContact> saveEmergencyContact(
+    EmergencyContact contact,
+  ) async {
+    final index = emergencyContacts.indexWhere((c) => c.id == contact.id);
+    if (index >= 0) {
+      emergencyContacts[index] = contact;
+    } else {
+      emergencyContacts.add(contact);
+    }
+    return contact;
+  }
+
+  @override
+  Future<void> deleteEmergencyContact(String contactId) async {
+    emergencyContacts.removeWhere((c) => c.id == contactId);
   }
 
   @override
@@ -235,7 +277,9 @@ void main() {
   testWidgets('shows login when there is no stored session', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(UleamMedApp(api: _FakeApi()));
+    await tester.pumpWidget(
+      UleamMedApp(api: _FakeApi(), settingsController: _testSettings()),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('Iniciar sesión'), findsOneWidget);
@@ -245,7 +289,9 @@ void main() {
   testWidgets('authenticates and loads home screen', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(UleamMedApp(api: _FakeApi()));
+    await tester.pumpWidget(
+      UleamMedApp(api: _FakeApi(), settingsController: _testSettings()),
+    );
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Entrar en modo demo'));
@@ -268,6 +314,7 @@ void main() {
             user: _FakeApi._demoUser,
           ),
         ),
+        settingsController: _testSettings(),
       ),
     );
     await tester.pumpAndSettle();
@@ -279,7 +326,9 @@ void main() {
   testWidgets('logout returns to login screen', (WidgetTester tester) async {
     final api = _FakeApi();
 
-    await tester.pumpWidget(UleamMedApp(api: api));
+    await tester.pumpWidget(
+      UleamMedApp(api: api, settingsController: _testSettings()),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Entrar en modo demo'));
     await tester.pumpAndSettle();
@@ -293,7 +342,9 @@ void main() {
   testWidgets('profile screen shows and updates user name', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(UleamMedApp(api: _FakeApi()));
+    await tester.pumpWidget(
+      UleamMedApp(api: _FakeApi(), settingsController: _testSettings()),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Entrar en modo demo'));
     await tester.pumpAndSettle();
@@ -318,7 +369,9 @@ void main() {
   testWidgets('password recovery requests code and resets password', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(UleamMedApp(api: _FakeApi()));
+    await tester.pumpWidget(
+      UleamMedApp(api: _FakeApi(), settingsController: _testSettings()),
+    );
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Olvide mi contrasena'));
