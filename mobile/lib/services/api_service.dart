@@ -4,6 +4,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
+import '../models/local_models.dart';
+import 'local_store.dart';
+import 'sync_service.dart';
+
+export '../models/local_models.dart';
+
 abstract class UleamMedApi {
   Future<DemoSession?> restoreSession();
   Future<DemoSession> login({required String email, required String password});
@@ -22,19 +28,42 @@ abstract class UleamMedApi {
     required String newPassword,
   });
   Future<void> logout();
+  Future<MedicalProfile> loadMedicalProfile();
+  Future<MedicalProfile> saveMedicalProfile(MedicalProfile profile);
   Future<List<MedicationItem>> listMedications();
+  Future<MedicationItem> saveMedication(MedicationItem medication);
+  Future<void> deleteMedication(String medicationId);
   Future<MedicationMarkResult> markMedicationTaken(String medicationId);
+  Future<MedicationMarkResult> recordMedicationStatus(
+    String medicationId,
+    DoseStatus status,
+  );
+  Future<List<DoseConfirmation>> listDoseConfirmations();
+  Future<List<Appointment>> listAppointments();
+  Future<List<EmergencyContact>> listEmergencyContacts();
+  Future<int> pendingSyncCount();
+  Future<SyncSummary> synchronizePendingChanges();
 }
 
 class ApiService implements UleamMedApi {
-  ApiService({http.Client? client, String? baseUrl, TokenStore? tokenStore})
+  ApiService({
+    http.Client? client,
+    String? baseUrl,
+    TokenStore? tokenStore,
+    LocalStore? localStore,
+  })
     : _client = client ?? http.Client(),
       _baseUrl = baseUrl ?? _defaultBaseUrl,
-      _tokenStore = tokenStore ?? SecureTokenStore();
+      _tokenStore = tokenStore ?? SecureTokenStore(),
+      _localStore = localStore ?? LocalStore() {
+    _syncService = SyncService(localStore: _localStore);
+  }
 
   final http.Client _client;
   final String _baseUrl;
   final TokenStore _tokenStore;
+  final LocalStore _localStore;
+  late final SyncService _syncService;
   String? _accessToken;
   String? _refreshToken;
 
@@ -187,7 +216,177 @@ class ApiService implements UleamMedApi {
   }
 
   @override
+  Future<MedicalProfile> loadMedicalProfile() {
+    return _localStore.readMedicalProfile();
+  }
+
+  @override
+  Future<MedicalProfile> saveMedicalProfile(MedicalProfile profile) async {
+    await _localStore.saveMedicalProfile(profile);
+    return _localStore.readMedicalProfile();
+  }
+
+  @override
   Future<List<MedicationItem>> listMedications() async {
+    final localItems = await _localStore.readMedications();
+
+    try {
+      final backendItems = await _loadBackendMedications();
+      if (localItems.isEmpty) {
+        await _localStore.saveMedications(backendItems);
+        return backendItems;
+      }
+      final merged = _mergeMedications(localItems, backendItems);
+      await _localStore.saveMedications(merged);
+      return merged;
+    } catch (_) {
+      if (localItems.isNotEmpty) {
+        return localItems;
+      }
+
+      final demoItems = MedicationItem.demoList();
+      await _localStore.saveMedications(demoItems);
+      return demoItems;
+    }
+  }
+
+  @override
+  Future<MedicationMarkResult> markMedicationTaken(String medicationId) async {
+    return recordMedicationStatus(medicationId, DoseStatus.taken);
+  }
+
+  @override
+  Future<MedicationItem> saveMedication(MedicationItem medication) {
+    return _localStore.upsertMedication(
+      medication.copyWith(syncStatus: SyncStatus.pending),
+    );
+  }
+
+  @override
+  Future<void> deleteMedication(String medicationId) {
+    return _localStore.deleteMedication(medicationId);
+  }
+
+  @override
+  Future<MedicationMarkResult> recordMedicationStatus(
+    String medicationId,
+    DoseStatus status,
+  ) async {
+    final medications = await listMedications();
+    final medication = medications.firstWhere(
+      (item) => item.id == medicationId,
+      orElse: () => throw const ApiException('Medicamento no encontrado'),
+    );
+    final updated = medication.copyWith(
+      taken: status == DoseStatus.taken ? true : medication.taken,
+      syncStatus: SyncStatus.pending,
+    );
+    await _localStore.upsertMedication(updated);
+    await _localStore.addDoseConfirmation(
+      DoseConfirmation(
+        id: '${medication.id}-${DateTime.now().microsecondsSinceEpoch}',
+        medicationId: medication.id,
+        medicationName: medication.name,
+        status: status,
+        recordedAt: DateTime.now(),
+      ),
+    );
+
+    final localResult = await _medicationResultFor(updated.id);
+    if (status != DoseStatus.taken) {
+      return localResult;
+    }
+
+    try {
+      final data = await _postAuthorizedJson(
+        Uri.parse('$_baseUrl/api/v1/medications/$medicationId/take'),
+        fallback: 'No se pudo marcar el medicamento',
+      );
+      final backendResult = MedicationMarkResult.fromJson(data);
+      await _localStore.upsertMedication(
+        backendResult.medication.copyWith(syncStatus: SyncStatus.synced),
+      );
+      return backendResult;
+    } catch (_) {
+      return localResult;
+    }
+  }
+
+  @override
+  Future<List<DoseConfirmation>> listDoseConfirmations() {
+    return _localStore.readDoseConfirmations();
+  }
+
+  @override
+  Future<List<Appointment>> listAppointments() async {
+    final appointments = await _localStore.readAppointments();
+    if (appointments.isNotEmpty) {
+      return appointments;
+    }
+    const demoAppointments = [
+      Appointment(
+        id: 'cita-general',
+        doctor: 'Dra. Maria Gonzalez',
+        specialty: 'Medicina General',
+        date: '28 Jun 2026',
+        time: '10:30',
+        location: 'Centro de Salud Norte',
+      ),
+      Appointment(
+        id: 'cita-cardio',
+        doctor: 'Dr. Carlos Ruiz',
+        specialty: 'Cardiologia',
+        date: '05 Jul 2026',
+        time: '15:00',
+        location: 'Hospital Regional',
+      ),
+    ];
+    await _localStore.saveAppointments(demoAppointments);
+    return demoAppointments;
+  }
+
+  @override
+  Future<List<EmergencyContact>> listEmergencyContacts() async {
+    final contacts = await _localStore.readEmergencyContacts();
+    if (contacts.isNotEmpty) {
+      return contacts;
+    }
+    const demoContacts = [
+      EmergencyContact(
+        id: '911',
+        name: 'Emergencias',
+        phone: '911',
+        relationship: 'Emergencia',
+        isPrimary: true,
+      ),
+      EmergencyContact(
+        id: 'hija',
+        name: 'Maria',
+        phone: '555-1234',
+        relationship: 'Hija',
+      ),
+      EmergencyContact(
+        id: 'medico',
+        name: 'Dr. Gonzalez',
+        phone: '555-9012',
+        relationship: 'Medico',
+      ),
+    ];
+    await _localStore.saveEmergencyContacts(demoContacts);
+    return demoContacts;
+  }
+
+  @override
+  Future<int> pendingSyncCount() {
+    return _localStore.pendingSyncCount();
+  }
+
+  @override
+  Future<SyncSummary> synchronizePendingChanges() {
+    return _syncService.synchronizePending();
+  }
+
+  Future<List<MedicationItem>> _loadBackendMedications() async {
     final data = await _getAuthorizedJson(
       Uri.parse('$_baseUrl/api/v1/medications'),
       fallback: 'No se pudieron cargar los medicamentos',
@@ -199,19 +398,49 @@ class ApiService implements UleamMedApi {
     }
 
     return items
-        .whereType<Map<String, dynamic>>()
-        .map(MedicationItem.fromJson)
+        .whereType<Map>()
+        .map((json) => MedicationItem.fromJson(Map<String, dynamic>.from(json)).copyWith(
+              syncStatus: SyncStatus.synced,
+            ))
         .toList();
   }
 
-  @override
-  Future<MedicationMarkResult> markMedicationTaken(String medicationId) async {
-    final data = await _postAuthorizedJson(
-      Uri.parse('$_baseUrl/api/v1/medications/$medicationId/take'),
-      fallback: 'No se pudo marcar el medicamento',
-    );
+  List<MedicationItem> _mergeMedications(
+    List<MedicationItem> localItems,
+    List<MedicationItem> backendItems,
+  ) {
+    final byId = <String, MedicationItem>{
+      for (final item in backendItems) item.id: item,
+    };
+    for (final local in localItems) {
+      if (local.syncStatus == SyncStatus.pending) {
+        byId[local.id] = local;
+      } else {
+        final backend = byId[local.id];
+        byId[local.id] = (backend ?? local).copyWith(
+          frequency: local.frequency,
+          duration: local.duration,
+          instructions: local.instructions,
+          isImportant: local.isImportant,
+        );
+      }
+    }
+    return byId.values.toList()
+      ..sort((a, b) => a.time.compareTo(b.time));
+  }
 
-    return MedicationMarkResult.fromJson(data);
+  Future<MedicationMarkResult> _medicationResultFor(String medicationId) async {
+    final medications = await _localStore.readMedications();
+    final medication = medications.firstWhere(
+      (item) => item.id == medicationId,
+      orElse: () => throw const ApiException('Medicamento no encontrado'),
+    );
+    final takenCount = medications.where((item) => item.taken).length;
+    return MedicationMarkResult(
+      medication: medication,
+      takenCount: takenCount,
+      totalCount: medications.length,
+    );
   }
 
   Future<String> _ensureAccessToken() async {
@@ -541,54 +770,6 @@ class DemoUser {
   final String email;
   final String fullName;
   final bool isActive;
-}
-
-class MedicationItem {
-  const MedicationItem({
-    required this.id,
-    required this.name,
-    required this.dose,
-    required this.time,
-    required this.taken,
-  });
-
-  factory MedicationItem.fromJson(Map<String, dynamic> json) {
-    return MedicationItem(
-      id: json['id'].toString(),
-      name: json['name'].toString(),
-      dose: json['dose'].toString(),
-      time: json['time'].toString(),
-      taken: json['taken'] == true,
-    );
-  }
-
-  final String id;
-  final String name;
-  final String dose;
-  final String time;
-  final bool taken;
-}
-
-class MedicationMarkResult {
-  const MedicationMarkResult({
-    required this.medication,
-    required this.takenCount,
-    required this.totalCount,
-  });
-
-  factory MedicationMarkResult.fromJson(Map<String, dynamic> json) {
-    return MedicationMarkResult(
-      medication: MedicationItem.fromJson(
-        json['medication'] as Map<String, dynamic>,
-      ),
-      takenCount: json['taken_count'] as int,
-      totalCount: json['total_count'] as int,
-    );
-  }
-
-  final MedicationItem medication;
-  final int takenCount;
-  final int totalCount;
 }
 
 class ApiException implements Exception {

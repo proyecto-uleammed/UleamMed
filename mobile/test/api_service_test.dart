@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:uleam_med/services/api_service.dart';
+import 'package:uleam_med/services/local_store.dart';
 
 class _MemoryTokenStore implements TokenStore {
   AuthTokens? tokens;
@@ -24,6 +25,23 @@ class _MemoryTokenStore implements TokenStore {
   Future<void> clear() async {
     tokens = null;
     wasCleared = true;
+  }
+}
+
+class _MemoryJsonStore implements JsonStore {
+  final Map<String, String> values = {};
+
+  @override
+  Future<String?> read(String key) async => values[key];
+
+  @override
+  Future<void> write(String key, String value) async {
+    values[key] = value;
+  }
+
+  @override
+  Future<void> delete(String key) async {
+    values.remove(key);
   }
 }
 
@@ -131,6 +149,34 @@ void main() {
       expect(session, isNull);
       expect(tokenStore.wasCleared, isTrue);
       expect(tokenStore.tokens, isNull);
+    });
+  });
+
+  group('ApiService offline data', () {
+    test('seeds medications and records a pending local confirmation', () async {
+      final localStore = LocalStore(jsonStore: _MemoryJsonStore());
+      final api = ApiService(
+        baseUrl: 'http://localhost:8000',
+        tokenStore: _MemoryTokenStore(),
+        localStore: localStore,
+        client: MockClient((request) async {
+          return _jsonResponse({'detail': 'No autorizado'}, statusCode: 401);
+        }),
+      );
+
+      final medications = await api.listMedications();
+      expect(medications, isNotEmpty);
+
+      final result = await api.recordMedicationStatus(
+        'omeprazol',
+        DoseStatus.taken,
+      );
+      final confirmations = await api.listDoseConfirmations();
+
+      expect(result.medication.taken, isTrue);
+      expect(confirmations, hasLength(1));
+      expect(confirmations.first.status, DoseStatus.taken);
+      expect(await api.pendingSyncCount(), greaterThanOrEqualTo(1));
     });
   });
 }

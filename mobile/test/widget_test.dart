@@ -10,6 +10,24 @@ class _FakeApi implements UleamMedApi {
   DemoSession? restoredSession;
   DemoSession? currentSession;
   bool didLogout = false;
+  MedicalProfile medicalProfile = const MedicalProfile();
+  final List<DoseConfirmation> confirmations = [];
+  final List<MedicationItem> medications = [
+    const MedicationItem(
+      id: 'metformina',
+      name: 'Metformina',
+      dose: '500 mg',
+      time: '08:00',
+      taken: true,
+    ),
+    const MedicationItem(
+      id: 'omeprazol',
+      name: 'Omeprazol',
+      dose: '20 mg',
+      time: '14:00',
+      taken: false,
+    ),
+  ];
 
   static const _demoUser = DemoUser(
     id: 1,
@@ -105,37 +123,110 @@ class _FakeApi implements UleamMedApi {
   }
 
   @override
+  Future<MedicalProfile> loadMedicalProfile() async {
+    return medicalProfile;
+  }
+
+  @override
+  Future<MedicalProfile> saveMedicalProfile(MedicalProfile profile) async {
+    medicalProfile = profile.copyWith(syncStatus: SyncStatus.pending);
+    return medicalProfile;
+  }
+
+  @override
   Future<List<MedicationItem>> listMedications() async {
-    return const [
-      MedicationItem(
-        id: 'metformina',
-        name: 'Metformina',
-        dose: '500 mg',
-        time: '08:00',
-        taken: true,
+    return medications;
+  }
+
+  @override
+  Future<MedicationItem> saveMedication(MedicationItem medication) async {
+    final index = medications.indexWhere((item) => item.id == medication.id);
+    if (index >= 0) {
+      medications[index] = medication;
+    } else {
+      medications.add(medication);
+    }
+    return medication;
+  }
+
+  @override
+  Future<void> deleteMedication(String medicationId) async {
+    medications.removeWhere((item) => item.id == medicationId);
+  }
+
+  @override
+  Future<MedicationMarkResult> markMedicationTaken(String medicationId) async {
+    return recordMedicationStatus(medicationId, DoseStatus.taken);
+  }
+
+  @override
+  Future<MedicationMarkResult> recordMedicationStatus(
+    String medicationId,
+    DoseStatus status,
+  ) async {
+    final index = medications.indexWhere((item) => item.id == medicationId);
+    final original = medications[index];
+    final updated = original.copyWith(taken: status == DoseStatus.taken);
+    medications[index] = updated;
+    confirmations.insert(
+      0,
+      DoseConfirmation(
+        id: '$medicationId-${confirmations.length}',
+        medicationId: medicationId,
+        medicationName: updated.name,
+        status: status,
+        recordedAt: DateTime(2026, 7, 6, 8, 0),
       ),
-      MedicationItem(
-        id: 'omeprazol',
-        name: 'Omeprazol',
-        dose: '20 mg',
-        time: '14:00',
-        taken: false,
+    );
+    return MedicationMarkResult(
+      medication: updated,
+      takenCount: medications.where((item) => item.taken).length,
+      totalCount: medications.length,
+    );
+  }
+
+  @override
+  Future<List<DoseConfirmation>> listDoseConfirmations() async {
+    return confirmations;
+  }
+
+  @override
+  Future<List<Appointment>> listAppointments() async {
+    return const [
+      Appointment(
+        id: 'demo',
+        doctor: 'Dra. Demo',
+        specialty: 'General',
+        date: '06 Jul 2026',
+        time: '10:00',
+        location: 'Centro medico',
       ),
     ];
   }
 
   @override
-  Future<MedicationMarkResult> markMedicationTaken(String medicationId) async {
-    return const MedicationMarkResult(
-      medication: MedicationItem(
-        id: 'omeprazol',
-        name: 'Omeprazol',
-        dose: '20 mg',
-        time: '14:00',
-        taken: true,
+  Future<List<EmergencyContact>> listEmergencyContacts() async {
+    return const [
+      EmergencyContact(
+        id: '911',
+        name: 'Emergencias',
+        phone: '911',
+        isPrimary: true,
       ),
-      takenCount: 2,
-      totalCount: 2,
+    ];
+  }
+
+  @override
+  Future<int> pendingSyncCount() async {
+    return medicalProfile.syncStatus == SyncStatus.pending ? 1 : 0;
+  }
+
+  @override
+  Future<SyncSummary> synchronizePendingChanges() async {
+    return const SyncSummary(
+      processed: 0,
+      pending: 0,
+      message: 'Todo esta sincronizado.',
     );
   }
 }
@@ -217,10 +308,12 @@ void main() {
       find.widgetWithText(TextFormField, 'Nombre completo'),
       'Roberto Nuevo',
     );
-    await tester.tap(find.text('Guardar perfil'));
+    await tester.drag(find.byType(ListView), const Offset(0, -900));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Guardar perfil medico', skipOffstage: false));
     await tester.pumpAndSettle();
 
-    expect(find.text('Perfil actualizado'), findsOneWidget);
+    expect(find.text('Perfil medico guardado sin conexion'), findsOneWidget);
     expect(find.text('Roberto Nuevo'), findsWidgets);
   });
 
