@@ -332,6 +332,23 @@ class DoseConfirmation {
   }
 }
 
+enum AppointmentReminder {
+  none('Sin recordatorio'),
+  oneDayBefore('1 dia antes'),
+  twoHoursBefore('2 horas antes');
+
+  const AppointmentReminder(this.label);
+
+  final String label;
+
+  static AppointmentReminder fromJson(Object? value) {
+    return AppointmentReminder.values.firstWhere(
+      (option) => option.name == value,
+      orElse: () => AppointmentReminder.none,
+    );
+  }
+}
+
 class Appointment {
   const Appointment({
     required this.id,
@@ -340,6 +357,10 @@ class Appointment {
     required this.date,
     required this.time,
     required this.location,
+    this.notes = '',
+    this.completed = false,
+    this.reminder = AppointmentReminder.none,
+    this.scheduledAt,
     this.syncStatus = SyncStatus.synced,
   });
 
@@ -351,6 +372,10 @@ class Appointment {
       date: json['date'].toString(),
       time: json['time'].toString(),
       location: json['location'].toString(),
+      notes: json['notes']?.toString() ?? '',
+      completed: json['completed'] == true,
+      reminder: AppointmentReminder.fromJson(json['reminder']),
+      scheduledAt: _parseDate(json['scheduledAt']),
       syncStatus: SyncStatus.fromJson(json['syncStatus']),
     );
   }
@@ -361,7 +386,50 @@ class Appointment {
   final String date;
   final String time;
   final String location;
+  final String notes;
+  final bool completed;
+  final AppointmentReminder reminder;
+  final DateTime? scheduledAt;
   final SyncStatus syncStatus;
+
+  bool get isPast {
+    if (completed) {
+      return true;
+    }
+    final when = scheduledAt;
+    if (when == null) {
+      return false;
+    }
+    return when.isBefore(DateTime.now());
+  }
+
+  Appointment copyWith({
+    String? id,
+    String? doctor,
+    String? specialty,
+    String? date,
+    String? time,
+    String? location,
+    String? notes,
+    bool? completed,
+    AppointmentReminder? reminder,
+    DateTime? scheduledAt,
+    SyncStatus? syncStatus,
+  }) {
+    return Appointment(
+      id: id ?? this.id,
+      doctor: doctor ?? this.doctor,
+      specialty: specialty ?? this.specialty,
+      date: date ?? this.date,
+      time: time ?? this.time,
+      location: location ?? this.location,
+      notes: notes ?? this.notes,
+      completed: completed ?? this.completed,
+      reminder: reminder ?? this.reminder,
+      scheduledAt: scheduledAt ?? this.scheduledAt,
+      syncStatus: syncStatus ?? this.syncStatus,
+    );
+  }
 
   Map<String, dynamic> toJson() {
     return {
@@ -371,6 +439,10 @@ class Appointment {
       'date': date,
       'time': time,
       'location': location,
+      'notes': notes,
+      'completed': completed,
+      'reminder': reminder.name,
+      'scheduledAt': scheduledAt?.toIso8601String(),
       'syncStatus': syncStatus.name,
     };
   }
