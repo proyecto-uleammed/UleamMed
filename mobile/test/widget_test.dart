@@ -212,18 +212,36 @@ class _FakeApi implements UleamMedApi {
     return confirmations;
   }
 
+  final List<Appointment> appointments = [
+    const Appointment(
+      id: 'demo',
+      doctor: 'Dra. Demo',
+      specialty: 'General',
+      date: '06 Jul 2026',
+      time: '10:00',
+      location: 'Centro medico',
+    ),
+  ];
+
   @override
   Future<List<Appointment>> listAppointments() async {
-    return const [
-      Appointment(
-        id: 'demo',
-        doctor: 'Dra. Demo',
-        specialty: 'General',
-        date: '06 Jul 2026',
-        time: '10:00',
-        location: 'Centro medico',
-      ),
-    ];
+    return appointments;
+  }
+
+  @override
+  Future<Appointment> saveAppointment(Appointment appointment) async {
+    final index = appointments.indexWhere((a) => a.id == appointment.id);
+    if (index >= 0) {
+      appointments[index] = appointment;
+    } else {
+      appointments.add(appointment);
+    }
+    return appointment;
+  }
+
+  @override
+  Future<void> deleteAppointment(String appointmentId) async {
+    appointments.removeWhere((a) => a.id == appointmentId);
   }
 
   final List<EmergencyContact> emergencyContacts = [

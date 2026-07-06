@@ -129,6 +129,26 @@ class LocalStore {
     );
   }
 
+  Future<Appointment> upsertAppointment(Appointment appointment) async {
+    final normalized = appointment.copyWith(syncStatus: SyncStatus.pending);
+    final appointments = await readAppointments();
+    final index = appointments.indexWhere((item) => item.id == normalized.id);
+    if (index >= 0) {
+      appointments[index] = normalized;
+    } else {
+      appointments.add(normalized);
+    }
+    await saveAppointments(appointments);
+    return normalized;
+  }
+
+  Future<void> deleteAppointment(String id) async {
+    final appointments = await readAppointments();
+    await saveAppointments(
+      appointments.where((item) => item.id != id).toList(),
+    );
+  }
+
   Future<List<EmergencyContact>> readEmergencyContacts() {
     return _readList(
       _emergencyContactsKey,
