@@ -478,6 +478,109 @@ class CaregiverPermission {
   }
 }
 
+enum HealthEntryKind {
+  condition,
+  allergy;
+
+  static HealthEntryKind fromJson(Object? value) {
+    return HealthEntryKind.values.firstWhere(
+      (kind) => kind.name == value,
+      orElse: () => HealthEntryKind.condition,
+    );
+  }
+}
+
+enum SeverityLevel {
+  low('Leve'),
+  medium('Moderada'),
+  high('Severa');
+
+  const SeverityLevel(this.label);
+
+  final String label;
+
+  static SeverityLevel fromJson(Object? value) {
+    return SeverityLevel.values.firstWhere(
+      (level) => level.name == value,
+      orElse: () => SeverityLevel.low,
+    );
+  }
+}
+
+/// Enfermedad, condicion cronica o alergia del paciente (PB-033/034/035).
+class HealthEntry {
+  const HealthEntry({
+    required this.id,
+    required this.kind,
+    required this.name,
+    this.severity = SeverityLevel.low,
+    this.detail = '',
+    this.date = '',
+    this.active = true,
+    this.syncStatus = SyncStatus.pending,
+  });
+
+  factory HealthEntry.fromJson(Map<String, dynamic> json) {
+    return HealthEntry(
+      id: json['id'].toString(),
+      kind: HealthEntryKind.fromJson(json['kind']),
+      name: json['name'].toString(),
+      severity: SeverityLevel.fromJson(json['severity']),
+      detail: json['detail']?.toString() ?? '',
+      date: json['date']?.toString() ?? '',
+      active: json['active'] != false,
+      syncStatus: SyncStatus.fromJson(json['syncStatus']),
+    );
+  }
+
+  final String id;
+  final HealthEntryKind kind;
+  final String name;
+  final SeverityLevel severity;
+  final String detail;
+  final String date;
+  final bool active;
+  final SyncStatus syncStatus;
+
+  bool get isSevereAllergy =>
+      kind == HealthEntryKind.allergy && severity == SeverityLevel.high;
+
+  HealthEntry copyWith({
+    String? id,
+    HealthEntryKind? kind,
+    String? name,
+    SeverityLevel? severity,
+    String? detail,
+    String? date,
+    bool? active,
+    SyncStatus? syncStatus,
+  }) {
+    return HealthEntry(
+      id: id ?? this.id,
+      kind: kind ?? this.kind,
+      name: name ?? this.name,
+      severity: severity ?? this.severity,
+      detail: detail ?? this.detail,
+      date: date ?? this.date,
+      active: active ?? this.active,
+      syncStatus: syncStatus ?? this.syncStatus,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'kind': kind.name,
+      'name': name,
+      'severity': severity.name,
+      'detail': detail,
+      'date': date,
+      'active': active,
+      'syncStatus': syncStatus.name,
+    };
+  }
+}
+
 class MedicationMarkResult {
   const MedicationMarkResult({
     required this.medication,

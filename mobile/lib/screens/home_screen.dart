@@ -4,6 +4,7 @@ import '../services/app_settings.dart';
 import '../theme/app_theme.dart';
 import '../widgets/action_card.dart';
 import 'activities_screen.dart';
+import 'conditions_screen.dart';
 import 'emergency_screen.dart';
 import 'medications_screen.dart';
 import 'profile_screen.dart';
@@ -231,6 +232,18 @@ class _HomeScreenState extends State<HomeScreen> {
                         _refreshSyncStatus();
                       }
                     },
+                  ),
+                  ActionCard(
+                    icon: Icons.health_and_safety,
+                    title: 'Condiciones y alergias',
+                    subtitle: 'Enfermedades y alergias con severidad',
+                    color: const Color(0xFFC62828),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ConditionsScreen(api: _api),
+                      ),
+                    ),
                   ),
                   ActionCard(
                     icon: Icons.calendar_month,

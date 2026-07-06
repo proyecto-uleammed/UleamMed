@@ -43,6 +43,7 @@ class LocalStore {
   static const _appointmentsKey = 'uleammed_appointments';
   static const _emergencyContactsKey = 'uleammed_emergency_contacts';
   static const _caregiverPermissionsKey = 'uleammed_caregiver_permissions';
+  static const _healthEntriesKey = 'uleammed_health_entries';
 
   Future<MedicalProfile> readMedicalProfile() async {
     final data = await _readObject(_medicalProfileKey);
@@ -176,6 +177,35 @@ class LocalStore {
     );
   }
 
+  Future<List<HealthEntry>> readHealthEntries() {
+    return _readList(_healthEntriesKey, (json) => HealthEntry.fromJson(json));
+  }
+
+  Future<void> saveHealthEntries(List<HealthEntry> entries) {
+    return _writeList(
+      _healthEntriesKey,
+      entries.map((entry) => entry.toJson()).toList(),
+    );
+  }
+
+  Future<HealthEntry> upsertHealthEntry(HealthEntry entry) async {
+    final normalized = entry.copyWith(syncStatus: SyncStatus.pending);
+    final entries = await readHealthEntries();
+    final index = entries.indexWhere((item) => item.id == normalized.id);
+    if (index >= 0) {
+      entries[index] = normalized;
+    } else {
+      entries.add(normalized);
+    }
+    await saveHealthEntries(entries);
+    return normalized;
+  }
+
+  Future<void> deleteHealthEntry(String id) async {
+    final entries = await readHealthEntries();
+    await saveHealthEntries(entries.where((item) => item.id != id).toList());
+  }
+
   Future<int> pendingSyncCount() async {
     var total = 0;
     final profile = await readMedicalProfile();
@@ -195,6 +225,9 @@ class LocalStore {
         .where((item) => item.syncStatus == SyncStatus.pending)
         .length;
     total += (await readCaregiverPermissions())
+        .where((item) => item.syncStatus == SyncStatus.pending)
+        .length;
+    total += (await readHealthEntries())
         .where((item) => item.syncStatus == SyncStatus.pending)
         .length;
     return total;
