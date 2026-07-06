@@ -5,6 +5,7 @@ import '../theme/app_theme.dart';
 import '../widgets/app_states.dart';
 import 'legal_screen.dart';
 import 'lock_setup_screen.dart';
+import 'reminders_screen.dart';
 
 /// Ajustes de accesibilidad y rol (PB-010/006).
 /// Las secciones de privacidad y bloqueo se agregan en la fase de privacidad.
@@ -90,6 +91,35 @@ class SettingsScreen extends StatelessWidget {
                   if (role != null) {
                     settings.setRole(role);
                   }
+                },
+              ),
+              const Divider(height: 32),
+              _SectionTitle(
+                icon: Icons.notifications_active_outlined,
+                title: 'Recordatorios',
+              ),
+              const SizedBox(height: 8),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Recordatorios de tomas'),
+                subtitle: const Text(
+                  'Muestra tus proximas tomas en el inicio.',
+                ),
+                value: current.remindersEnabled,
+                onChanged: (enabled) => settings.setRemindersEnabled(enabled),
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.info_outline),
+                title: const Text('Como funcionan los recordatorios'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => RemindersScreen(settings: settings),
+                    ),
+                  );
                 },
               ),
               const Divider(height: 32),

@@ -3,6 +3,7 @@ import '../services/api_service.dart';
 import '../services/app_settings.dart';
 import '../theme/app_theme.dart';
 import '../widgets/action_card.dart';
+import '../widgets/upcoming_doses.dart';
 import 'activities_screen.dart';
 import 'caregivers_screen.dart';
 import 'conditions_screen.dart';
@@ -185,6 +186,13 @@ class _HomeScreenState extends State<HomeScreen> {
                       );
                     },
                   ),
+                  if (widget.settings?.value.remindersEnabled ?? true) ...[
+                    const SizedBox(height: 24),
+                    UpcomingDoses(
+                      api: _api,
+                      onChanged: _refreshMedicationSummary,
+                    ),
+                  ],
                   const SizedBox(height: 24),
                   Text(
                     'Acciones rápidas',
