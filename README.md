@@ -109,15 +109,15 @@ La estructura MER ya fue incorporada con modelos SQLAlchemy en `backend/models` 
 
 Incluye, entre otras, estas tablas:
 
-- `users`: tabla heredada del prototipo inicial; aun la usa auth.
-- `usuario`: tabla del MER para usuarios del sistema.
+- `users`: tabla oficial actual para auth del MVP.
+- `usuario`: tabla del MER, conservada porque otras tablas tienen llaves foraneas hacia ella.
 - `encargado`, `cuidador`, `adulto_mayor`.
 - `medicamento`, `tratamiento`, `tratamiento_medicamento`.
 - `cumplimiento_medicacion`.
 - `notificacion`, `destinatario_notificacion`, `token_fcm`.
 - Tablas de historial y examenes medicos.
 
-Importante: aunque las tablas ya existen, los endpoints principales todavia no estan migrados por completo al MER. El backend mantiene `users` para autenticacion y usa memoria temporal para algunos modulos demo.
+Importante: aunque las tablas ya existen, auth usa `users` como contrato actual. Los modulos medicos todavia deben conectarse gradualmente a las tablas reales del MER.
 
 Alembic toma la URL desde `DATABASE_URL`. No se deben guardar credenciales reales en `alembic.ini`.
 
@@ -321,7 +321,7 @@ Documentacion:
 
 ## Pendientes conocidos
 
-- Adaptar autenticacion desde `users` hacia `usuario` cuando el equipo lo acuerde.
+- Conectar medicamentos, cuidadores, historial, cumplimiento y notificaciones a las tablas reales del MER.
 - Reemplazar almacenamiento en memoria por persistencia real usando el MER.
 - Reemplazar datos semilla locales de citas, actividades y emergencias por
   endpoints reales cuando existan.

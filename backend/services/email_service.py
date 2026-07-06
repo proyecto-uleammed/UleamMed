@@ -61,5 +61,6 @@ def _enviar_email(destinatario: str, asunto: str, cuerpo: str) -> None:
             if settings.SMTP_USERNAME and settings.SMTP_PASSWORD:
                 smtp.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
             smtp.send_message(mensaje)
+            logger.info("Correo UleamMed enviado a %s | asunto=%s", destinatario, asunto)
     except Exception:
         logger.exception("No se pudo enviar correo UleamMed a %s", destinatario)
