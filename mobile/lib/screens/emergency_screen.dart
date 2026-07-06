@@ -114,6 +114,7 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Emergencia')),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'fab-emergency',
         onPressed: () => _openContactForm(),
         icon: const Icon(Icons.person_add),
         label: const Text('Contacto'),

@@ -48,6 +48,9 @@ abstract class UleamMedApi {
   Future<List<HealthEntry>> listHealthEntries();
   Future<HealthEntry> saveHealthEntry(HealthEntry entry);
   Future<void> deleteHealthEntry(String entryId);
+  Future<List<CaregiverPermission>> listCaregivers();
+  Future<CaregiverPermission> saveCaregiver(CaregiverPermission caregiver);
+  Future<void> deleteCaregiver(String caregiverId);
   Future<int> pendingSyncCount();
   Future<SyncSummary> synchronizePendingChanges();
 }
@@ -416,6 +419,21 @@ class ApiService implements UleamMedApi {
   @override
   Future<void> deleteHealthEntry(String entryId) {
     return _localStore.deleteHealthEntry(entryId);
+  }
+
+  @override
+  Future<List<CaregiverPermission>> listCaregivers() {
+    return _localStore.readCaregiverPermissions();
+  }
+
+  @override
+  Future<CaregiverPermission> saveCaregiver(CaregiverPermission caregiver) {
+    return _localStore.upsertCaregiverPermission(caregiver);
+  }
+
+  @override
+  Future<void> deleteCaregiver(String caregiverId) {
+    return _localStore.deleteCaregiverPermission(caregiverId);
   }
 
   @override
