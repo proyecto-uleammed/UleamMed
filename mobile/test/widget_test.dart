@@ -450,7 +450,10 @@ void main() {
     expect(find.text('Proximas tomas'), findsOneWidget);
     expect(find.text('Omeprazol - 20 mg'), findsOneWidget);
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Tomado'));
+    final takenButton = find.widgetWithText(FilledButton, 'Tomado');
+    await tester.ensureVisible(takenButton);
+    await tester.pumpAndSettle();
+    await tester.tap(takenButton);
     await tester.pumpAndSettle();
 
     expect(find.text('Omeprazol: marcado como tomado'), findsOneWidget);
