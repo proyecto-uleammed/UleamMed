@@ -51,9 +51,11 @@ void main() {
       final tokenStore = _MemoryTokenStore(
         const AuthTokens(accessToken: 'access-ok', refreshToken: 'refresh-ok'),
       );
+      final localStore = LocalStore(jsonStore: _MemoryJsonStore());
       final api = ApiService(
         baseUrl: 'http://localhost:8000',
         tokenStore: tokenStore,
+        localStore: localStore,
         client: MockClient((request) async {
           if (request.url.path == '/health') {
             return _jsonResponse({'environment': 'test'});
@@ -83,9 +85,11 @@ void main() {
           ),
         );
         var profileCalls = 0;
+        final localStore = LocalStore(jsonStore: _MemoryJsonStore());
         final api = ApiService(
           baseUrl: 'http://localhost:8000',
           tokenStore: tokenStore,
+          localStore: localStore,
           client: MockClient((request) async {
             if (request.url.path == '/health') {
               return _jsonResponse({'environment': 'test'});
@@ -125,9 +129,11 @@ void main() {
           refreshToken: 'refresh-expired',
         ),
       );
+      final localStore = LocalStore(jsonStore: _MemoryJsonStore());
       final api = ApiService(
         baseUrl: 'http://localhost:8000',
         tokenStore: tokenStore,
+        localStore: localStore,
         client: MockClient((request) async {
           if (request.url.path == '/health') {
             return _jsonResponse({'environment': 'test'});
