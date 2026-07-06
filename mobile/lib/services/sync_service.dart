@@ -2,12 +2,12 @@ import '../models/local_models.dart';
 import 'local_store.dart';
 
 class SyncService {
-  const SyncService({required LocalStore localStore}) : _localStore = localStore;
+  const SyncService({required this.localStore});
 
-  final LocalStore _localStore;
+  final LocalStore localStore;
 
   Future<SyncSummary> synchronizePending() async {
-    final pending = await _localStore.pendingSyncCount();
+    final pending = await localStore.pendingSyncCount();
     if (pending == 0) {
       return const SyncSummary(
         processed: 0,
