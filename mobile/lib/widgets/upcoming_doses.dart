@@ -117,23 +117,22 @@ class _UpcomingDosesState extends State<UpcomingDoses> {
               ],
             ),
             const SizedBox(height: 8),
-            if (next.isEmpty)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE8F5E9),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Row(
-                  children: [
-                    Icon(Icons.check_circle, color: Color(0xFF2E7D32)),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: Text('No tienes tomas pendientes por ahora.'),
-                    ),
-                  ],
-                ),
+            if (meds.isEmpty)
+              _EmptyDosesHint(
+                icon: Icons.medication_outlined,
+                title: 'Aun no tienes medicamentos',
+                message:
+                    'Cuando agregues tus medicamentos en la pestana Medicinas, '
+                    'aqui veras las proximas tomas del dia con botones para '
+                    'marcarlas como tomadas, posponerlas u omitirlas.',
+              )
+            else if (next.isEmpty)
+              _EmptyDosesHint(
+                icon: Icons.check_circle_outline,
+                title: 'Tomas al dia',
+                message:
+                    'No tienes tomas pendientes por ahora. Cuando llegue la '
+                    'hora de tu siguiente medicamento, aparecera aqui.',
               )
             else
               ...next.map((med) => _DoseCard(
@@ -146,6 +145,48 @@ class _UpcomingDosesState extends State<UpcomingDoses> {
           ],
         );
       },
+    );
+  }
+}
+
+class _EmptyDosesHint extends StatelessWidget {
+  const _EmptyDosesHint({
+    required this.icon,
+    required this.title,
+    required this.message,
+  });
+
+  final IconData icon;
+  final String title;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.accent.withValues(alpha: 0.6)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: AppColors.primary, size: 28),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: Theme.of(context).textTheme.titleLarge),
+                const SizedBox(height: 4),
+                Text(message, style: Theme.of(context).textTheme.bodyMedium),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
