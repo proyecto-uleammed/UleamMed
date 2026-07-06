@@ -4,6 +4,7 @@ import '../services/app_settings.dart';
 import '../theme/app_theme.dart';
 import '../widgets/action_card.dart';
 import 'activities_screen.dart';
+import 'caregivers_screen.dart';
 import 'conditions_screen.dart';
 import 'emergency_screen.dart';
 import 'medications_screen.dart';
@@ -258,6 +259,18 @@ class _HomeScreenState extends State<HomeScreen> {
                     subtitle: 'Revisa tus tomas de la semana',
                     color: AppColors.primary,
                     onTap: () => widget.onOpenTab?.call(2),
+                  ),
+                  ActionCard(
+                    icon: Icons.family_restroom,
+                    title: 'Cuidadores',
+                    subtitle: 'Invita y gestiona permisos',
+                    color: AppColors.primaryLight,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => CaregiversScreen(api: _api),
+                      ),
+                    ),
                   ),
                   ActionCard(
                     icon: Icons.fitness_center,

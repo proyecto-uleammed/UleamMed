@@ -197,6 +197,35 @@ class LocalStore {
     );
   }
 
+  Future<void> saveCaregiverPermissions(List<CaregiverPermission> items) {
+    return _writeList(
+      _caregiverPermissionsKey,
+      items.map((item) => item.toJson()).toList(),
+    );
+  }
+
+  Future<CaregiverPermission> upsertCaregiverPermission(
+    CaregiverPermission permission,
+  ) async {
+    final normalized = permission.copyWith(syncStatus: SyncStatus.pending);
+    final items = await readCaregiverPermissions();
+    final index = items.indexWhere((item) => item.id == normalized.id);
+    if (index >= 0) {
+      items[index] = normalized;
+    } else {
+      items.add(normalized);
+    }
+    await saveCaregiverPermissions(items);
+    return normalized;
+  }
+
+  Future<void> deleteCaregiverPermission(String id) async {
+    final items = await readCaregiverPermissions();
+    await saveCaregiverPermissions(
+      items.where((item) => item.id != id).toList(),
+    );
+  }
+
   Future<List<HealthEntry>> readHealthEntries() {
     return _readList(_healthEntriesKey, (json) => HealthEntry.fromJson(json));
   }

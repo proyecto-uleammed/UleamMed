@@ -114,6 +114,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
           ),
         ),
         floatingActionButton: FloatingActionButton.extended(
+          heroTag: 'fab-appointments',
           onPressed: () => _openForm(),
           icon: const Icon(Icons.add),
           label: const Text('Agregar'),

@@ -127,6 +127,7 @@ class _MedicationsScreenState extends State<MedicationsScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Medicamentos')),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'fab-medications',
         onPressed: () => _openMedicationForm(),
         icon: const Icon(Icons.add),
         label: const Text('Agregar'),
