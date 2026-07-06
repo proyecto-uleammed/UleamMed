@@ -430,7 +430,7 @@ void main() {
     await tester.tap(find.byTooltip('Guardar perfil medico'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Perfil medico guardado sin conexion'), findsOneWidget);
+    expect(find.text('Perfil medico guardado'), findsOneWidget);
     expect(find.text('Roberto Nuevo'), findsWidgets);
   });
 

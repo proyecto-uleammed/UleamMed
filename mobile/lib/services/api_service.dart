@@ -250,13 +250,7 @@ class ApiService implements UleamMedApi {
       await _localStore.saveMedications(merged);
       return merged;
     } catch (_) {
-      if (localItems.isNotEmpty) {
-        return localItems;
-      }
-
-      final demoItems = MedicationItem.demoList();
-      await _localStore.saveMedications(demoItems);
-      return demoItems;
+      return localItems;
     }
   }
 
@@ -328,31 +322,8 @@ class ApiService implements UleamMedApi {
   }
 
   @override
-  Future<List<Appointment>> listAppointments() async {
-    final appointments = await _localStore.readAppointments();
-    if (appointments.isNotEmpty) {
-      return appointments;
-    }
-    const demoAppointments = [
-      Appointment(
-        id: 'cita-general',
-        doctor: 'Dra. Maria Gonzalez',
-        specialty: 'Medicina General',
-        date: '28 Jun 2026',
-        time: '10:30',
-        location: 'Centro de Salud Norte',
-      ),
-      Appointment(
-        id: 'cita-cardio',
-        doctor: 'Dr. Carlos Ruiz',
-        specialty: 'Cardiologia',
-        date: '05 Jul 2026',
-        time: '15:00',
-        location: 'Hospital Regional',
-      ),
-    ];
-    await _localStore.saveAppointments(demoAppointments);
-    return demoAppointments;
+  Future<List<Appointment>> listAppointments() {
+    return _localStore.readAppointments();
   }
 
   @override
@@ -366,34 +337,8 @@ class ApiService implements UleamMedApi {
   }
 
   @override
-  Future<List<EmergencyContact>> listEmergencyContacts() async {
-    final contacts = await _localStore.readEmergencyContacts();
-    if (contacts.isNotEmpty) {
-      return contacts;
-    }
-    const demoContacts = [
-      EmergencyContact(
-        id: '911',
-        name: 'Emergencias',
-        phone: '911',
-        relationship: 'Emergencia',
-        isPrimary: true,
-      ),
-      EmergencyContact(
-        id: 'hija',
-        name: 'Maria',
-        phone: '555-1234',
-        relationship: 'Hija',
-      ),
-      EmergencyContact(
-        id: 'medico',
-        name: 'Dr. Gonzalez',
-        phone: '555-9012',
-        relationship: 'Medico',
-      ),
-    ];
-    await _localStore.saveEmergencyContacts(demoContacts);
-    return demoContacts;
+  Future<List<EmergencyContact>> listEmergencyContacts() {
+    return _localStore.readEmergencyContacts();
   }
 
   @override

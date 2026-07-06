@@ -42,7 +42,7 @@ class _ConditionsScreenState extends State<ConditionsScreen> {
 
     if (saved == true && mounted) {
       _reload();
-      showAppSnackBar(context, 'Guardado sin conexion');
+      showAppSnackBar(context, 'Guardado');
     }
   }
 

@@ -427,9 +427,6 @@ class _HistoryTile extends StatelessWidget {
           style: const TextStyle(fontWeight: FontWeight.w600),
         ),
         subtitle: Text('$label - ${_time(confirmation.recordedAt)}'),
-        trailing: confirmation.syncStatus == SyncStatus.pending
-            ? const Icon(Icons.sync_problem, color: Color(0xFFF57F17))
-            : const Icon(Icons.check, color: AppColors.primary),
       ),
     );
   }

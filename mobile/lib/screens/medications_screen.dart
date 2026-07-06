@@ -24,11 +24,9 @@ class _MedicationsScreenState extends State<MedicationsScreen> {
   Future<_MedicationData> _loadData() async {
     final medications = await _api.listMedications();
     final confirmations = await _api.listDoseConfirmations();
-    final pendingSync = await _api.pendingSyncCount();
     return _MedicationData(
       medications: medications,
       confirmations: confirmations,
-      pendingSync: pendingSync,
     );
   }
 
@@ -107,7 +105,7 @@ class _MedicationsScreenState extends State<MedicationsScreen> {
         SnackBar(
           content: Text(
             medication == null
-                ? 'Medicamento guardado para sincronizar'
+                ? 'Medicamento guardado'
                 : 'Medicamento actualizado',
           ),
         ),
@@ -158,7 +156,6 @@ class _MedicationsScreenState extends State<MedicationsScreen> {
               _MedicationSummary(
                 totalCount: data.medications.length,
                 takenCount: takenCount,
-                pendingSync: data.pendingSync,
               ),
               const SizedBox(height: 16),
               if (data.medications.isEmpty)
@@ -197,24 +194,20 @@ class _MedicationData {
   const _MedicationData({
     this.medications = const [],
     this.confirmations = const [],
-    this.pendingSync = 0,
   });
 
   final List<MedicationItem> medications;
   final List<DoseConfirmation> confirmations;
-  final int pendingSync;
 }
 
 class _MedicationSummary extends StatelessWidget {
   const _MedicationSummary({
     required this.totalCount,
     required this.takenCount,
-    required this.pendingSync,
   });
 
   final int totalCount;
   final int takenCount;
-  final int pendingSync;
 
   @override
   Widget build(BuildContext context) {
@@ -234,14 +227,18 @@ class _MedicationSummary extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Hoy tienes $totalCount medicamentos programados.',
+                  totalCount == 0
+                      ? 'Aun no tienes medicamentos programados.'
+                      : 'Hoy tienes $totalCount medicamentos programados.',
                   style: Theme.of(context).textTheme.bodyLarge,
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  '$takenCount ya tomados. $pendingSync cambios pendientes.',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
+                if (totalCount > 0) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    '$takenCount ya tomados.',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ],
               ],
             ),
           ),
@@ -273,7 +270,8 @@ class _EmptyMedications extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            'Se guardara en este dispositivo aunque no tengas internet.',
+            'Aqui apareceran tus medicamentos con su dosis, horario y foto. '
+            'Toca el boton + para agregar el primero.',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodyMedium,
           ),
@@ -302,7 +300,6 @@ class _MedicationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isPending = medication.syncStatus == SyncStatus.pending;
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: Padding(
@@ -340,27 +337,14 @@ class _MedicationCard extends StatelessWidget {
                         ),
                       ],
                       const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          Chip(
-                            label: Text(
-                              medication.taken ? 'Tomado' : 'Pendiente',
-                            ),
-                            avatar: Icon(
-                              medication.taken
-                                  ? Icons.check
-                                  : Icons.schedule,
-                              size: 18,
-                            ),
-                          ),
-                          if (isPending)
-                            const Chip(
-                              label: Text('Sin sincronizar'),
-                              avatar: Icon(Icons.sync_problem, size: 18),
-                            ),
-                        ],
+                      Chip(
+                        label: Text(
+                          medication.taken ? 'Tomado' : 'Pendiente',
+                        ),
+                        avatar: Icon(
+                          medication.taken ? Icons.check : Icons.schedule,
+                          size: 18,
+                        ),
                       ),
                     ],
                   ),
@@ -488,9 +472,6 @@ class _ConfirmationHistory extends StatelessWidget {
                   subtitle: Text(
                     '${_statusLabel(confirmation.status)} - ${_formatDate(confirmation.recordedAt)}',
                   ),
-                  trailing: confirmation.syncStatus == SyncStatus.pending
-                      ? const Icon(Icons.sync_problem)
-                      : const Icon(Icons.cloud_done),
                 ),
               ),
       ],
