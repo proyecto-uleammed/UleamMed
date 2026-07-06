@@ -14,6 +14,15 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
+from backend.core.config import settings
+
+# Las migraciones pueden apuntar a cualquier base (PostgreSQL local o Supabase)
+# usando DATABASE_URL del entorno o del archivo .env. Asi evitamos escribir
+# credenciales reales en alembic.ini, que si se versiona en Git.
+# Si DATABASE_URL no esta definida, se usa el valor por defecto de alembic.ini.
+if settings.DATABASE_URL:
+    config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+
 # add your model's MetaData object here
 # for 'autogenerate' support
 # from myapp import mymodel
