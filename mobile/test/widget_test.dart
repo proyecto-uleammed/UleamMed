@@ -308,12 +308,7 @@ void main() {
       find.widgetWithText(TextFormField, 'Nombre completo'),
       'Roberto Nuevo',
     );
-    await tester.scrollUntilVisible(
-      find.text('Guardar perfil medico'),
-      500,
-      scrollable: find.byType(Scrollable).last,
-    );
-    await tester.tap(find.text('Guardar perfil medico'));
+    await tester.tap(find.byTooltip('Guardar perfil medico'));
     await tester.pumpAndSettle();
 
     expect(find.text('Perfil medico guardado sin conexion'), findsOneWidget);
