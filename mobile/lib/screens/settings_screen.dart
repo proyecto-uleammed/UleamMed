@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../services/app_settings.dart';
 import '../theme/app_theme.dart';
+import '../widgets/app_states.dart';
+import 'legal_screen.dart';
+import 'lock_setup_screen.dart';
 
 /// Ajustes de accesibilidad y rol (PB-010/006).
 /// Las secciones de privacidad y bloqueo se agregan en la fase de privacidad.
@@ -87,6 +90,83 @@ class SettingsScreen extends StatelessWidget {
                   if (role != null) {
                     settings.setRole(role);
                   }
+                },
+              ),
+              const Divider(height: 32),
+              _SectionTitle(
+                icon: Icons.lock_outline,
+                title: 'Privacidad y seguridad',
+              ),
+              const SizedBox(height: 8),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Bloqueo de la app'),
+                subtitle: const Text('Pide un PIN al abrir la aplicacion.'),
+                value: current.appLockEnabled,
+                onChanged: (enabled) async {
+                  if (enabled) {
+                    final ok = await Navigator.push<bool>(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => LockSetupScreen(settings: settings),
+                      ),
+                    );
+                    if (ok == true && context.mounted) {
+                      showAppSnackBar(context, 'Bloqueo activado');
+                    }
+                  } else {
+                    await settings.setAppLock(enabled: false);
+                    if (context.mounted) {
+                      showAppSnackBar(context, 'Bloqueo desactivado');
+                    }
+                  }
+                },
+              ),
+              if (current.appLockEnabled)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.timer_outlined),
+                  title: const Text('Bloqueo automatico'),
+                  subtitle: Text(
+                    'Tras ${current.autoLockMinutes} min en segundo plano',
+                  ),
+                  trailing: DropdownButton<int>(
+                    value: current.autoLockMinutes,
+                    items: const [1, 2, 5, 10]
+                        .map(
+                          (minutes) => DropdownMenuItem(
+                            value: minutes,
+                            child: Text('$minutes min'),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (minutes) {
+                      if (minutes != null) {
+                        settings.setAppLock(
+                          enabled: true,
+                          autoLockMinutes: minutes,
+                        );
+                      }
+                    },
+                  ),
+                ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.description_outlined),
+                title: const Text('Terminos y privacidad'),
+                subtitle: Text(
+                  current.termsAccepted
+                      ? 'Aceptados (v${current.termsAcceptedVersion})'
+                      : 'Pendiente de aceptar',
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => LegalScreen(settings: settings),
+                    ),
+                  );
                 },
               ),
             ],
