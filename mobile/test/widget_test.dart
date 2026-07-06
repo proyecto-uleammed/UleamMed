@@ -308,9 +308,12 @@ void main() {
       find.widgetWithText(TextFormField, 'Nombre completo'),
       'Roberto Nuevo',
     );
-    await tester.drag(find.byType(ListView), const Offset(0, -900));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Guardar perfil medico', skipOffstage: false));
+    await tester.scrollUntilVisible(
+      find.text('Guardar perfil medico'),
+      500,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.tap(find.text('Guardar perfil medico'));
     await tester.pumpAndSettle();
 
     expect(find.text('Perfil medico guardado sin conexion'), findsOneWidget);
