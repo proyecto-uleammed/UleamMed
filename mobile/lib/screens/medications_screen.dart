@@ -1,4 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
@@ -309,23 +313,7 @@ class _MedicationCard extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 52,
-                  height: 52,
-                  decoration: BoxDecoration(
-                    color: medication.taken
-                        ? AppColors.primaryLight.withValues(alpha: 0.2)
-                        : AppColors.surface,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    medication.taken ? Icons.check_circle : Icons.medication,
-                    color: medication.taken
-                        ? AppColors.primary
-                        : AppColors.textSecondary,
-                    size: 30,
-                  ),
-                ),
+                _MedicationAvatar(medication: medication),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(
@@ -414,6 +402,58 @@ class _MedicationCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _MedicationAvatar extends StatelessWidget {
+  const _MedicationAvatar({required this.medication});
+
+  final MedicationItem medication;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasPhoto =
+        medication.photoPath.isNotEmpty &&
+        File(medication.photoPath).existsSync();
+    if (hasPhoto) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Image.file(
+          File(medication.photoPath),
+          width: 52,
+          height: 52,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) =>
+              _MedicationAvatarFallback(taken: medication.taken),
+        ),
+      );
+    }
+    return _MedicationAvatarFallback(taken: medication.taken);
+  }
+}
+
+class _MedicationAvatarFallback extends StatelessWidget {
+  const _MedicationAvatarFallback({required this.taken});
+
+  final bool taken;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 52,
+      height: 52,
+      decoration: BoxDecoration(
+        color: taken
+            ? AppColors.primaryLight.withValues(alpha: 0.2)
+            : AppColors.surface,
+        shape: BoxShape.circle,
+      ),
+      child: Icon(
+        taken ? Icons.check_circle : Icons.medication,
+        color: taken ? AppColors.primary : AppColors.textSecondary,
+        size: 30,
       ),
     );
   }
@@ -522,6 +562,8 @@ class _MedicationFormState extends State<_MedicationForm> {
     text: widget.medication?.instructions ?? '',
   );
   late bool _isImportant = widget.medication?.isImportant ?? true;
+  late String _photoPath = widget.medication?.photoPath ?? '';
+  final _picker = ImagePicker();
   bool _isSaving = false;
 
   @override
@@ -533,6 +575,80 @@ class _MedicationFormState extends State<_MedicationForm> {
     _durationController.dispose();
     _instructionsController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickPhoto(ImageSource source) async {
+    try {
+      final picked = await _picker.pickImage(
+        source: source,
+        maxWidth: 1024,
+        imageQuality: 80,
+      );
+      if (picked == null) {
+        return;
+      }
+      final directory = await getApplicationDocumentsDirectory();
+      final fileName =
+          'med_${DateTime.now().millisecondsSinceEpoch}${_extension(picked.name)}';
+      final saved = await File(
+        picked.path,
+      ).copy('${directory.path}/$fileName');
+      if (mounted) {
+        setState(() => _photoPath = saved.path);
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No se pudo cargar la foto')),
+        );
+      }
+    }
+  }
+
+  String _extension(String name) {
+    final dot = name.lastIndexOf('.');
+    if (dot == -1) {
+      return '.jpg';
+    }
+    return name.substring(dot);
+  }
+
+  Future<void> _choosePhotoSource() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera),
+              title: const Text('Tomar foto'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickPhoto(ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: const Text('Elegir de la galeria'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickPhoto(ImageSource.gallery);
+              },
+            ),
+            if (_photoPath.isNotEmpty)
+              ListTile(
+                leading: const Icon(Icons.delete_outline),
+                title: const Text('Quitar foto'),
+                onTap: () {
+                  Navigator.pop(context);
+                  setState(() => _photoPath = '');
+                },
+              ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _save() async {
@@ -557,6 +673,7 @@ class _MedicationFormState extends State<_MedicationForm> {
       syncStatus: SyncStatus.pending,
       createdAt: widget.medication?.createdAt ?? now,
       updatedAt: now,
+      photoPath: _photoPath,
     );
     await widget.onSave(item);
     if (mounted) {
@@ -602,6 +719,53 @@ class _MedicationFormState extends State<_MedicationForm> {
                   ? 'Agregar medicamento'
                   : 'Editar medicamento',
               style: Theme.of(context).textTheme.headlineMedium,
+            ),
+            const SizedBox(height: 16),
+            Center(
+              child: GestureDetector(
+                onTap: _choosePhotoSource,
+                child: Column(
+                  children: [
+                    Container(
+                      width: 110,
+                      height: 110,
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: AppColors.accent),
+                      ),
+                      child: _photoPath.isNotEmpty
+                          ? ClipRRect(
+                              borderRadius: BorderRadius.circular(16),
+                              child: Image.file(
+                                File(_photoPath),
+                                fit: BoxFit.cover,
+                              ),
+                            )
+                          : const Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.add_a_photo,
+                                  color: AppColors.primary,
+                                  size: 34,
+                                ),
+                                SizedBox(height: 6),
+                                Text('Foto del medicamento'),
+                              ],
+                            ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      _photoPath.isNotEmpty ? 'Cambiar foto' : 'Agregar foto',
+                      style: const TextStyle(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
             const SizedBox(height: 16),
             _FormField(
