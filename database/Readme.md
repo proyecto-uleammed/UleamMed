@@ -139,6 +139,82 @@ Las capturas revisadas muestran:
 
 Nota: las capturas fueron compartidas durante la revisión, pero todavía no existen como archivos dentro del repositorio. Si luego se guardan en una carpeta del proyecto, este README puede enlazarlas directamente.
 
+## Subir la base de datos a Supabase (base compartida del equipo)
+
+El objetivo es aplicar exactamente las mismas migraciones de Alembic sobre el
+proyecto de Supabase, para que todo el equipo use la misma estructura de tablas.
+La configuración ya está preparada: `alembic/env.py` toma la conexión desde la
+variable `DATABASE_URL` (entorno o archivo `.env`), por lo que **no** hay que
+escribir credenciales dentro de `alembic.ini`.
+
+### 1. Obtener la cadena de conexión de Supabase
+
+1. Entra a tu proyecto en Supabase.
+2. Ve a `Project Settings` -> `Database` -> `Connection string`.
+3. Copia la cadena. Para migraciones se recomienda el **Session pooler**
+   (puerto `5432`), que funciona bien con IPv4 y con DDL/migraciones.
+4. Adapta la cadena al driver `psycopg` que usa el proyecto (`postgresql+psycopg://`).
+
+Formato final esperado (reemplaza `PROJECT_REF`, `REGION` y `CONTRASENA`):
+
+```env
+DATABASE_URL=postgresql+psycopg://postgres.PROJECT_REF:CONTRASENA@aws-0-REGION.pooler.supabase.com:5432/postgres?sslmode=require
+```
+
+Notas:
+
+- La contraseña es la de la base de datos que definiste al crear el proyecto en
+  Supabase (o la que reseteaste en `Database` -> `Reset database password`).
+- `sslmode=require` es obligatorio: Supabase solo acepta conexiones cifradas.
+- Usa el **Session pooler (5432)** para migraciones. Evita el *Transaction
+  pooler* (`6543`) porque no maneja bien transacciones DDL de Alembic.
+
+### 2. Configurar `.env` local (no se sube a Git)
+
+```env
+DATABASE_URL=postgresql+psycopg://postgres.PROJECT_REF:CONTRASENA@aws-0-REGION.pooler.supabase.com:5432/postgres?sslmode=require
+```
+
+El archivo `.env` está en `.gitignore`, así que la contraseña de Supabase nunca
+se versiona. Toma como referencia `.env.example`.
+
+### 3. Aplicar las migraciones sobre Supabase
+
+Desde la raíz del repositorio, con el entorno virtual activo:
+
+```bash
+# Verifica a qué base apunta y en qué revisión está (debería estar vacía la primera vez)
+alembic current
+
+# Crea toda la estructura del MER en Supabase
+alembic upgrade head
+
+# Confirma que quedó en la última revisión
+alembic current   # -> 4d76158bf7bf (head)
+```
+
+Alternativa sin editar `.env` (pasando la variable solo para ese comando):
+
+```bash
+DATABASE_URL='postgresql+psycopg://postgres.PROJECT_REF:CONTRASENA@aws-0-REGION.pooler.supabase.com:5432/postgres?sslmode=require' \
+alembic upgrade head
+```
+
+### 4. Verificar en Supabase
+
+En el panel de Supabase, `Table Editor` o `SQL Editor`, deberías ver todas las
+tablas del MER (`usuario`, `encargado`, `cuidador`, `adulto_mayor`, etc.) más la
+tabla de control `alembic_version` con el valor `4d76158bf7bf`.
+
+### 5. Que el resto del equipo la use
+
+Cada integrante solo necesita poner la misma `DATABASE_URL` de Supabase en su
+`.env`. No deben volver a correr `alembic upgrade head` salvo que existan
+migraciones nuevas: la estructura ya vive en Supabase compartida.
+
+> Importante: nunca subas el `.env` ni la contraseña de Supabase al repositorio.
+> Si la contraseña se filtra, resetéala desde `Project Settings` -> `Database`.
+
 ## Comandos útiles
 
 Crear una migración nueva:
