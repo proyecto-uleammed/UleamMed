@@ -18,6 +18,7 @@ Ya esta integrado en `main`:
   - El Home actualiza el resumen, por ejemplo `3 de 4 tomados hoy`.
 - Notificaciones y dispositivos demo en memoria.
 - WebSocket autenticado demo.
+- MER de base de datos con modelos SQLAlchemy y migraciones Alembic.
 - CI inicial con GitHub Actions.
 - Preparacion para publicar imagen Docker del backend en AWS ECR.
 
@@ -28,7 +29,7 @@ Este repositorio todavia es un prototipo. Hay partes reales y partes demo.
 No romper estas reglas:
 
 - No subir `.env`, credenciales Firebase, llaves AWS ni secretos.
-- No asumir que PostgreSQL ya esta modelado. La base real y Alembic siguen pendientes.
+- No asumir que los endpoints ya usan el MER completo. Las tablas y migraciones existen, pero varios servicios siguen en modo demo.
 - No reemplazar el flujo de autenticacion sin revisar `backend/core/security.py`, `backend/api/deps.py` y `mobile/lib/services/api_service.dart`.
 - No borrar los endpoints demo de medicamentos hasta que existan tablas reales equivalentes.
 - No editar carpetas generadas de Flutter (`android`, `ios`, `macos`, `windows`, `linux`, `web`) salvo que el cambio sea especifico de plataforma.
@@ -44,6 +45,8 @@ backend/                 API FastAPI
 backend/api/v1/endpoints Endpoints REST y WebSocket
 backend/schemas          Contratos Pydantic
 backend/services         Logica de negocio demo y servicios
+alembic/                 Migraciones de base de datos
+database/                Documentacion del MER y migraciones
 mobile/                  App Flutter
 mobile/lib/screens       Pantallas de la app
 mobile/lib/services      Cliente HTTP hacia el backend
@@ -90,17 +93,33 @@ Estos modulos usan memoria temporal:
 
 Cuando el modulo de base de datos este listo, se deben reemplazar por tablas y consultas reales sin cambiar el contrato que consume Flutter, salvo que se coordine con frontend.
 
-## Base de datos
+## Base de datos y Alembic
 
-La configuracion esta preparada para SQLAlchemy y PostgreSQL mediante `DATABASE_URL`.
+La estructura MER ya fue incorporada con modelos SQLAlchemy en `backend/models` y migraciones Alembic en la carpeta `alembic/`.
 
-Pendiente:
+Incluye, entre otras, estas tablas:
 
-- Modelado final de tablas.
-- Migraciones reales con Alembic.
-- Persistencia real de medicamentos, tomas, notificaciones, citas y actividades.
+- `users`: tabla heredada del prototipo inicial; aun la usa auth.
+- `usuario`: tabla del MER para usuarios del sistema.
+- `encargado`, `cuidador`, `adulto_mayor`.
+- `medicamento`, `tratamiento`, `tratamiento_medicamento`.
+- `cumplimiento_medicacion`.
+- `notificacion`, `destinatario_notificacion`, `token_fcm`.
+- Tablas de historial y examenes medicos.
 
-Para demo local se puede usar SQLite temporal, solo para probar el prototipo:
+Importante: aunque las tablas ya existen, los endpoints principales todavia no estan migrados por completo al MER. El backend mantiene `users` para autenticacion y usa memoria temporal para algunos modulos demo.
+
+Alembic toma la URL desde `DATABASE_URL`. No se deben guardar credenciales reales en `alembic.ini`.
+
+Comandos utiles:
+
+```bash
+alembic upgrade head
+alembic current
+alembic downgrade base
+```
+
+Para demo local del prototipo movil se puede usar SQLite temporal y crear solo las tablas que usa el backend actual:
 
 ```bash
 rm -f /tmp/uleammed-demo.db
@@ -283,8 +302,8 @@ Documentacion:
 
 ## Pendientes conocidos
 
-- Base de datos real y migraciones Alembic.
-- Reemplazar almacenamiento en memoria por persistencia real.
+- Adaptar autenticacion desde `users` hacia `usuario` cuando el equipo lo acuerde.
+- Reemplazar almacenamiento en memoria por persistencia real usando el MER.
 - Login visual real en Flutter; hoy la app usa usuario demo automatico.
 - Refactorizar datos estaticos de citas, actividades y emergencias.
 - Conectar citas, actividades y emergencias al backend cuando existan endpoints.
