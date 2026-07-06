@@ -12,13 +12,18 @@ Ya esta integrado en `main`:
 - Pantalla inicial Flutter para iniciar sesion, crear cuenta o recuperar contrasena de forma preparada.
 - Sesion movil persistida con almacenamiento seguro, restauracion automatica, refresh token y logout.
 - Perfil basico editable desde Flutter usando `/api/v1/users/me`.
+- Perfil medico local-first con enfermedades, alergias, indicaciones,
+  contacto de emergencia y consentimiento para compartir con cuidadores.
 - Conexion Flutter -> FastAPI mediante `mobile/lib/services/api_service.dart`.
 - Modo demo disponible manualmente para desarrollo: `roberto@uleammed.demo`.
 - Modulo de medicamentos conectado al backend:
   - `GET /api/v1/medications`
   - `POST /api/v1/medications/{medication_id}/take`
-  - El boton `Marcar` cambia el medicamento a `Tomado`.
+  - La pantalla Flutter agrega CRUD local-first y confirmaciones `tomado`,
+    `omitido` o `pospuesto`.
   - El Home actualiza el resumen, por ejemplo `3 de 4 tomados hoy`.
+- Citas y contactos de emergencia leen desde almacenamiento local con datos
+  semilla para funcionar offline.
 - Notificaciones y dispositivos demo en memoria.
 - WebSocket autenticado demo.
 - MER de base de datos con modelos SQLAlchemy y migraciones Alembic.
@@ -295,6 +300,10 @@ Workflows incluidos:
   - Valida backend.
   - Construye imagen Docker.
   - Publica imagen en AWS ECR si AWS esta configurado.
+- `.github/workflows/ci-flutter.yml`
+  - Corre en PRs hacia `main` o `Frontend` y en push a `Frontend`.
+  - Ejecuta `flutter pub get`, `flutter analyze`, `flutter test` y
+    `flutter build apk --debug`.
 
 Pendiente para activar AWS:
 
@@ -314,11 +323,11 @@ Documentacion:
 
 - Adaptar autenticacion desde `users` hacia `usuario` cuando el equipo lo acuerde.
 - Reemplazar almacenamiento en memoria por persistencia real usando el MER.
-- Refactorizar datos estaticos de citas, actividades y emergencias.
+- Reemplazar datos semilla locales de citas, actividades y emergencias por
+  endpoints reales cuando existan.
 - Conectar citas, actividades y emergencias al backend cuando existan endpoints.
 - Configurar un proveedor SMTP real para enviar correos fuera del modo logs.
 - Mejorar validaciones de UX y accesibilidad.
-- Agregar CI para Flutter.
 - Definir despliegue real del backend despues de ECR.
 
 ## Guia rapida para futuros cambios

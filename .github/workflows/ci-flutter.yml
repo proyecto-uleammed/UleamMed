@@ -1,0 +1,47 @@
+name: Validacion Flutter
+
+on:
+  pull_request:
+    branches:
+      - main
+      - Frontend
+    paths:
+      - "mobile/**"
+      - ".github/workflows/ci-flutter.yml"
+  push:
+    branches:
+      - Frontend
+    paths:
+      - "mobile/**"
+      - ".github/workflows/ci-flutter.yml"
+
+jobs:
+  flutter:
+    name: Analisis, pruebas y build debug
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Preparar Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Instalar dependencias
+        working-directory: mobile
+        run: flutter pub get
+
+      - name: Analizar codigo
+        working-directory: mobile
+        run: flutter analyze
+
+      - name: Ejecutar pruebas
+        working-directory: mobile
+        run: flutter test
+
+      - name: Compilar APK debug
+        working-directory: mobile
+        run: flutter build apk --debug
