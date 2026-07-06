@@ -7,19 +7,31 @@ Frontend movil en Flutter para la plataforma UleamMed.
 La app ya esta conectada al backend FastAPI para el flujo demo principal y
 cuenta con una primera capa local-first para datos del MVP.
 
-Pantallas incluidas:
+Navegacion principal por barra inferior de 5 destinos: Inicio, Medicamentos,
+Historial, Consultas y Perfil. Emergencia queda como acceso rapido desde Inicio.
 
-- Inicio con saludo, estado de animo, estado de conexion backend y resumen del dia.
-- Pantalla inicial para iniciar sesion o crear cuenta.
-- Recuperacion de contrasena preparada; valida correo, pero aun no envia email real.
-- Perfil medico editable: enfermedades, alergias, indicaciones, contacto clave
-  y consentimiento local para compartir con cuidadores.
+Pantallas y flujos incluidos:
+
+- Onboarding accesible de 3 pasos con opcion de omitir en el primer inicio.
+- Inicio con saludo, resumen del dia, proximas 3 tomas accionables
+  (tomado / posponer 10-15-30-60 min / omitir) y accesos rapidos.
+- Inicio de sesion y registro con confirmacion de contrasena, requisitos y
+  aceptacion de terminos; recuperacion de contrasena por codigo de 6 digitos.
+- Perfil medico editable y ajustes de accesibilidad (escala de fuente),
+  rol, recordatorios, bloqueo por PIN y terminos.
 - Medicamentos local-first con CRUD, horarios, instrucciones y confirmacion de
   toma como tomado, omitido o pospuesto.
-- Citas medicas guardadas localmente con datos semilla.
-- Actividades del dia demo.
-- Contactos de emergencia guardados localmente con datos semilla.
-- Home con contador de cambios locales pendientes de sincronizacion.
+- Historial cronologico de tomas con cumplimiento semanal y filtros.
+- Condiciones y alergias estructuradas con nivel de severidad (color + texto).
+- Consultas CRUD con pestañas de proximas y pasadas, date/time picker, detalle,
+  editar, eliminar, marcar realizada y recordatorio configurable.
+- Cuidadores: invitacion por correo o telefono y permisos por tipo de dato con
+  resumen de informacion compartida.
+- Emergencia con datos clave, contactos de emergencia y llamada directa.
+- Banner global de conexion online/offline y pantalla de cola de pendientes de
+  sincronizacion con reintento.
+- Bloqueo local por PIN con timeout de sesion en segundo plano.
+- Pantallas legales de terminos, privacidad y consentimiento.
 
 ## Integracion con backend
 
@@ -54,9 +66,11 @@ Funcionan sin internet:
 
 - Consultar y editar perfil medico local.
 - Consultar, agregar, editar y eliminar medicamentos locales.
-- Confirmar toma como `tomado`, `omitido` o `pospuesto`.
-- Consultar historial local de confirmaciones.
-- Consultar citas y contactos de emergencia guardados.
+- Confirmar toma como `tomado`, `omitido` o `pospuesto` y posponerla.
+- Consultar historial local de confirmaciones y cumplimiento semanal.
+- Gestionar condiciones, alergias, consultas y contactos de emergencia locales.
+- Ver proximas tomas accionables en el inicio.
+- Bloqueo por PIN y ajustes de accesibilidad.
 
 Requieren internet o endpoints futuros:
 
@@ -103,3 +117,7 @@ flutter build apk --debug
 - Medicamentos conserva los endpoints demo existentes y agrega cache local.
 - Citas y emergencias ya leen desde store local, aunque aun usan datos semilla.
 - Si se cambia un contrato del backend, actualizar `api_service.dart` y los tests.
+- Los recordatorios funcionan en la app (proximas tomas en el inicio + posponer).
+  Las notificaciones del sistema (con la app cerrada) son el siguiente paso y
+  requieren configuracion nativa de `flutter_local_notifications` en Gradle y
+  `AndroidManifest.xml`; se dejaron fuera del MVP para no romper el build de CI.
