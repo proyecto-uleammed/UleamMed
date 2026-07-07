@@ -8,25 +8,25 @@ from backend.schemas.user import UserRead, UserUpdate
 
 
 # Todas las rutas de este archivo quedan bajo /api/v1/users.
-router = APIRouter(prefix="/users", tags=["usuarios"])
+router = APIRouter(prefix="/users", tags=["users"])
 
 
 @router.get("/me", response_model=UserRead)
-def obtener_mi_perfil(usuario_actual: User = Depends(get_current_user)) -> UserRead:
+def get_my_profile(current_user: User = Depends(get_current_user)) -> UserRead:
     """Devuelve los datos publicos del usuario autenticado."""
-    return usuario_actual
+    return current_user
 
 
 @router.patch("/me", response_model=UserRead)
-def actualizar_mi_perfil(
-    datos: UserUpdate,
-    usuario_actual: User = Depends(get_current_user),
+def update_my_profile(
+    payload: UserUpdate,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> UserRead:
     """Actualiza campos permitidos del perfil propio."""
-    if "full_name" in datos.model_fields_set:
-        usuario_actual.full_name = datos.full_name
-    db.add(usuario_actual)
+    if "full_name" in payload.model_fields_set:
+        current_user.full_name = payload.full_name
+    db.add(current_user)
     db.commit()
-    db.refresh(usuario_actual)
-    return usuario_actual
+    db.refresh(current_user)
+    return current_user

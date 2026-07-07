@@ -3,9 +3,9 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
 from backend.core.database import get_db
-from backend.core.security import decodificar_token
+from backend.core.security import decode_token
 from backend.models.user import User
-from backend.services.auth_service import obtener_usuario_por_id
+from backend.services.auth_service import get_user_by_id
 
 
 # FastAPI usa esta configuracion para leer el token Bearer del header Authorization.
@@ -17,7 +17,7 @@ def get_current_user(
     db: Session = Depends(get_db),
 ) -> User:
     """Obtiene el usuario autenticado desde el access token."""
-    credenciales_invalidas = HTTPException(
+    invalid_credentials = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="No se pudieron validar las credenciales",
         headers={"WWW-Authenticate": "Bearer"},
@@ -25,22 +25,22 @@ def get_current_user(
 
     try:
         # El token debe estar firmado correctamente y ser de tipo access.
-        payload = decodificar_token(token)
+        payload = decode_token(token)
         user_id = payload.get("sub")
         token_type = payload.get("type")
         if user_id is None or token_type != "access":
-            raise credenciales_invalidas
+            raise invalid_credentials
     except ValueError as exc:
-        raise credenciales_invalidas from exc
+        raise invalid_credentials from exc
 
     try:
         user_id_int = int(user_id)
     except (TypeError, ValueError) as exc:
-        raise credenciales_invalidas from exc
+        raise invalid_credentials from exc
 
     # Si el usuario no existe o esta inactivo, la ruta se considera no autorizada.
-    usuario = obtener_usuario_por_id(db, user_id_int)
-    if usuario is None or not usuario.is_active:
-        raise credenciales_invalidas
+    user = get_user_by_id(db, user_id_int)
+    if user is None or not user.is_active:
+        raise invalid_credentials
 
-    return usuario
+    return user

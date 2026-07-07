@@ -12,86 +12,86 @@ from backend.schemas.medication import (
     MedicationUpdate,
 )
 from backend.services.medication_service import (
-    actualizar_medicamento_usuario,
-    contar_medicamentos_tomados,
-    crear_medicamento_usuario,
-    eliminar_medicamento_usuario,
-    listar_medicamentos_usuario,
-    marcar_medicamento_tomado,
+    count_taken_medications,
+    create_user_medication,
+    delete_user_medication,
+    list_user_medications,
+    mark_user_medication_taken,
+    update_user_medication,
 )
 
 
-router = APIRouter(prefix="/medications", tags=["medicamentos"])
+router = APIRouter(prefix="/medications", tags=["medications"])
 
 
 @router.get("", response_model=MedicationListResponse)
-def listar_mis_medicamentos(
-    usuario_actual: User = Depends(get_current_user),
+def list_my_medications(
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> MedicationListResponse:
     """Lista los medicamentos programados para el usuario autenticado."""
-    return MedicationListResponse(items=listar_medicamentos_usuario(db, usuario_actual.id))
+    return MedicationListResponse(items=list_user_medications(db, current_user.id))
 
 
 @router.post("", response_model=MedicationRead, status_code=status.HTTP_201_CREATED)
-def crear_mi_medicamento(
-    datos: MedicationCreate,
-    usuario_actual: User = Depends(get_current_user),
+def create_my_medication(
+    payload: MedicationCreate,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> MedicationRead:
     """Crea un medicamento para el usuario autenticado."""
     try:
-        return crear_medicamento_usuario(db, usuario_actual.id, datos)
+        return create_user_medication(db, current_user.id, payload)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
 
 
 @router.patch("/{medication_id}", response_model=MedicationRead)
-def actualizar_mi_medicamento(
+def update_my_medication(
     medication_id: int,
-    datos: MedicationUpdate,
-    usuario_actual: User = Depends(get_current_user),
+    payload: MedicationUpdate,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> MedicationRead:
     """Actualiza un medicamento del usuario autenticado."""
     try:
-        medicamento = actualizar_medicamento_usuario(db, usuario_actual.id, medication_id, datos)
+        medication = update_user_medication(db, current_user.id, medication_id, payload)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-    if medicamento is None:
+    if medication is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Medicamento no encontrado")
-    return medicamento
+    return medication
 
 
 @router.delete("/{medication_id}", status_code=status.HTTP_204_NO_CONTENT)
-def eliminar_mi_medicamento(
+def delete_my_medication(
     medication_id: int,
-    usuario_actual: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> None:
     """Elimina logicamente un medicamento del usuario autenticado."""
-    eliminado = eliminar_medicamento_usuario(db, usuario_actual.id, medication_id)
-    if not eliminado:
+    removed = delete_user_medication(db, current_user.id, medication_id)
+    if not removed:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Medicamento no encontrado")
 
 
 @router.post("/{medication_id}/take", response_model=MedicationMarkResponse)
-def marcar_mi_medicamento(
+def mark_my_medication(
     medication_id: int,
-    usuario_actual: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> MedicationMarkResponse:
     """Marca un medicamento como tomado para el usuario autenticado."""
-    medicamento = marcar_medicamento_tomado(db, usuario_actual.id, medication_id)
-    if medicamento is None:
+    medication = mark_user_medication_taken(db, current_user.id, medication_id)
+    if medication is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Medicamento no encontrado",
         )
 
-    tomados, total = contar_medicamentos_tomados(db, usuario_actual.id)
+    taken_count, total_count = count_taken_medications(db, current_user.id)
     return MedicationMarkResponse(
-        medication=medicamento,
-        taken_count=tomados,
-        total_count=total,
+        medication=medication,
+        taken_count=taken_count,
+        total_count=total_count,
     )

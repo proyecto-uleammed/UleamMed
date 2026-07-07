@@ -38,57 +38,57 @@ _notifications: dict[int, list[NotificationRead]] = {}
 _lock = Lock()
 
 
-def registrar_token_dispositivo(user_id: int, token: str, platform: str | None = None) -> DeviceTokenRead:
+def register_device_token(user_id: int, token: str, platform: str | None = None) -> DeviceTokenRead:
     """Guarda o actualiza el token FCM de un dispositivo del usuario."""
-    registro = DeviceRegistration(user_id=user_id, token=token, platform=platform)
+    registration = DeviceRegistration(user_id=user_id, token=token, platform=platform)
     with _lock:
-        _device_tokens.setdefault(user_id, {})[token] = registro
+        _device_tokens.setdefault(user_id, {})[token] = registration
 
     return DeviceTokenRead(user_id=user_id, token=token, platform=platform)
 
 
-def eliminar_token_dispositivo(user_id: int, token: str) -> bool:
+def delete_device_token(user_id: int, token: str) -> bool:
     """Elimina un token FCM del usuario autenticado."""
     with _lock:
-        tokens_usuario = _device_tokens.get(user_id, {})
-        eliminado = tokens_usuario.pop(token, None) is not None
-        if not tokens_usuario:
+        user_tokens = _device_tokens.get(user_id, {})
+        removed = user_tokens.pop(token, None) is not None
+        if not user_tokens:
             _device_tokens.pop(user_id, None)
 
-    return eliminado
+    return removed
 
 
-def listar_tokens_usuario(user_id: int) -> list[DeviceTokenRead]:
+def list_user_tokens(user_id: int) -> list[DeviceTokenRead]:
     """Devuelve los tokens registrados para un usuario."""
     with _lock:
-        registros = list(_device_tokens.get(user_id, {}).values())
+        registrations = list(_device_tokens.get(user_id, {}).values())
 
     return [
-        DeviceTokenRead(user_id=registro.user_id, token=registro.token, platform=registro.platform)
-        for registro in registros
+        DeviceTokenRead(user_id=registration.user_id, token=registration.token, platform=registration.platform)
+        for registration in registrations
     ]
 
 
-def listar_notificaciones_usuario(user_id: int) -> list[NotificationRead]:
+def list_user_notifications(user_id: int) -> list[NotificationRead]:
     """Devuelve las notificaciones registradas para el usuario."""
     with _lock:
         return list(_notifications.get(user_id, []))
 
 
-def enviar_notificacion_demo(
+def send_demo_notification(
     user_id: int,
     title: str,
     body: str,
     data: dict[str, Any] | None = None,
 ) -> NotificationRead:
     """Registra una notificacion y la envia por FCM si hay credenciales."""
-    tokens = [dispositivo.token for dispositivo in listar_tokens_usuario(user_id)]
+    tokens = [device.token for device in list_user_tokens(user_id)]
     status = "sin_tokens"
 
     if tokens:
-        status = _enviar_por_firebase(tokens=tokens, title=title, body=body, data=data)
+        status = _send_with_firebase(tokens=tokens, title=title, body=body, data=data)
 
-    notificacion = NotificationRead(
+    notification = NotificationRead(
         id=str(uuid4()),
         user_id=user_id,
         title=title,
@@ -100,32 +100,32 @@ def enviar_notificacion_demo(
     )
 
     with _lock:
-        _notifications.setdefault(user_id, []).append(notificacion)
+        _notifications.setdefault(user_id, []).append(notification)
 
-    return notificacion
+    return notification
 
 
-def _enviar_por_firebase(
+def _send_with_firebase(
     tokens: list[str],
     title: str,
     body: str,
     data: dict[str, Any] | None = None,
 ) -> str:
     """Intenta enviar por FCM; si no hay credenciales, deja el envio simulado."""
-    app_inicializada = _inicializar_firebase()
-    if not app_inicializada:
+    app_initialized = _initialize_firebase()
+    if not app_initialized:
         return "simulada_sin_credenciales_firebase"
 
-    mensaje = messaging.MulticastMessage(
+    message = messaging.MulticastMessage(
         tokens=tokens,
         notification=messaging.Notification(title=title, body=body),
         data={key: str(value) for key, value in (data or {}).items()},
     )
-    respuesta = messaging.send_each_for_multicast(mensaje)
-    return f"enviada_firebase_{respuesta.success_count}_ok_{respuesta.failure_count}_error"
+    response = messaging.send_each_for_multicast(message)
+    return f"enviada_firebase_{response.success_count}_ok_{response.failure_count}_error"
 
 
-def _inicializar_firebase() -> bool:
+def _initialize_firebase() -> bool:
     """Inicializa Firebase Admin SDK una sola vez si existe el JSON configurado."""
     if firebase_admin._apps:
         return True
@@ -133,10 +133,10 @@ def _inicializar_firebase() -> bool:
     if not settings.FIREBASE_CREDENTIALS:
         return False
 
-    ruta_credenciales = Path(settings.FIREBASE_CREDENTIALS)
-    if not ruta_credenciales.exists():
+    credentials_path = Path(settings.FIREBASE_CREDENTIALS)
+    if not credentials_path.exists():
         return False
 
-    credencial = credentials.Certificate(str(ruta_credenciales))
-    firebase_admin.initialize_app(credencial)
+    certificate = credentials.Certificate(str(credentials_path))
+    firebase_admin.initialize_app(certificate)
     return True

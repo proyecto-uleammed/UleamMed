@@ -9,7 +9,7 @@ class UserBase(BaseModel):
 
     @field_validator("email")
     @classmethod
-    def validar_email(cls, value: str) -> str:
+    def validate_email(cls, value: str) -> str:
         """Normaliza el correo y valida una estructura minima."""
         email = value.strip().lower()
         if "@" not in email or "." not in email.rsplit("@", maxsplit=1)[-1]:
@@ -59,7 +59,7 @@ class PasswordResetRequest(BaseModel):
 
     @field_validator("email")
     @classmethod
-    def validar_email(cls, value: str) -> str:
+    def validate_email(cls, value: str) -> str:
         email = value.strip().lower()
         if "@" not in email or "." not in email.rsplit("@", maxsplit=1)[-1]:
             raise ValueError("Debe ingresar un correo electronico valido")
@@ -75,7 +75,7 @@ class PasswordResetConfirm(BaseModel):
 
     @field_validator("email")
     @classmethod
-    def validar_email(cls, value: str) -> str:
+    def validate_email(cls, value: str) -> str:
         email = value.strip().lower()
         if "@" not in email or "." not in email.rsplit("@", maxsplit=1)[-1]:
             raise ValueError("Debe ingresar un correo electronico valido")
@@ -83,7 +83,7 @@ class PasswordResetConfirm(BaseModel):
 
     @field_validator("code")
     @classmethod
-    def validar_codigo(cls, value: str) -> str:
+    def validate_code(cls, value: str) -> str:
         code = value.strip()
         if not code.isdigit():
             raise ValueError("El codigo debe tener 6 digitos")

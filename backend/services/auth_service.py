@@ -7,102 +7,102 @@ from sqlalchemy.orm import Session
 
 from backend.core.config import settings
 from backend.core.security import (
-    crear_access_token,
-    crear_refresh_token,
-    generar_password_hash,
-    verificar_password,
+    create_access_token,
+    create_refresh_token,
+    generate_password_hash,
+    verify_password,
 )
 from backend.models.password_reset_token import PasswordResetToken
 from backend.models.user import User
 from backend.schemas.user import TokenPair, UserCreate
 
 
-def obtener_usuario_por_email(db: Session, email: str) -> User | None:
+def get_user_by_email(db: Session, email: str) -> User | None:
     """Busca un usuario por correo, normalizando a minusculas."""
     statement = select(User).where(User.email == email.lower())
     return db.scalar(statement)
 
 
-def obtener_usuario_por_id(db: Session, user_id: int) -> User | None:
+def get_user_by_id(db: Session, user_id: int) -> User | None:
     """Busca un usuario por su identificador primario."""
     return db.get(User, user_id)
 
 
-def crear_usuario(db: Session, datos: UserCreate) -> User:
+def create_user(db: Session, payload: UserCreate) -> User:
     """Crea un usuario con contrasena hasheada y lo guarda en la BD."""
-    usuario = User(
-        email=datos.email.lower(),
-        full_name=datos.full_name,
-        hashed_password=generar_password_hash(datos.password),
+    user = User(
+        email=payload.email.lower(),
+        full_name=payload.full_name,
+        hashed_password=generate_password_hash(payload.password),
     )
-    db.add(usuario)
+    db.add(user)
     db.commit()
-    db.refresh(usuario)
-    return usuario
+    db.refresh(user)
+    return user
 
 
-def autenticar_usuario(db: Session, email: str, password: str) -> User | None:
+def authenticate_user(db: Session, email: str, password: str) -> User | None:
     """Valida correo y contrasena; devuelve None si las credenciales fallan."""
-    usuario = obtener_usuario_por_email(db, email)
-    if usuario is None:
+    user = get_user_by_email(db, email)
+    if user is None:
         return None
-    if not verificar_password(password, usuario.hashed_password):
+    if not verify_password(password, user.hashed_password):
         return None
-    return usuario
+    return user
 
 
-def crear_tokens_para_usuario(usuario: User) -> TokenPair:
+def create_tokens_for_user(user: User) -> TokenPair:
     """Genera access token y refresh token para un usuario valido."""
-    subject = str(usuario.id)
+    subject = str(user.id)
     return TokenPair(
-        access_token=crear_access_token(subject),
-        refresh_token=crear_refresh_token(subject),
+        access_token=create_access_token(subject),
+        refresh_token=create_refresh_token(subject),
     )
 
 
-def crear_codigo_recuperacion(db: Session, usuario: User) -> str:
+def create_password_reset_code(db: Session, user: User) -> str:
     """Genera un codigo temporal de 6 digitos para restablecer contrasena."""
-    codigo = f"{secrets.randbelow(1_000_000):06d}"
-    ahora = datetime.now(UTC)
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    now = datetime.now(UTC)
 
-    tokens_activos = db.scalars(
+    active_tokens = db.scalars(
         select(PasswordResetToken).where(
-            PasswordResetToken.user_id == usuario.id,
+            PasswordResetToken.user_id == user.id,
             PasswordResetToken.used_at.is_(None),
         )
     ).all()
-    for token in tokens_activos:
-        token.used_at = ahora
+    for token in active_tokens:
+        token.used_at = now
 
     reset_token = PasswordResetToken(
-        user_id=usuario.id,
-        code_hash=_hash_codigo_recuperacion(codigo),
-        expires_at=ahora + timedelta(minutes=settings.PASSWORD_RESET_CODE_EXPIRE_MINUTES),
+        user_id=user.id,
+        code_hash=_hash_reset_code(code),
+        expires_at=now + timedelta(minutes=settings.PASSWORD_RESET_CODE_EXPIRE_MINUTES),
     )
     db.add(reset_token)
     db.commit()
-    return codigo
+    return code
 
 
-def restablecer_password_con_codigo(
+def reset_password_with_code(
     db: Session,
     *,
     email: str,
-    codigo: str,
-    nueva_password: str,
+    code: str,
+    new_password: str,
 ) -> bool:
     """Valida el codigo vigente y cambia la contrasena del usuario."""
-    usuario = obtener_usuario_por_email(db, email)
-    if usuario is None or not usuario.is_active:
+    user = get_user_by_email(db, email)
+    if user is None or not user.is_active:
         return False
 
-    ahora = datetime.now(UTC)
-    codigo_hash = _hash_codigo_recuperacion(codigo)
+    now = datetime.now(UTC)
+    code_hash = _hash_reset_code(code)
     reset_token = db.scalar(
         select(PasswordResetToken)
         .where(
-            PasswordResetToken.user_id == usuario.id,
-            PasswordResetToken.code_hash == codigo_hash,
+            PasswordResetToken.user_id == user.id,
+            PasswordResetToken.code_hash == code_hash,
             PasswordResetToken.used_at.is_(None),
         )
         .order_by(PasswordResetToken.created_at.desc())
@@ -113,19 +113,19 @@ def restablecer_password_con_codigo(
     expires_at = reset_token.expires_at
     if expires_at.tzinfo is None:
         expires_at = expires_at.replace(tzinfo=UTC)
-    if expires_at < ahora:
-        reset_token.used_at = ahora
+    if expires_at < now:
+        reset_token.used_at = now
         db.add(reset_token)
         db.commit()
         return False
 
-    usuario.hashed_password = generar_password_hash(nueva_password)
-    reset_token.used_at = ahora
-    db.add(usuario)
+    user.hashed_password = generate_password_hash(new_password)
+    reset_token.used_at = now
+    db.add(user)
     db.add(reset_token)
     db.commit()
     return True
 
 
-def _hash_codigo_recuperacion(codigo: str) -> str:
-    return hashlib.sha256(codigo.strip().encode("utf-8")).hexdigest()
+def _hash_reset_code(code: str) -> str:
+    return hashlib.sha256(code.strip().encode("utf-8")).hexdigest()

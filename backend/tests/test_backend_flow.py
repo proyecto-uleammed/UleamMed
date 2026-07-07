@@ -8,7 +8,7 @@ from sqlalchemy.pool import StaticPool
 
 from backend.app.main import app
 from backend.core.database import Base, get_db
-from backend.core.security import crear_access_token
+from backend.core.security import create_access_token
 
 
 class BackendIntegratedFlowTest(unittest.TestCase):
@@ -39,7 +39,7 @@ class BackendIntegratedFlowTest(unittest.TestCase):
         app.dependency_overrides.clear()
         Base.metadata.drop_all(bind=self.engine)
 
-    def _crear_usuario_y_token(self) -> str:
+    def _create_user_and_token(self) -> str:
         """Registra un usuario demo y devuelve su access token."""
         registro = self.client.post(
             "/api/v1/auth/register",
@@ -63,7 +63,7 @@ class BackendIntegratedFlowTest(unittest.TestCase):
 
     def test_flujo_rest_principal(self) -> None:
         """Valida auth, perfil, dispositivos y notificaciones demo."""
-        access_token = self._crear_usuario_y_token()
+        access_token = self._create_user_and_token()
         headers = {"Authorization": f"Bearer {access_token}"}
 
         perfil = self.client.get("/api/v1/users/me", headers=headers)
@@ -86,14 +86,14 @@ class BackendIntegratedFlowTest(unittest.TestCase):
         self.assertEqual(actualizar.status_code, 200)
         self.assertEqual(actualizar.json()["full_name"], "Persona Actualizada")
 
-        dispositivo = self.client.post(
+        device = self.client.post(
             "/api/v1/devices",
             headers=headers,
             json={"token": "fcm-token-demo-12345", "platform": "android"},
         )
-        self.assertEqual(dispositivo.status_code, 200)
+        self.assertEqual(device.status_code, 200)
 
-        notificacion = self.client.post(
+        notification = self.client.post(
             "/api/v1/notifications/send",
             headers=headers,
             json={
@@ -102,8 +102,8 @@ class BackendIntegratedFlowTest(unittest.TestCase):
                 "data": {"tipo": "medicina"},
             },
         )
-        self.assertEqual(notificacion.status_code, 200)
-        self.assertIn("status", notificacion.json())
+        self.assertEqual(notification.status_code, 200)
+        self.assertIn("status", notification.json())
 
         listado = self.client.get("/api/v1/notifications", headers=headers)
         self.assertEqual(listado.status_code, 200)
@@ -111,7 +111,7 @@ class BackendIntegratedFlowTest(unittest.TestCase):
 
     def test_registro_envia_correo_bienvenida(self) -> None:
         """Valida que el registro dispare el correo de bienvenida."""
-        with patch("backend.api.v1.endpoints.auth.enviar_correo_bienvenida") as enviar:
+        with patch("backend.api.v1.endpoints.auth.send_welcome_email") as send:
             respuesta = self.client.post(
                 "/api/v1/auth/register",
                 json={
@@ -122,8 +122,8 @@ class BackendIntegratedFlowTest(unittest.TestCase):
             )
 
         self.assertEqual(respuesta.status_code, 201)
-        enviar.assert_called_once()
-        self.assertEqual(enviar.call_args.args[0].email, "bienvenida@uleam.edu.ec")
+        send.assert_called_once()
+        self.assertEqual(send.call_args.args[0].email, "bienvenida@uleam.edu.ec")
 
     def test_recuperacion_password_con_codigo(self) -> None:
         """Valida solicitud de codigo y cambio de contrasena."""
@@ -139,7 +139,7 @@ class BackendIntegratedFlowTest(unittest.TestCase):
 
         with (
             patch("backend.services.auth_service.secrets.randbelow", return_value=123456),
-            patch("backend.api.v1.endpoints.auth.enviar_correo_recuperacion") as enviar,
+            patch("backend.api.v1.endpoints.auth.send_password_reset_email") as send,
         ):
             solicitud = self.client.post(
                 "/api/v1/auth/forgot-password",
@@ -148,8 +148,8 @@ class BackendIntegratedFlowTest(unittest.TestCase):
 
         self.assertEqual(solicitud.status_code, 200)
         self.assertIn("instrucciones", solicitud.json()["message"])
-        enviar.assert_called_once()
-        self.assertEqual(enviar.call_args.kwargs["codigo"], "123456")
+        send.assert_called_once()
+        self.assertEqual(send.call_args.kwargs["code"], "123456")
 
         invalido = self.client.post(
             "/api/v1/auth/reset-password",
@@ -161,7 +161,7 @@ class BackendIntegratedFlowTest(unittest.TestCase):
         )
         self.assertEqual(invalido.status_code, 400)
 
-        with patch("backend.api.v1.endpoints.auth.enviar_correo_password_actualizado") as confirmar:
+        with patch("backend.api.v1.endpoints.auth.send_password_updated_email") as confirm:
             reset = self.client.post(
                 "/api/v1/auth/reset-password",
                 json={
@@ -172,8 +172,8 @@ class BackendIntegratedFlowTest(unittest.TestCase):
             )
 
         self.assertEqual(reset.status_code, 200)
-        confirmar.assert_called_once()
-        self.assertEqual(confirmar.call_args.args[0].email, "recupera@uleam.edu.ec")
+        confirm.assert_called_once()
+        self.assertEqual(confirm.call_args.args[0].email, "recupera@uleam.edu.ec")
 
         login_viejo = self.client.post(
             "/api/v1/auth/login",
@@ -189,7 +189,7 @@ class BackendIntegratedFlowTest(unittest.TestCase):
 
     def test_modulo_medicamentos_permite_marcar_toma(self) -> None:
         """Valida listado y marcado de medicamentos del usuario."""
-        access_token = self._crear_usuario_y_token()
+        access_token = self._create_user_and_token()
         headers = {"Authorization": f"Bearer {access_token}"}
 
         listado = self.client.get("/api/v1/medications", headers=headers)
@@ -228,7 +228,7 @@ class BackendIntegratedFlowTest(unittest.TestCase):
         self.assertEqual(marcado.json()["total_count"], 1)
 
         actualizado = self.client.get("/api/v1/medications", headers=headers)
-        self.assertEqual(sum(1 for medicamento in actualizado.json()["items"] if medicamento["taken"]), 1)
+        self.assertEqual(sum(1 for medication in actualizado.json()["items"] if medication["taken"]), 1)
 
         eliminado = self.client.delete(f"/api/v1/medications/{medicamento_id}", headers=headers)
         self.assertEqual(eliminado.status_code, 204)
@@ -238,7 +238,7 @@ class BackendIntegratedFlowTest(unittest.TestCase):
 
     def test_websocket_autenticado(self) -> None:
         """Valida conexion WebSocket con access token y respuesta eco."""
-        access_token = self._crear_usuario_y_token()
+        access_token = self._create_user_and_token()
 
         with self.client.websocket_connect(f"/api/v1/ws?token={access_token}") as websocket:
             conectado = websocket.receive_json()
@@ -251,7 +251,7 @@ class BackendIntegratedFlowTest(unittest.TestCase):
 
     def test_token_con_subject_invalido_devuelve_401(self) -> None:
         """Un token firmado pero con subject no numerico no debe generar 500."""
-        token = crear_access_token("usuario-invalido")
+        token = create_access_token("invalid-user")
 
         respuesta = self.client.get(
             "/api/v1/users/me",

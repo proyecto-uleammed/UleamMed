@@ -14,32 +14,32 @@ from backend.schemas.notification import (
     NotificationSendRequest,
 )
 from backend.services.notification_service import (
-    enviar_notificacion_demo,
-    listar_notificaciones_usuario,
+    list_user_notifications,
+    send_demo_notification,
 )
 
 
 # Todas las rutas de este archivo quedan bajo /api/v1/notifications.
-router = APIRouter(prefix="/notifications", tags=["notificaciones"])
+router = APIRouter(prefix="/notifications", tags=["notifications"])
 
 
 @router.post("/send", response_model=NotificationRead)
-def enviar_notificacion(
-    datos: NotificationSendRequest,
-    usuario_actual: User = Depends(get_current_user),
+def send_notification(
+    payload: NotificationSendRequest,
+    current_user: User = Depends(get_current_user),
 ) -> NotificationRead:
     """Envia una notificacion demo al usuario autenticado."""
-    return enviar_notificacion_demo(
-        user_id=usuario_actual.id,
-        title=datos.title,
-        body=datos.body,
-        data=datos.data,
+    return send_demo_notification(
+        user_id=current_user.id,
+        title=payload.title,
+        body=payload.body,
+        data=payload.data,
     )
 
 
 @router.get("", response_model=NotificationListResponse)
-def listar_mis_notificaciones(
-    usuario_actual: User = Depends(get_current_user),
+def list_my_notifications(
+    current_user: User = Depends(get_current_user),
 ) -> NotificationListResponse:
     """Lista las notificaciones guardadas para el usuario autenticado."""
-    return NotificationListResponse(items=listar_notificaciones_usuario(usuario_actual.id))
+    return NotificationListResponse(items=list_user_notifications(current_user.id))

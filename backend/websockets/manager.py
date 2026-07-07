@@ -24,17 +24,17 @@ class ConnectionManager:
 
     def disconnect(self, user_id: int, websocket: WebSocket) -> None:
         """Quita una conexion cerrada de la lista del usuario."""
-        conexiones = self.active_connections.get(user_id, [])
-        if websocket in conexiones:
-            conexiones.remove(websocket)
+        connections = self.active_connections.get(user_id, [])
+        if websocket in connections:
+            connections.remove(websocket)
 
-        if not conexiones:
+        if not connections:
             self.active_connections.pop(user_id, None)
 
     async def send_to_user(self, user_id: int, message: dict[str, Any]) -> None:
         """Envia un mensaje JSON a todas las conexiones de un usuario."""
-        conexiones = list(self.active_connections.get(user_id, []))
-        for websocket in conexiones:
+        connections = list(self.active_connections.get(user_id, []))
+        for websocket in connections:
             await websocket.send_json(message)
 
     async def broadcast(self, message: dict[str, Any]) -> None:

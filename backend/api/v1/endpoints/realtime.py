@@ -1,20 +1,20 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
 
-from backend.core.security import decodificar_token
+from backend.core.security import decode_token
 from backend.websockets.manager import manager
 
 
 # Todas las rutas de este archivo quedan bajo /api/v1.
-router = APIRouter(tags=["tiempo real"])
+router = APIRouter(tags=["realtime"])
 
 
-def _obtener_user_id_desde_token(token: str | None) -> int | None:
+def _get_user_id_from_token(token: str | None) -> int | None:
     """Valida el JWT del query param y devuelve el id del usuario."""
     if not token:
         return None
 
     try:
-        payload = decodificar_token(token)
+        payload = decode_token(token)
     except ValueError:
         return None
 
@@ -30,7 +30,7 @@ def _obtener_user_id_desde_token(token: str | None) -> int | None:
 @router.websocket("/ws")
 async def websocket_tiempo_real(websocket: WebSocket, token: str | None = None) -> None:
     """Canal WebSocket autenticado para eventos en tiempo real."""
-    user_id = _obtener_user_id_desde_token(token)
+    user_id = _get_user_id_from_token(token)
     if user_id is None:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
@@ -48,12 +48,12 @@ async def websocket_tiempo_real(websocket: WebSocket, token: str | None = None) 
     try:
         while True:
             # Por ahora se recibe texto libre y se responde un eco demo.
-            mensaje = await websocket.receive_text()
+            message = await websocket.receive_text()
             await manager.send_to_user(
                 user_id,
                 {
                     "type": "eco",
-                    "message": mensaje,
+                    "message": message,
                     "user_id": user_id,
                 },
             )
