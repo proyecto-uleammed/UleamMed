@@ -53,12 +53,15 @@ backend/                 API FastAPI
 backend/api/v1/endpoints Endpoints REST y WebSocket
 backend/schemas          Contratos Pydantic
 backend/services         Logica de negocio demo y servicios
-alembic/                 Migraciones de base de datos
+backend/alembic          Migraciones de base de datos
+backend/alembic.ini      Configuracion de Alembic
+backend/requirements.txt Dependencias Python del backend
+backend/tests            Pruebas integradas del backend
+backend/Dockerfile       Imagen Docker del backend
 database/                Documentacion del MER y migraciones
 mobile/                  App Flutter
 mobile/lib/screens       Pantallas de la app
 mobile/lib/services      Cliente HTTP hacia el backend
-tests/                   Pruebas integradas del backend
 .github/workflows        CI de validacion y AWS/ECR
 docs/                    Documentacion de CI/AWS
 infra/aws                Plantillas de politicas AWS
@@ -105,7 +108,7 @@ Cuando el modulo de base de datos este listo, se deben reemplazar por tablas y c
 
 ## Base de datos y Alembic
 
-La estructura MER ya fue incorporada con modelos SQLAlchemy en `backend/models` y migraciones Alembic en la carpeta `alembic/`.
+La estructura MER ya fue incorporada con modelos SQLAlchemy en `backend/models` y migraciones Alembic en `backend/alembic/`.
 
 Incluye, entre otras, estas tablas:
 
@@ -119,14 +122,14 @@ Incluye, entre otras, estas tablas:
 
 Importante: aunque las tablas ya existen, auth usa `users` como contrato actual. Los modulos medicos todavia deben conectarse gradualmente a las tablas reales del MER.
 
-Alembic toma la URL desde `DATABASE_URL`. No se deben guardar credenciales reales en `alembic.ini`.
+Alembic toma la URL desde `DATABASE_URL`. No se deben guardar credenciales reales en `backend/alembic.ini`.
 
 Comandos utiles:
 
 ```bash
-alembic upgrade head
-alembic current
-alembic downgrade base
+alembic -c backend/alembic.ini upgrade head
+alembic -c backend/alembic.ini current
+alembic -c backend/alembic.ini downgrade base
 ```
 
 Para demo local del prototipo movil se puede usar SQLite temporal y crear solo las tablas que usa el backend actual:
@@ -183,7 +186,7 @@ Linux/macOS:
 
 ```bash
 python3 -m venv .venv
-.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -m pip install -r backend/requirements.txt
 .venv/bin/python -m pip install ruff pip-audit
 ```
 
@@ -191,7 +194,7 @@ Windows:
 
 ```powershell
 python -m venv venv
-venv\Scripts\pip.exe install -r requirements.txt
+venv\Scripts\pip.exe install -r backend\requirements.txt
 venv\Scripts\pip.exe install ruff pip-audit
 ```
 
@@ -267,8 +270,8 @@ flutter run -d emulator-5554 --dart-define=ULEAMMED_API_URL=http://10.0.2.2:8000
 Backend:
 
 ```bash
-.venv/bin/python -m ruff check backend tests
-.venv/bin/python -m unittest discover -s tests -v
+.venv/bin/python -m ruff check backend
+.venv/bin/python -m unittest discover -s backend/tests -v
 ```
 
 Frontend:

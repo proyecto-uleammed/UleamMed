@@ -9,6 +9,7 @@ __pycache__
 .pytest_cache
 .mypy_cache
 tests
+backend/tests
 docs
 database
 infra

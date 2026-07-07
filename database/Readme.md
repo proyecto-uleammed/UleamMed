@@ -68,19 +68,20 @@ La secuencia de migraciones quedó organizada de la siguiente forma:
 3. `20b3513cc0dc` - creación de la tabla `encargado`
 4. `34c12292dadd` - creación de la tabla `cuidador`
 5. `4d76158bf7bf` - creación de las tablas principales restantes del MER
+6. `b7a9f4e2c6d1` - creación de tokens temporales para recuperación de contraseña
 
 ## Estado validado
 
 La base de datos quedó sincronizada con Alembic y la revisión actual validada es:
 
 ```powershell
-alembic current
+alembic -c backend/alembic.ini current
 ```
 
 Resultado esperado:
 
 ```text
-4d76158bf7bf (head)
+b7a9f4e2c6d1 (head)
 ```
 
 ## Relaciones validadas en PostgreSQL
@@ -153,7 +154,7 @@ Nota: las capturas fueron compartidas durante la revisión, pero todavía no exi
 ## Despliegue en Supabase (base compartida del equipo)
 
 La estructura del MER ya fue desplegada en el proyecto de **Supabase** aplicando
-las mismas migraciones de Alembic. La configuración ya está lista: `alembic/env.py`
+las mismas migraciones de Alembic. La configuración ya está lista: `backend/alembic/env.py`
 toma siempre la conexión desde `DATABASE_URL` (entorno o archivo `.env`), así que
 **no** se escriben credenciales reales en Git.
 
@@ -192,9 +193,9 @@ DATABASE_URL=postgresql+psycopg://postgres.PROJECT_REF:CONTRASENA@aws-1-REGION.p
 ### 3. Aplicar las migraciones sobre Supabase
 
 ```bash
-alembic current       # revision actual en Supabase
-alembic upgrade head  # crea/actualiza toda la estructura
-alembic current       # debe quedar en la ultima revision (head)
+alembic -c backend/alembic.ini current       # revision actual en Supabase
+alembic -c backend/alembic.ini upgrade head  # crea/actualiza toda la estructura
+alembic -c backend/alembic.ini current       # debe quedar en la ultima revision (head)
 ```
 
 ### 4. Verificar
@@ -205,27 +206,27 @@ más la tabla de control `alembic_version` con el número de la última revisió
 ### 5. Uso por el resto del equipo
 
 Cada integrante solo pone la misma `DATABASE_URL` de Supabase en su `.env`. No
-necesitan volver a correr `alembic upgrade head`, salvo que se agreguen migraciones
-nuevas; en ese caso, quien tenga la conexión ejecuta `alembic upgrade head` una vez.
+necesitan volver a correr `alembic -c backend/alembic.ini upgrade head`, salvo que se agreguen migraciones
+nuevas; en ese caso, quien tenga la conexión ejecuta `alembic -c backend/alembic.ini upgrade head` una vez.
 
 ## Comandos útiles
 
 Crear una migración nueva:
 
 ```powershell
-alembic revision --autogenerate -m "descripcion de la migracion"
+alembic -c backend/alembic.ini revision --autogenerate -m "descripcion de la migracion"
 ```
 
 Aplicar migraciones:
 
 ```powershell
-alembic upgrade head
+alembic -c backend/alembic.ini upgrade head
 ```
 
 Ver la revisión actual:
 
 ```powershell
-alembic current
+alembic -c backend/alembic.ini current
 ```
 
 ## Decisión actual de integración

@@ -25,18 +25,19 @@ jobs:
         with:
           python-version: ${{ inputs.version_python }}
           cache: pip
+          cache-dependency-path: backend/requirements.txt
 
       - name: Instalar dependencias
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r backend/requirements.txt
           pip install ruff pip-audit
 
       - name: Revisar calidad de codigo
-        run: ruff check backend tests
+        run: ruff check backend
 
       - name: Ejecutar pruebas integradas
-        run: python -m unittest discover -s tests -v
+        run: python -m unittest discover -s backend/tests -v
 
       - name: Revisar vulnerabilidades de dependencias (informativo)
         continue-on-error: true

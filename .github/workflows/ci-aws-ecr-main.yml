@@ -69,7 +69,7 @@ jobs:
           SHA_COMMIT: ${{ github.sha }}
         run: |
           IMAGEN="${REGISTRY_ECR}/${REPOSITORIO_ECR}"
-          docker build -t "${IMAGEN}:${SHA_COMMIT}" -t "${IMAGEN}:latest" .
+          docker build -f backend/Dockerfile -t "${IMAGEN}:${SHA_COMMIT}" -t "${IMAGEN}:latest" .
           docker push "${IMAGEN}:${SHA_COMMIT}"
           docker push "${IMAGEN}:latest"
 
