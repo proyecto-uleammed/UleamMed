@@ -234,7 +234,49 @@ alembic -c backend/alembic.ini current
 El backend queda conectado a Supabase/PostgreSQL usando `DATABASE_URL`.
 Para autenticación se usará `users` como tabla oficial del MVP.
 
+## Migración gradual de nombres a inglés
+
+La línea oficial nueva usa inglés técnico:
+
+- Tablas y columnas PostgreSQL/SQLAlchemy: `snake_case` en inglés.
+- API JSON: inglés; puede usar `camelCase` si Flutter ya lo consume.
+- Texto visible en la app: puede seguir en español.
+
+La migración `e7b3a9c2d4f1` crea tablas equivalentes en inglés sin borrar las
+tablas legacy en español. También copia datos existentes cuando las tablas
+legacy tienen registros. Las tablas legacy quedan disponibles solo como
+compatibilidad temporal.
+
+### Mapa de transición
+
+| Legacy español | Nuevo inglés |
+| --- | --- |
+| `usuario` | `users` |
+| `encargado` | `guardians` |
+| `cuidador` | `caregivers` |
+| `adulto_mayor` | `older_adults` |
+| `cuidador_adulto_mayor` | `caregiver_older_adults` |
+| `perfil_medico` | `medical_profiles` |
+| `historial_medico` | `medical_histories` |
+| `examen_medico` | `medical_exams` |
+| `detalle_examen` | `exam_details` |
+| `parametro_examen` | `exam_parameters` |
+| `medicamento` | `medication_catalog` |
+| `tratamiento` | `treatments` |
+| `tratamiento_medicamento` | `treatment_medications` |
+| `cumplimiento_medicacion` | `medication_adherence_records` |
+| `notificacion` | `notifications` |
+| `destinatario_notificacion` | `notification_recipients` |
+| `token_fcm` | `fcm_tokens` |
+
+### Regla para nuevas migraciones
+
+No crear tablas o columnas nuevas en español. Si una migración necesita tocar un
+módulo legacy, debe escribir hacia la tabla nueva en inglés y dejar la tabla
+vieja solo como fuente de datos temporal. `backend/alembic/env.py` ignora las
+tablas legacy durante autogeneración para evitar borrados accidentales.
+
 Pendiente para fases posteriores: conectar los módulos médicos reales
 medicamentos, cuidadores, historial, notificaciones y cumplimiento con las
-tablas del MER. Esa integración debe hacerse con migraciones nuevas y sin borrar
-tablas que actualmente tengan llaves foráneas.
+tablas nuevas en inglés. Esa integración debe hacerse sin borrar tablas que
+actualmente tengan llaves foráneas hasta validar que ya no tienen uso.

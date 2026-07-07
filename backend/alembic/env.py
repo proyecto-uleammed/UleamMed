@@ -6,49 +6,74 @@ from sqlalchemy import pool
 from alembic import context
 from backend.core.config import settings
 from backend.core.database import Base
-from backend.models import adulto_mayor as adulto_mayor_model
-from backend.models import cuidador as cuidador_model
-from backend.models import cuidador_adulto_mayor as cuidador_adulto_mayor_model
-from backend.models import cumplimiento_medicacion as cumplimiento_medicacion_model
-from backend.models import destinatario_notificacion as destinatario_notificacion_model
-from backend.models import detalle_examen as detalle_examen_model
-from backend.models import encargado as encargado_model
-from backend.models import examen_medico as examen_medico_model
-from backend.models import historial_medico as historial_medico_model
+from backend.models import caregiver as caregiver_model
+from backend.models import caregiver_older_adult as caregiver_older_adult_model
+from backend.models import exam_detail as exam_detail_model
+from backend.models import exam_parameter as exam_parameter_model
+from backend.models import fcm_token as fcm_token_model
+from backend.models import guardian as guardian_model
+from backend.models import medical_exam as medical_exam_model
+from backend.models import medical_history as medical_history_model
+from backend.models import medical_profile as medical_profile_model
 from backend.models import medication as medication_model
-from backend.models import medicamento as medicamento_model
-from backend.models import notificacion as notificacion_model
-from backend.models import parametro_examen as parametro_examen_model
+from backend.models import medication_adherence_record as medication_adherence_record_model
+from backend.models import medication_catalog as medication_catalog_model
+from backend.models import notification as notification_model
+from backend.models import notification_recipient as notification_recipient_model
+from backend.models import older_adult as older_adult_model
 from backend.models import password_reset_token as password_reset_token_model
-from backend.models import perfil_medico as perfil_medico_model
-from backend.models import token_fcm as token_fcm_model
-from backend.models import tratamiento as tratamiento_model
-from backend.models import tratamiento_medicamento as tratamiento_medicamento_model
+from backend.models import treatment as treatment_model
+from backend.models import treatment_medication as treatment_medication_model
 from backend.models import user as user_model
-from backend.models import usuario as usuario_model
 
 _MODEL_MODULES = (
-    adulto_mayor_model,
-    cuidador_model,
-    cuidador_adulto_mayor_model,
-    cumplimiento_medicacion_model,
-    destinatario_notificacion_model,
-    detalle_examen_model,
-    encargado_model,
-    examen_medico_model,
-    historial_medico_model,
+    caregiver_model,
+    caregiver_older_adult_model,
+    exam_detail_model,
+    exam_parameter_model,
+    fcm_token_model,
+    guardian_model,
+    medical_exam_model,
+    medical_history_model,
+    medical_profile_model,
     medication_model,
-    medicamento_model,
-    notificacion_model,
-    parametro_examen_model,
+    medication_adherence_record_model,
+    medication_catalog_model,
+    notification_model,
+    notification_recipient_model,
+    older_adult_model,
     password_reset_token_model,
-    perfil_medico_model,
-    token_fcm_model,
-    tratamiento_model,
-    tratamiento_medicamento_model,
+    treatment_model,
+    treatment_medication_model,
     user_model,
-    usuario_model,
 )
+
+LEGACY_SPANISH_TABLES = {
+    "adulto_mayor",
+    "cuidador",
+    "cuidador_adulto_mayor",
+    "cumplimiento_medicacion",
+    "destinatario_notificacion",
+    "detalle_examen",
+    "encargado",
+    "examen_medico",
+    "historial_medico",
+    "medicamento",
+    "notificacion",
+    "parametro_examen",
+    "perfil_medico",
+    "token_fcm",
+    "tratamiento",
+    "tratamiento_medicamento",
+    "usuario",
+}
+
+
+def include_object(object_, name, type_, reflected, compare_to):
+    """Avoid accidental drops while legacy Spanish tables are being phased out."""
+    if type_ == "table" and reflected and compare_to is None and name in LEGACY_SPANISH_TABLES:
+        return False
+    return True
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -91,6 +116,7 @@ def run_migrations_offline() -> None:
     context.configure(
         url=url,
         target_metadata=target_metadata,
+        include_object=include_object,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
     )
@@ -114,7 +140,9 @@ def run_migrations_online() -> None:
 
     with connectable.connect() as connection:
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=connection,
+            target_metadata=target_metadata,
+            include_object=include_object,
         )
 
         with context.begin_transaction():
