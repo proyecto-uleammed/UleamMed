@@ -204,17 +204,7 @@ void main() {
         localStore: localStore,
         client: MockClient((request) async {
           if (request.url.path == '/api/v1/medications') {
-            return _jsonResponse({
-              'items': [
-                {
-                  'id': 'omeprazol',
-                  'name': 'Omeprazol',
-                  'dose': '20 mg',
-                  'time': '14:00',
-                  'taken': false,
-                },
-              ],
-            });
+            return _jsonResponse({'items': []});
           }
           return _jsonResponse({'detail': 'No autorizado'}, statusCode: 401);
         }),

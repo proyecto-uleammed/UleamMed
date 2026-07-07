@@ -194,18 +194,47 @@ class BackendIntegratedFlowTest(unittest.TestCase):
 
         listado = self.client.get("/api/v1/medications", headers=headers)
         self.assertEqual(listado.status_code, 200)
-        medicamentos = listado.json()["items"]
-        self.assertEqual(len(medicamentos), 4)
-        self.assertEqual(sum(1 for medicamento in medicamentos if medicamento["taken"]), 2)
+        self.assertEqual(listado.json()["items"], [])
 
-        marcado = self.client.post("/api/v1/medications/omeprazol/take", headers=headers)
+        creado = self.client.post(
+            "/api/v1/medications",
+            headers=headers,
+            json={
+                "name": "Omeprazol",
+                "dose": "20 mg",
+                "time": "14:00",
+                "frequency": "Diario",
+                "duration": "30 dias",
+                "instructions": "Tomar antes de comer",
+                "isImportant": True,
+            },
+        )
+        self.assertEqual(creado.status_code, 201)
+        medicamento_id = creado.json()["id"]
+        self.assertEqual(creado.json()["name"], "Omeprazol")
+
+        editado = self.client.patch(
+            f"/api/v1/medications/{medicamento_id}",
+            headers=headers,
+            json={"dose": "40 mg"},
+        )
+        self.assertEqual(editado.status_code, 200)
+        self.assertEqual(editado.json()["dose"], "40 mg")
+
+        marcado = self.client.post(f"/api/v1/medications/{medicamento_id}/take", headers=headers)
         self.assertEqual(marcado.status_code, 200)
         self.assertTrue(marcado.json()["medication"]["taken"])
-        self.assertEqual(marcado.json()["taken_count"], 3)
-        self.assertEqual(marcado.json()["total_count"], 4)
+        self.assertEqual(marcado.json()["taken_count"], 1)
+        self.assertEqual(marcado.json()["total_count"], 1)
 
         actualizado = self.client.get("/api/v1/medications", headers=headers)
-        self.assertEqual(sum(1 for medicamento in actualizado.json()["items"] if medicamento["taken"]), 3)
+        self.assertEqual(sum(1 for medicamento in actualizado.json()["items"] if medicamento["taken"]), 1)
+
+        eliminado = self.client.delete(f"/api/v1/medications/{medicamento_id}", headers=headers)
+        self.assertEqual(eliminado.status_code, 204)
+
+        final = self.client.get("/api/v1/medications", headers=headers)
+        self.assertEqual(final.json()["items"], [])
 
     def test_websocket_autenticado(self) -> None:
         """Valida conexion WebSocket con access token y respuesta eco."""

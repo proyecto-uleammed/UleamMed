@@ -253,10 +253,6 @@ class ApiService implements UleamMedApi {
   Future<List<MedicationItem>> listMedications() async {
     final localItems = await _localStore.readMedications();
 
-    if (localItems.isEmpty) {
-      return localItems;
-    }
-
     try {
       final backendItems = await _loadBackendMedications();
       final merged = _mergeMedications(localItems, backendItems);
@@ -273,15 +269,50 @@ class ApiService implements UleamMedApi {
   }
 
   @override
-  Future<MedicationItem> saveMedication(MedicationItem medication) {
-    return _localStore.upsertMedication(
+  Future<MedicationItem> saveMedication(MedicationItem medication) async {
+    final localPending = await _localStore.upsertMedication(
       medication.copyWith(syncStatus: SyncStatus.pending),
     );
+    try {
+      final isBackendId = int.tryParse(medication.id) != null;
+      final uri = isBackendId
+          ? Uri.parse('$_baseUrl/api/v1/medications/${medication.id}')
+          : Uri.parse('$_baseUrl/api/v1/medications');
+      final body = {
+        'name': medication.name,
+        'dose': medication.dose,
+        'time': medication.time,
+        'frequency': medication.frequency,
+        'duration': medication.duration,
+        'instructions': medication.instructions,
+        'isImportant': medication.isImportant,
+        if (isBackendId) 'taken': medication.taken,
+      };
+      final data = isBackendId
+          ? await _patchAuthorizedJson(uri, body: body, fallback: 'No se pudo actualizar el medicamento')
+          : await _postAuthorizedJson(uri, body: body, fallback: 'No se pudo crear el medicamento');
+      final saved = MedicationItem.fromJson(data).copyWith(syncStatus: SyncStatus.synced);
+      if (!isBackendId) {
+        await _localStore.deleteMedication(medication.id);
+      }
+      return _localStore.upsertMedication(saved);
+    } catch (_) {
+      return localPending;
+    }
   }
 
   @override
-  Future<void> deleteMedication(String medicationId) {
-    return _localStore.deleteMedication(medicationId);
+  Future<void> deleteMedication(String medicationId) async {
+    await _localStore.deleteMedication(medicationId);
+    final isBackendId = int.tryParse(medicationId) != null;
+    if (!isBackendId) {
+      return;
+    }
+    try {
+      await _deleteAuthorized(Uri.parse('$_baseUrl/api/v1/medications/$medicationId'));
+    } catch (_) {
+      // La eliminacion local se conserva para no bloquear el flujo offline.
+    }
   }
 
   @override
@@ -674,6 +705,33 @@ class ApiService implements UleamMedApi {
       ),
       fallback: fallback,
     );
+  }
+
+  Future<void> _deleteAuthorized(Uri uri) async {
+    final token = await _ensureAccessToken();
+    var response = await _client.delete(uri, headers: _authorizedHeaders(token));
+
+    if (response.statusCode == 401 && await _refreshAccessToken()) {
+      response = await _client.delete(
+        uri,
+        headers: _authorizedHeaders(await _ensureAccessToken()),
+      );
+    }
+
+    if (response.statusCode == 401) {
+      await logout();
+      throw const ApiException(
+        'Sesion expirada, inicia sesion nuevamente',
+        401,
+      );
+    }
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw ApiException(
+        _errorMessageFromResponse(response, 'No se pudo eliminar el medicamento'),
+        response.statusCode,
+      );
+    }
   }
 
   Future<Map<String, dynamic>> _authorizedJson({

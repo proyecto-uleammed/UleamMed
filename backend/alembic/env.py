@@ -15,6 +15,7 @@ from backend.models import detalle_examen as detalle_examen_model
 from backend.models import encargado as encargado_model
 from backend.models import examen_medico as examen_medico_model
 from backend.models import historial_medico as historial_medico_model
+from backend.models import medication as medication_model
 from backend.models import medicamento as medicamento_model
 from backend.models import notificacion as notificacion_model
 from backend.models import parametro_examen as parametro_examen_model
@@ -36,6 +37,7 @@ _MODEL_MODULES = (
     encargado_model,
     examen_medico_model,
     historial_medico_model,
+    medication_model,
     medicamento_model,
     notificacion_model,
     parametro_examen_model,
