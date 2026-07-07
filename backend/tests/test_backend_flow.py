@@ -161,15 +161,19 @@ class BackendIntegratedFlowTest(unittest.TestCase):
         )
         self.assertEqual(invalido.status_code, 400)
 
-        reset = self.client.post(
-            "/api/v1/auth/reset-password",
-            json={
-                "email": "recupera@uleam.edu.ec",
-                "code": "123456",
-                "new_password": "clave-nueva-123",
-            },
-        )
+        with patch("backend.api.v1.endpoints.auth.enviar_correo_password_actualizado") as confirmar:
+            reset = self.client.post(
+                "/api/v1/auth/reset-password",
+                json={
+                    "email": "recupera@uleam.edu.ec",
+                    "code": "123456",
+                    "new_password": "clave-nueva-123",
+                },
+            )
+
         self.assertEqual(reset.status_code, 200)
+        confirmar.assert_called_once()
+        self.assertEqual(confirmar.call_args.args[0].email, "recupera@uleam.edu.ec")
 
         login_viejo = self.client.post(
             "/api/v1/auth/login",

@@ -16,7 +16,8 @@ def enviar_correo_bienvenida(usuario: User) -> None:
     cuerpo = (
         f"Hola {nombre},\n\n"
         "Tu cuenta en UleamMed fue creada correctamente.\n"
-        "Ya puedes iniciar sesion y gestionar tu salud diaria.\n\n"
+        "Ya puedes iniciar sesión y gestionar tu salud diaria desde la aplicación.\n\n"
+        "Gracias por confiar en UleamMed.\n\n"
         "Equipo UleamMed"
     )
     _enviar_email(destinatario=usuario.email, asunto=asunto, cuerpo=cuerpo)
@@ -25,13 +26,27 @@ def enviar_correo_bienvenida(usuario: User) -> None:
 def enviar_correo_recuperacion(usuario: User, codigo: str, minutos_expiracion: int) -> None:
     """Envia o registra el codigo temporal para restablecer contrasena."""
     nombre = usuario.full_name or usuario.email
-    asunto = "Codigo para restablecer tu contrasena UleamMed"
+    asunto = "Código para restablecer tu contraseña de UleamMed"
     cuerpo = (
         f"Hola {nombre},\n\n"
-        "Recibimos una solicitud para restablecer tu contrasena.\n"
-        f"Tu codigo de recuperacion es: {codigo}\n"
-        f"Este codigo vence en {minutos_expiracion} minutos.\n\n"
+        "Recibimos una solicitud para restablecer la contraseña de tu cuenta.\n\n"
+        f"Código de recuperación: {codigo}\n"
+        f"Este código vence en {minutos_expiracion} minutos.\n\n"
         "Si no solicitaste este cambio, puedes ignorar este correo.\n\n"
+        "Equipo UleamMed"
+    )
+    _enviar_email(destinatario=usuario.email, asunto=asunto, cuerpo=cuerpo)
+
+
+def enviar_correo_password_actualizado(usuario: User) -> None:
+    """Envia confirmacion cuando la contrasena fue restablecida."""
+    nombre = usuario.full_name or usuario.email
+    asunto = "Tu contraseña de UleamMed fue actualizada"
+    cuerpo = (
+        f"Hola {nombre},\n\n"
+        "La contraseña de tu cuenta UleamMed fue restablecida correctamente.\n"
+        "Si realizaste este cambio, no necesitas hacer nada más.\n\n"
+        "Si no reconoces esta acción, contacta al equipo de soporte de UleamMed.\n\n"
         "Equipo UleamMed"
     )
     _enviar_email(destinatario=usuario.email, asunto=asunto, cuerpo=cuerpo)

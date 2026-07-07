@@ -14,7 +14,11 @@ from backend.schemas.user import (
     UserCreate,
     UserRead,
 )
-from backend.services.email_service import enviar_correo_bienvenida, enviar_correo_recuperacion
+from backend.services.email_service import (
+    enviar_correo_bienvenida,
+    enviar_correo_password_actualizado,
+    enviar_correo_recuperacion,
+)
 from backend.services.auth_service import (
     autenticar_usuario,
     crear_codigo_recuperacion,
@@ -134,5 +138,9 @@ def confirmar_recuperacion_password(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Codigo invalido o expirado",
         )
+
+    usuario = obtener_usuario_por_email(db, datos.email)
+    if usuario is not None:
+        enviar_correo_password_actualizado(usuario)
 
     return MessageResponse(message="Contrasena actualizada correctamente.")
