@@ -33,7 +33,7 @@ class _UleamMedAppState extends State<UleamMedApp> with WidgetsBindingObserver {
   late final AppSettingsController _settings =
       widget.settingsController ?? AppSettingsController(AppSettingsService());
   late final LockService _lock = widget.lockService ?? LockService();
-  DemoSession? _session;
+  AppSession? _session;
   bool _isRestoringSession = true;
   bool _locked = false;
   DateTime? _pausedAt;
@@ -111,7 +111,7 @@ class _UleamMedAppState extends State<UleamMedApp> with WidgetsBindingObserver {
     }
   }
 
-  void _handleAuthenticated(DemoSession session) {
+  void _handleAuthenticated(AppSession session) {
     setState(() {
       _session = session;
       _locked = false;
@@ -159,9 +159,7 @@ class _UleamMedAppState extends State<UleamMedApp> with WidgetsBindingObserver {
     }
     if (_session == null) {
       if (!_settings.value.onboardingSeen) {
-        return OnboardingScreen(
-          onDone: () => _settings.markOnboardingSeen(),
-        );
+        return OnboardingScreen(onDone: () => _settings.markOnboardingSeen());
       }
       return AuthScreen(api: _api, onAuthenticated: _handleAuthenticated);
     }

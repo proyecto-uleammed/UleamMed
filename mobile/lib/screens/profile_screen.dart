@@ -46,7 +46,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<_ProfileData> _loadProfileData() async {
-    final session = await widget.api.loadDemoSession();
+    final session = await widget.api.loadAppSession();
     final medicalProfile = await widget.api.loadMedicalProfile();
     return _ProfileData(session: session, medicalProfile: medicalProfile);
   }
@@ -99,16 +99,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
       setState(() {
         _profileData = Future.value(
-          _ProfileData(
-            session: updatedSession,
-            medicalProfile: updatedProfile,
-          ),
+          _ProfileData(session: updatedSession, medicalProfile: updatedProfile),
         );
         _didHydrateForm = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Perfil medico guardado')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Perfil medico guardado')));
     } on ApiException catch (error) {
       if (!mounted) {
         return;
@@ -310,7 +307,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 class _ProfileData {
   const _ProfileData({required this.session, required this.medicalProfile});
 
-  final DemoSession session;
+  final AppSession session;
   final MedicalProfile medicalProfile;
 }
 

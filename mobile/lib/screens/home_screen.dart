@@ -33,12 +33,12 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   late final UleamMedApi _api = widget.api ?? ApiService();
-  late Future<DemoSession> _demoSession = _api.loadDemoSession();
+  late Future<AppSession> _session = _api.loadAppSession();
   late Future<List<MedicationItem>> _medicationSummary = _api.listMedications();
 
   void _refreshSession() {
     setState(() {
-      _demoSession = _api.loadDemoSession();
+      _session = _api.loadAppSession();
     });
   }
 
@@ -114,8 +114,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        FutureBuilder<DemoSession>(
-                          future: _demoSession,
+                        FutureBuilder<AppSession>(
+                          future: _session,
                           builder: (context, snapshot) {
                             final name =
                                 snapshot.data?.user.fullName.split(' ').first ??
@@ -448,10 +448,7 @@ class _DeviceDateTimeState extends State<_DeviceDateTime> {
           ],
         ),
         const SizedBox(height: 2),
-        Text(
-          _dateLabel,
-          style: TextStyle(color: subtitleColor, fontSize: 15),
-        ),
+        Text(_dateLabel, style: TextStyle(color: subtitleColor, fontSize: 15)),
         Text(
           _timeZoneLabel,
           style: TextStyle(color: subtitleColor, fontSize: 12),

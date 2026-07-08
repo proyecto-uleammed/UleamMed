@@ -11,16 +11,15 @@ import 'sync_service.dart';
 export '../models/local_models.dart';
 
 abstract class UleamMedApi {
-  Future<DemoSession?> restoreSession();
-  Future<DemoSession> login({required String email, required String password});
-  Future<DemoSession> register({
+  Future<AppSession?> restoreSession();
+  Future<AppSession> login({required String email, required String password});
+  Future<AppSession> register({
     required String email,
     required String password,
     required String fullName,
   });
-  Future<DemoSession> startDemoSession();
-  Future<DemoSession> loadDemoSession();
-  Future<DemoSession> updateProfile({required String fullName});
+  Future<AppSession> loadAppSession();
+  Future<AppSession> updateProfile({required String fullName});
   Future<String> requestPasswordReset({required String email});
   Future<String> resetPassword({
     required String email,
@@ -61,11 +60,10 @@ class ApiService implements UleamMedApi {
     String? baseUrl,
     TokenStore? tokenStore,
     LocalStore? localStore,
-  })
-    : _client = client ?? http.Client(),
-      _baseUrl = baseUrl ?? _defaultBaseUrl,
-      _tokenStore = tokenStore ?? SecureTokenStore(),
-      _localStore = localStore ?? LocalStore() {
+  }) : _client = client ?? http.Client(),
+       _baseUrl = baseUrl ?? _defaultBaseUrl,
+       _tokenStore = tokenStore ?? SecureTokenStore(),
+       _localStore = localStore ?? LocalStore() {
     _syncService = SyncService(localStore: _localStore);
   }
 
@@ -76,16 +74,6 @@ class ApiService implements UleamMedApi {
   late final SyncService _syncService;
   String? _accessToken;
   String? _refreshToken;
-
-  static const _demoEmail = 'roberto@uleammed.demo';
-  static const _demoPassword = 'clave-segura-123';
-  static const _demoName = 'Roberto Andrade';
-  static const _backendDemoMedicationIds = {
-    'metformina',
-    'losartan',
-    'omeprazol',
-    'atorvastatina',
-  };
 
   static String get _defaultBaseUrl {
     const configuredUrl = String.fromEnvironment('ULEAMMED_API_URL');
@@ -106,7 +94,7 @@ class ApiService implements UleamMedApi {
   }
 
   @override
-  Future<DemoSession?> restoreSession() async {
+  Future<AppSession?> restoreSession() async {
     final tokens = await _tokenStore.read();
     if (tokens == null) {
       return null;
@@ -114,7 +102,7 @@ class ApiService implements UleamMedApi {
 
     _setTokensInMemory(tokens);
     try {
-      final session = await loadDemoSession();
+      final session = await loadAppSession();
       return _finalizeSession(session);
     } on ApiException catch (error) {
       if (error.statusCode == 401) {
@@ -126,18 +114,18 @@ class ApiService implements UleamMedApi {
   }
 
   @override
-  Future<DemoSession> login({
+  Future<AppSession> login({
     required String email,
     required String password,
   }) async {
     final tokens = await _loginUser(email: email, password: password);
     await _persistTokens(tokens);
-    final session = await loadDemoSession();
+    final session = await loadAppSession();
     return _finalizeSession(session);
   }
 
   @override
-  Future<DemoSession> register({
+  Future<AppSession> register({
     required String email,
     required String password,
     required String fullName,
@@ -164,40 +152,29 @@ class ApiService implements UleamMedApi {
   }
 
   @override
-  Future<DemoSession> startDemoSession() async {
-    await _ensureDemoUser();
-    final tokens = await _loginUser(email: _demoEmail, password: _demoPassword);
-    await _persistTokens(tokens);
-    final session = await loadDemoSession();
-    final finalized = await _finalizeSession(session);
-    await _seedDemoMedicationsIfNeeded();
-    return finalized;
-  }
-
-  @override
-  Future<DemoSession> loadDemoSession() async {
+  Future<AppSession> loadAppSession() async {
     final health = await _getJson(Uri.parse('$_baseUrl/health'));
     final user = await _getAuthorizedJson(
       Uri.parse('$_baseUrl/api/v1/users/me'),
       fallback: 'No se pudo cargar el perfil',
     );
 
-    return DemoSession(
+    return AppSession(
       apiUrl: _baseUrl,
       environment: health['environment']?.toString() ?? 'development',
-      user: DemoUser.fromJson(user),
+      user: AppUser.fromJson(user),
     );
   }
 
   @override
-  Future<DemoSession> updateProfile({required String fullName}) async {
+  Future<AppSession> updateProfile({required String fullName}) async {
     await _patchAuthorizedJson(
       Uri.parse('$_baseUrl/api/v1/users/me'),
       body: {'full_name': fullName.trim()},
       fallback: 'No se pudo actualizar el perfil',
     );
 
-    return loadDemoSession();
+    return loadAppSession();
   }
 
   @override
@@ -289,9 +266,19 @@ class ApiService implements UleamMedApi {
         if (isBackendId) 'taken': medication.taken,
       };
       final data = isBackendId
-          ? await _patchAuthorizedJson(uri, body: body, fallback: 'No se pudo actualizar el medicamento')
-          : await _postAuthorizedJson(uri, body: body, fallback: 'No se pudo crear el medicamento');
-      final saved = MedicationItem.fromJson(data).copyWith(syncStatus: SyncStatus.synced);
+          ? await _patchAuthorizedJson(
+              uri,
+              body: body,
+              fallback: 'No se pudo actualizar el medicamento',
+            )
+          : await _postAuthorizedJson(
+              uri,
+              body: body,
+              fallback: 'No se pudo crear el medicamento',
+            );
+      final saved = MedicationItem.fromJson(
+        data,
+      ).copyWith(syncStatus: SyncStatus.synced);
       if (!isBackendId) {
         await _localStore.deleteMedication(medication.id);
       }
@@ -309,7 +296,9 @@ class ApiService implements UleamMedApi {
       return;
     }
     try {
-      await _deleteAuthorized(Uri.parse('$_baseUrl/api/v1/medications/$medicationId'));
+      await _deleteAuthorized(
+        Uri.parse('$_baseUrl/api/v1/medications/$medicationId'),
+      );
     } catch (_) {
       // La eliminacion local se conserva para no bloquear el flujo offline.
     }
@@ -435,7 +424,7 @@ class ApiService implements UleamMedApi {
     return _syncService.synchronizePending();
   }
 
-  Future<DemoSession> _finalizeSession(DemoSession session) async {
+  Future<AppSession> _finalizeSession(AppSession session) async {
     final userId = session.user.id.toString();
     final previousUserId = await _localStore.readActiveUserId();
     if (previousUserId != null && previousUserId != userId) {
@@ -443,37 +432,7 @@ class ApiService implements UleamMedApi {
     }
     await _localStore.saveActiveUserId(userId);
 
-    if (session.user.email != _demoEmail) {
-      await _clearBackendDemoSeedIfNeeded();
-    }
-
     return session;
-  }
-
-  Future<void> _clearBackendDemoSeedIfNeeded() async {
-    final meds = await _localStore.readMedications();
-    if (meds.isEmpty) {
-      return;
-    }
-    final onlyBackendDemo = meds.every(
-      (item) => _backendDemoMedicationIds.contains(item.id),
-    );
-    if (onlyBackendDemo) {
-      await _localStore.saveMedications([]);
-    }
-  }
-
-  Future<void> _seedDemoMedicationsIfNeeded() async {
-    final localItems = await _localStore.readMedications();
-    if (localItems.isNotEmpty) {
-      return;
-    }
-    try {
-      final backendItems = await _loadBackendMedications();
-      await _localStore.saveMedications(backendItems);
-    } catch (_) {
-      // El modo demo puede funcionar sin datos precargados.
-    }
   }
 
   Future<List<MedicationItem>> _loadBackendMedications() async {
@@ -489,9 +448,11 @@ class ApiService implements UleamMedApi {
 
     return items
         .whereType<Map>()
-        .map((json) => MedicationItem.fromJson(Map<String, dynamic>.from(json)).copyWith(
-              syncStatus: SyncStatus.synced,
-            ))
+        .map(
+          (json) => MedicationItem.fromJson(
+            Map<String, dynamic>.from(json),
+          ).copyWith(syncStatus: SyncStatus.synced),
+        )
         .toList();
   }
 
@@ -515,8 +476,7 @@ class ApiService implements UleamMedApi {
         );
       }
     }
-    return byId.values.toList()
-      ..sort((a, b) => a.time.compareTo(b.time));
+    return byId.values.toList()..sort((a, b) => a.time.compareTo(b.time));
   }
 
   Future<MedicationMarkResult> _medicationResultFor(String medicationId) async {
@@ -545,30 +505,6 @@ class ApiService implements UleamMedApi {
     }
 
     throw const ApiException('Sesion no iniciada', 401);
-  }
-
-  Future<void> _ensureDemoUser() async {
-    final response = await _client.post(
-      Uri.parse('$_baseUrl/api/v1/auth/register'),
-      headers: _jsonHeaders,
-      body: jsonEncode({
-        'email': _demoEmail,
-        'password': _demoPassword,
-        'full_name': _demoName,
-      }),
-    );
-
-    if (response.statusCode == 201 || response.statusCode == 409) {
-      return;
-    }
-
-    throw ApiException(
-      _errorMessageFromResponse(
-        response,
-        'No se pudo preparar el usuario demo',
-      ),
-      response.statusCode,
-    );
   }
 
   Future<AuthTokens> _loginUser({
@@ -709,7 +645,10 @@ class ApiService implements UleamMedApi {
 
   Future<void> _deleteAuthorized(Uri uri) async {
     final token = await _ensureAccessToken();
-    var response = await _client.delete(uri, headers: _authorizedHeaders(token));
+    var response = await _client.delete(
+      uri,
+      headers: _authorizedHeaders(token),
+    );
 
     if (response.statusCode == 401 && await _refreshAccessToken()) {
       response = await _client.delete(
@@ -728,7 +667,10 @@ class ApiService implements UleamMedApi {
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw ApiException(
-        _errorMessageFromResponse(response, 'No se pudo eliminar el medicamento'),
+        _errorMessageFromResponse(
+          response,
+          'No se pudo eliminar el medicamento',
+        ),
         response.statusCode,
       );
     }
@@ -854,8 +796,8 @@ class SecureTokenStore implements TokenStore {
   }
 }
 
-class DemoSession {
-  const DemoSession({
+class AppSession {
+  const AppSession({
     required this.apiUrl,
     required this.environment,
     required this.user,
@@ -863,19 +805,19 @@ class DemoSession {
 
   final String apiUrl;
   final String environment;
-  final DemoUser user;
+  final AppUser user;
 }
 
-class DemoUser {
-  const DemoUser({
+class AppUser {
+  const AppUser({
     required this.id,
     required this.email,
     required this.fullName,
     required this.isActive,
   });
 
-  factory DemoUser.fromJson(Map<String, dynamic> json) {
-    return DemoUser(
+  factory AppUser.fromJson(Map<String, dynamic> json) {
+    return AppUser(
       id: json['id'] as int,
       email: json['email'].toString(),
       fullName: json['full_name']?.toString() ?? 'Usuario',

@@ -71,7 +71,7 @@ void main() {
       final session = await api.restoreSession();
 
       expect(session, isNotNull);
-      expect(session!.user.email, 'roberto@uleammed.demo');
+      expect(session!.user.email, 'roberto@uleammed.test');
       expect(session.user.fullName, 'Roberto Andrade');
     });
 
@@ -199,7 +199,10 @@ void main() {
       final api = ApiService(
         baseUrl: 'http://localhost:8000',
         tokenStore: _MemoryTokenStore(
-          const AuthTokens(accessToken: 'access-ok', refreshToken: 'refresh-ok'),
+          const AuthTokens(
+            accessToken: 'access-ok',
+            refreshToken: 'refresh-ok',
+          ),
         ),
         localStore: localStore,
         client: MockClient((request) async {
@@ -228,7 +231,7 @@ http.Response _jsonResponse(Map<String, dynamic> body, {int statusCode = 200}) {
 Map<String, dynamic> _userJson({required String fullName}) {
   return {
     'id': 1,
-    'email': 'roberto@uleammed.demo',
+    'email': 'roberto@uleammed.test',
     'full_name': fullName,
     'is_active': true,
   };

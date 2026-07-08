@@ -26,7 +26,7 @@ class AdminHomeScreen extends StatefulWidget {
 }
 
 class _AdminHomeScreenState extends State<AdminHomeScreen> {
-  late final Future<DemoSession> _session = widget.api.loadDemoSession();
+  late final Future<AppSession> _session = widget.api.loadAppSession();
 
   @override
   Widget build(BuildContext context) {
@@ -70,7 +70,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                       children: [
                         _RoleBadge(label: AppRole.admin.label),
                         const SizedBox(height: 10),
-                        FutureBuilder<DemoSession>(
+                        FutureBuilder<AppSession>(
                           future: _session,
                           builder: (context, snapshot) {
                             final name =

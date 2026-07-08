@@ -26,7 +26,7 @@ class CaregiverHomeScreen extends StatefulWidget {
 }
 
 class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
-  late final Future<DemoSession> _session = widget.api.loadDemoSession();
+  late final Future<AppSession> _session = widget.api.loadAppSession();
 
   @override
   Widget build(BuildContext context) {
@@ -70,7 +70,7 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
                       children: [
                         _RoleBadge(label: AppRole.caregiver.label),
                         const SizedBox(height: 10),
-                        FutureBuilder<DemoSession>(
+                        FutureBuilder<AppSession>(
                           future: _session,
                           builder: (context, snapshot) {
                             final name =

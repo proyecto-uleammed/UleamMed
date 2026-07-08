@@ -29,11 +29,24 @@ AppSettingsController _testSettings() {
   return AppSettingsController(AppSettingsService(store: store));
 }
 
+Future<void> _loginWithForm(WidgetTester tester) async {
+  await tester.enterText(
+    find.widgetWithText(TextFormField, 'Correo electrónico'),
+    'roberto@uleammed.test',
+  );
+  await tester.enterText(
+    find.widgetWithText(TextFormField, 'Contraseña'),
+    'clave-segura-123',
+  );
+  await tester.tap(find.widgetWithText(FilledButton, 'Entrar'));
+  await tester.pumpAndSettle();
+}
+
 class _FakeApi implements UleamMedApi {
   _FakeApi({this.restoredSession});
 
-  DemoSession? restoredSession;
-  DemoSession? currentSession;
+  AppSession? restoredSession;
+  AppSession? currentSession;
   bool didLogout = false;
   MedicalProfile medicalProfile = const MedicalProfile();
   final List<DoseConfirmation> confirmations = [];
@@ -54,69 +67,64 @@ class _FakeApi implements UleamMedApi {
     ),
   ];
 
-  static const _demoUser = DemoUser(
+  static const _testUser = AppUser(
     id: 1,
-    email: 'roberto@uleammed.demo',
+    email: 'roberto@uleammed.test',
     fullName: 'Roberto Andrade',
     isActive: true,
   );
 
   @override
-  Future<DemoSession?> restoreSession() async {
+  Future<AppSession?> restoreSession() async {
     currentSession = restoredSession;
     return restoredSession;
   }
 
   @override
-  Future<DemoSession> login({
+  Future<AppSession> login({
     required String email,
     required String password,
   }) async {
-    currentSession = const DemoSession(
+    currentSession = const AppSession(
       apiUrl: 'http://localhost:8000',
       environment: 'test',
-      user: _demoUser,
+      user: _testUser,
     );
     return currentSession!;
   }
 
   @override
-  Future<DemoSession> register({
+  Future<AppSession> register({
     required String email,
     required String password,
     required String fullName,
   }) async {
-    currentSession = DemoSession(
+    currentSession = AppSession(
       apiUrl: 'http://localhost:8000',
       environment: 'test',
-      user: DemoUser(id: 2, email: email, fullName: fullName, isActive: true),
+      user: AppUser(id: 2, email: email, fullName: fullName, isActive: true),
     );
     return currentSession!;
   }
 
   @override
-  Future<DemoSession> startDemoSession() async {
-    return login(email: _demoUser.email, password: 'clave-segura-123');
-  }
-
-  @override
-  Future<DemoSession> loadDemoSession() async {
+  Future<AppSession> loadAppSession() async {
     return currentSession ??
         restoredSession ??
-        const DemoSession(
+        const AppSession(
           apiUrl: 'http://localhost:8000',
           environment: 'test',
-          user: _demoUser,
+          user: _testUser,
         );
   }
 
   @override
-  Future<DemoSession> updateProfile({required String fullName}) async {
-    final previous = await loadDemoSession();
-    currentSession = DemoSession(
+  Future<AppSession> updateProfile({required String fullName}) async {
+    final previous = await loadAppSession();
+    currentSession = AppSession(
       apiUrl: previous.apiUrl,
       environment: previous.environment,
-      user: DemoUser(
+      user: AppUser(
         id: previous.user.id,
         email: previous.user.email,
         fullName: fullName,
@@ -217,7 +225,7 @@ class _FakeApi implements UleamMedApi {
 
   final List<Appointment> appointments = [
     const Appointment(
-      id: 'demo',
+      id: 'local-test',
       doctor: 'Dra. Demo',
       specialty: 'General',
       date: '06 Jul 2026',
@@ -352,7 +360,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Iniciar sesión'), findsOneWidget);
-    expect(find.text('Entrar en modo demo'), findsOneWidget);
   });
 
   testWidgets('authenticates and loads home screen', (
@@ -363,8 +370,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Entrar en modo demo'));
-    await tester.pumpAndSettle();
+    await _loginWithForm(tester);
 
     expect(find.text('Hola, Roberto 👋'), findsOneWidget);
     expect(find.text('Medicamentos'), findsWidgets);
@@ -376,10 +382,10 @@ void main() {
     await tester.pumpWidget(
       UleamMedApp(
         api: _FakeApi(
-          restoredSession: const DemoSession(
+          restoredSession: const AppSession(
             apiUrl: 'http://localhost:8000',
             environment: 'test',
-            user: _FakeApi._demoUser,
+            user: _FakeApi._testUser,
           ),
         ),
         settingsController: _testSettings(),
@@ -398,8 +404,7 @@ void main() {
       UleamMedApp(api: api, settingsController: _testSettings()),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Entrar en modo demo'));
-    await tester.pumpAndSettle();
+    await _loginWithForm(tester);
     await tester.tap(find.byIcon(Icons.logout));
     await tester.pumpAndSettle();
 
@@ -414,14 +419,13 @@ void main() {
       UleamMedApp(api: _FakeApi(), settingsController: _testSettings()),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Entrar en modo demo'));
-    await tester.pumpAndSettle();
+    await _loginWithForm(tester);
 
     await tester.tap(find.byIcon(Icons.account_circle));
     await tester.pumpAndSettle();
 
     expect(find.text('Mi perfil'), findsOneWidget);
-    expect(find.text('roberto@uleammed.demo'), findsWidgets);
+    expect(find.text('roberto@uleammed.test'), findsWidgets);
 
     await tester.enterText(
       find.widgetWithText(TextFormField, 'Nombre completo'),
@@ -443,8 +447,7 @@ void main() {
       UleamMedApp(api: api, settingsController: _testSettings()),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Entrar en modo demo'));
-    await tester.pumpAndSettle();
+    await _loginWithForm(tester);
 
     expect(find.text('Proximas tomas'), findsOneWidget);
     expect(find.text('Omeprazol - 20 mg'), findsOneWidget);
@@ -476,7 +479,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(
       find.widgetWithText(TextFormField, 'Correo electronico'),
-      'roberto@uleammed.demo',
+      'roberto@uleammed.test',
     );
     await tester.tap(find.text('Solicitar codigo'));
     await tester.pumpAndSettle();

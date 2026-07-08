@@ -15,7 +15,6 @@ Ya esta integrado en `main`:
 - Perfil medico local-first con enfermedades, alergias, indicaciones,
   contacto de emergencia y consentimiento para compartir con cuidadores.
 - Conexion Flutter -> FastAPI mediante `mobile/lib/services/api_service.dart`.
-- Modo demo disponible manualmente para desarrollo: `roberto@uleammed.demo`.
 - Modulo de medicamentos conectado al backend y a PostgreSQL/Supabase por usuario autenticado:
   - `GET /api/v1/medications`
   - `POST /api/v1/medications`
@@ -257,7 +256,7 @@ Ejemplo con URL manual:
 flutter run -d emulator-5554 --dart-define=ULEAMMED_API_URL=http://10.0.2.2:8000
 ```
 
-## Flujo de demo probado
+## Flujo movil probado
 
 1. Levantar backend en puerto `8000`.
 2. Abrir app Flutter en Android Emulator.

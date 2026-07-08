@@ -13,7 +13,7 @@ class AuthScreen extends StatefulWidget {
   });
 
   final UleamMedApi api;
-  final ValueChanged<DemoSession> onAuthenticated;
+  final ValueChanged<AppSession> onAuthenticated;
 
   @override
   State<AuthScreen> createState() => _AuthScreenState();
@@ -68,11 +68,7 @@ class _AuthScreenState extends State<AuthScreen> {
     });
   }
 
-  Future<void> _startDemo() async {
-    await _runAuthAction(widget.api.startDemoSession);
-  }
-
-  Future<void> _runAuthAction(Future<DemoSession> Function() action) async {
+  Future<void> _runAuthAction(Future<AppSession> Function() action) async {
     setState(() {
       _isLoading = true;
       _error = null;
@@ -335,12 +331,6 @@ class _AuthScreenState extends State<AuthScreen> {
                 label: const Text('Olvide mi contrasena'),
               ),
             ],
-            const SizedBox(height: 10),
-            TextButton.icon(
-              onPressed: _isLoading ? null : _startDemo,
-              icon: const Icon(Icons.science),
-              label: const Text('Entrar en modo demo'),
-            ),
           ],
         ),
       ),

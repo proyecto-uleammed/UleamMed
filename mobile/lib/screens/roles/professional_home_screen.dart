@@ -26,7 +26,7 @@ class ProfessionalHomeScreen extends StatefulWidget {
 }
 
 class _ProfessionalHomeScreenState extends State<ProfessionalHomeScreen> {
-  late final Future<DemoSession> _session = widget.api.loadDemoSession();
+  late final Future<AppSession> _session = widget.api.loadAppSession();
 
   @override
   Widget build(BuildContext context) {
@@ -70,7 +70,7 @@ class _ProfessionalHomeScreenState extends State<ProfessionalHomeScreen> {
                       children: [
                         _RoleBadge(label: AppRole.professional.label),
                         const SizedBox(height: 10),
-                        FutureBuilder<DemoSession>(
+                        FutureBuilder<AppSession>(
                           future: _session,
                           builder: (context, snapshot) {
                             final name =
