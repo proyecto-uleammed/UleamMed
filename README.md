@@ -250,6 +250,28 @@ flutter pub get
 flutter run
 ```
 
+Arranque recomendado para Android Emulator:
+
+```bash
+./scripts/run_android.sh
+```
+
+Este script evita conflictos comunes: no abre otro emulador si ya existe, espera
+que Android termine de arrancar, levanta el backend correcto
+`backend.app.main:app` y ejecuta Flutter con `http://10.0.2.2:8000`.
+
+Para limpiar procesos de desarrollo:
+
+```bash
+./scripts/stop_dev.sh
+```
+
+Para cerrar tambien el emulador:
+
+```bash
+./scripts/stop_dev.sh --emulator
+```
+
 Ejemplo con URL manual:
 
 ```bash
