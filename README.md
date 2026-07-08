@@ -16,11 +16,13 @@ Ya esta integrado en `main`:
   contacto de emergencia y consentimiento para compartir con cuidadores.
 - Conexion Flutter -> FastAPI mediante `mobile/lib/services/api_service.dart`.
 - Modo demo disponible manualmente para desarrollo: `roberto@uleammed.demo`.
-- Modulo de medicamentos conectado al backend:
+- Modulo de medicamentos conectado al backend y a PostgreSQL/Supabase por usuario autenticado:
   - `GET /api/v1/medications`
+  - `POST /api/v1/medications`
+  - `PATCH /api/v1/medications/{medication_id}`
+  - `DELETE /api/v1/medications/{medication_id}`
   - `POST /api/v1/medications/{medication_id}/take`
-  - La pantalla Flutter agrega CRUD local-first y confirmaciones `tomado`,
-    `omitido` o `pospuesto`.
+  - Flutter no envia `user_id`; el backend toma el usuario desde el token.
   - El Home actualiza el resumen, por ejemplo `3 de 4 tomados hoy`.
 - Citas y contactos de emergencia leen desde almacenamiento local con datos
   semilla para funcionar offline.
@@ -37,9 +39,8 @@ Este repositorio todavia es un prototipo. Hay partes reales y partes demo.
 No romper estas reglas:
 
 - No subir `.env`, credenciales Firebase, llaves AWS ni secretos.
-- No asumir que los endpoints ya usan el MER completo. Las tablas y migraciones existen, pero varios servicios siguen en modo demo.
+- No asumir que todos los endpoints ya usan el MER completo. Auth, perfil y medicamentos ya usan tablas reales; dispositivos, notificaciones push y partes medicas avanzadas siguen en desarrollo/demo.
 - No reemplazar el flujo de autenticacion sin revisar `backend/core/security.py`, `backend/api/deps.py` y `mobile/lib/services/api_service.dart`.
-- No borrar los endpoints demo de medicamentos hasta que existan tablas reales equivalentes.
 - No editar carpetas generadas de Flutter (`android`, `ios`, `macos`, `windows`, `linux`, `web`) salvo que el cambio sea especifico de plataforma.
 - No cambiar `10.0.2.2` por `127.0.0.1` para Android: el emulador usa `10.0.2.2` para llegar al backend de la computadora.
 - No tratar CI-AWS como despliegue completo. Hoy solo valida y prepara/publica imagen en ECR cuando se configuren los secretos.
@@ -87,7 +88,10 @@ El backend esta construido con FastAPI y expone:
 - `POST /api/v1/auth/reset-password`: cambiar contrasena usando codigo temporal.
 - `GET /api/v1/users/me`: ver perfil autenticado.
 - `PATCH /api/v1/users/me`: actualizar perfil autenticado.
-- `GET /api/v1/medications`: listar medicamentos demo del usuario.
+- `GET /api/v1/medications`: listar medicamentos reales del usuario autenticado.
+- `POST /api/v1/medications`: crear medicamento del usuario autenticado.
+- `PATCH /api/v1/medications/{medication_id}`: actualizar medicamento del usuario autenticado.
+- `DELETE /api/v1/medications/{medication_id}`: eliminar logicamente medicamento del usuario autenticado.
 - `POST /api/v1/medications/{medication_id}/take`: marcar medicamento como tomado.
 - `POST /api/v1/devices`: registrar token FCM del dispositivo.
 - `GET /api/v1/devices`: listar tokens FCM del usuario.
@@ -98,13 +102,12 @@ El backend esta construido con FastAPI y expone:
 
 ### Datos demo temporales
 
-Estos modulos usan memoria temporal:
+Estos modulos aun usan memoria temporal o implementacion demo:
 
-- Medicamentos: `backend/services/medication_service.py`.
 - Dispositivos y notificaciones: `backend/services/notification_service.py`.
 - WebSocket: conexiones activas en memoria.
 
-Cuando el modulo de base de datos este listo, se deben reemplazar por tablas y consultas reales sin cambiar el contrato que consume Flutter, salvo que se coordine con frontend.
+Medicamentos ya usa `backend/models/medication.py` y PostgreSQL/Supabase. Los siguientes reemplazos reales deben hacerse sin romper el contrato que consume Flutter, salvo que se coordine con frontend.
 
 ## Base de datos y Alembic
 
@@ -113,14 +116,14 @@ La estructura MER ya fue incorporada con modelos SQLAlchemy en `backend/models` 
 Incluye, entre otras, estas tablas:
 
 - `users`: tabla oficial actual para auth del MVP.
-- `usuario`: tabla del MER, conservada porque otras tablas tienen llaves foraneas hacia ella.
-- `encargado`, `cuidador`, `adulto_mayor`.
-- `medicamento`, `tratamiento`, `tratamiento_medicamento`.
-- `cumplimiento_medicacion`.
-- `notificacion`, `destinatario_notificacion`, `token_fcm`.
-- Tablas de historial y examenes medicos.
+- `password_reset_tokens`: codigos temporales de recuperacion.
+- `medications`: medicamentos personales creados por cada usuario.
+- `guardians`, `caregivers`, `older_adults`, `caregiver_older_adults`.
+- `medical_profiles`, `medical_histories`, `medical_exams`, `exam_details`, `exam_parameters`.
+- `medication_catalog`, `treatments`, `treatment_medications`, `medication_adherence_records`.
+- `notifications`, `notification_recipients`, `fcm_tokens`.
 
-Importante: aunque las tablas ya existen, auth usa `users` como contrato actual. Los modulos medicos todavia deben conectarse gradualmente a las tablas reales del MER.
+La linea oficial nueva usa nombres tecnicos en ingles para tablas, columnas, modelos y endpoints. Los nombres en espanol solo quedan en migraciones historicas y como referencia de transicion, no como modelos activos nuevos.
 
 Alembic toma la URL desde `DATABASE_URL`. No se deben guardar credenciales reales en `backend/alembic.ini`.
 
@@ -138,7 +141,7 @@ Para demo local del prototipo movil se puede usar SQLite temporal y crear solo l
 rm -f /tmp/uleammed-demo.db
 DATABASE_URL='sqlite:////tmp/uleammed-demo.db' SECRET_KEY='demo-secret-key' .venv/bin/python - <<'PY'
 from backend.core.database import Base, engine
-from backend.models.user import User
+from backend.models import medication, password_reset_token, user
 
 Base.metadata.create_all(bind=engine)
 print('demo database ready')
