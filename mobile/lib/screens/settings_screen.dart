@@ -62,6 +62,41 @@ class SettingsScreen extends StatelessWidget {
               ),
               const Divider(height: 32),
               _SectionTitle(
+                icon: Icons.badge_outlined,
+                title: 'Rol y panel',
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Cada rol abre un panel distinto con menus y acciones propias. '
+                'Puedes cambiarlo para previsualizar mientras personalizamos.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 12),
+              ...AppRole.values.map((role) {
+                final selected = current.role == role;
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: ListTile(
+                    onTap: () => settings.setRole(role),
+                    leading: Icon(
+                      _roleIcon(role),
+                      color: AppColors.primary,
+                    ),
+                    title: Text(role.label),
+                    subtitle: Text(_rolePanelHint(role)),
+                    trailing: Icon(
+                      selected
+                          ? Icons.radio_button_checked
+                          : Icons.radio_button_unchecked,
+                      color: selected
+                          ? AppColors.primary
+                          : AppColors.textSecondary,
+                    ),
+                  ),
+                );
+              }),
+              const Divider(height: 32),
+              _SectionTitle(
                 icon: Icons.notifications_active_outlined,
                 title: 'Recordatorios',
               ),
@@ -190,4 +225,22 @@ class _SectionTitle extends StatelessWidget {
       ],
     );
   }
+}
+
+IconData _roleIcon(AppRole role) {
+  return switch (role) {
+    AppRole.patient => Icons.person,
+    AppRole.caregiver => Icons.family_restroom,
+    AppRole.professional => Icons.medical_services,
+    AppRole.admin => Icons.admin_panel_settings,
+  };
+}
+
+String _rolePanelHint(AppRole role) {
+  return switch (role) {
+    AppRole.patient => 'Medicamentos, historial y consultas propias',
+    AppRole.caregiver => 'Personas a cargo, alertas y mensajes',
+    AppRole.professional => 'Pacientes, indicaciones y agenda',
+    AppRole.admin => 'Usuarios, reportes y configuracion',
+  };
 }

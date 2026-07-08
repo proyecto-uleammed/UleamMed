@@ -1,18 +1,14 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import '../services/api_service.dart';
 import '../services/app_settings.dart';
-import '../services/connectivity_service.dart';
-import 'appointments_screen.dart';
-import 'history_screen.dart';
-import 'home_screen.dart';
-import 'medications_screen.dart';
-import 'profile_screen.dart';
+import 'roles/admin_shell.dart';
+import 'roles/caregiver_shell.dart';
+import 'roles/patient_shell.dart';
+import 'roles/professional_shell.dart';
 
-/// Contenedor principal con navegacion inferior de 5 modulos (PB-008).
-class MainShell extends StatefulWidget {
+/// Enruta al panel correspondiente segun el rol activo (PB-006).
+class MainShell extends StatelessWidget {
   const MainShell({
     super.key,
     required this.api,
@@ -25,89 +21,40 @@ class MainShell extends StatefulWidget {
   final AppSettingsController settings;
 
   @override
-  State<MainShell> createState() => _MainShellState();
-}
-
-class _MainShellState extends State<MainShell> {
-  final ConnectivityService _connectivity = ConnectivityService();
-  StreamSubscription<NetworkStatus>? _networkSubscription;
-  NetworkStatus _lastStatus = NetworkStatus.online;
-  int _index = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    // Sincroniza en silencio los cambios locales cuando vuelve la conexion.
-    // El usuario final no ve el estado de conexion; solo funciona.
-    _networkSubscription = _connectivity.watchStatus().listen((status) {
-      if (status == NetworkStatus.online &&
-          _lastStatus == NetworkStatus.offline) {
-        widget.api.synchronizePendingChanges();
-      }
-      _lastStatus = status;
-    });
-  }
-
-  @override
-  void dispose() {
-    _networkSubscription?.cancel();
-    super.dispose();
-  }
-
-  void _goTo(int index) {
-    setState(() {
-      _index = index;
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final tabs = <Widget>[
-      HomeScreen(
-        api: widget.api,
-        onLogout: widget.onLogout,
-        settings: widget.settings,
-        onOpenTab: _goTo,
-      ),
-      MedicationsScreen(api: widget.api),
-      HistoryScreen(api: widget.api),
-      AppointmentsScreen(api: widget.api),
-      ProfileScreen(api: widget.api, settings: widget.settings),
-    ];
+    return AnimatedBuilder(
+      animation: settings,
+      builder: (context, _) {
+        final role = settings.value.role;
+        final key = ValueKey(role);
 
-    return Scaffold(
-      body: IndexedStack(index: _index, children: tabs),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: _goTo,
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
-            label: 'Inicio',
+        return switch (role) {
+          AppRole.patient => PatientShell(
+            key: key,
+            api: api,
+            onLogout: onLogout,
+            settings: settings,
           ),
-          NavigationDestination(
-            icon: Icon(Icons.medication_outlined),
-            selectedIcon: Icon(Icons.medication),
-            label: 'Medicinas',
+          AppRole.caregiver => CaregiverShell(
+            key: key,
+            api: api,
+            onLogout: onLogout,
+            settings: settings,
           ),
-          NavigationDestination(
-            icon: Icon(Icons.history),
-            selectedIcon: Icon(Icons.history_toggle_off),
-            label: 'Historial',
+          AppRole.professional => ProfessionalShell(
+            key: key,
+            api: api,
+            onLogout: onLogout,
+            settings: settings,
           ),
-          NavigationDestination(
-            icon: Icon(Icons.event_outlined),
-            selectedIcon: Icon(Icons.event),
-            label: 'Consultas',
+          AppRole.admin => AdminShell(
+            key: key,
+            api: api,
+            onLogout: onLogout,
+            settings: settings,
           ),
-          NavigationDestination(
-            icon: Icon(Icons.person_outline),
-            selectedIcon: Icon(Icons.person),
-            label: 'Perfil',
-          ),
-        ],
-      ),
+        };
+      },
     );
   }
 }
