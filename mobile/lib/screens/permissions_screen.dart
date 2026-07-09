@@ -144,7 +144,8 @@ class _PermissionsScreenState extends State<PermissionsScreen>
                     icon: Icons.fullscreen,
                     title: 'Pantalla completa',
                     description:
-                        'Muestra la alarma sobre la pantalla bloqueada.',
+                        'Permite que Android abra la alarma sobre la pantalla. '
+                        'Si no esta activo, sonara como notificacion y deberas tocarla.',
                     state: snapshot.fullScreen,
                     onPressed: _requestFullScreen,
                     onOpenSettings: widget.permissions.openSettings,

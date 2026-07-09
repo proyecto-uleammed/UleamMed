@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -25,12 +26,30 @@ class _MedicationsScreenState extends State<MedicationsScreen> {
 
   Future<_MedicationData> _loadData() async {
     final medications = await _api.listMedications();
-    await widget.notificationScheduler?.reconcile(medications);
+    unawaited(_reconcileReminders(medications));
     final confirmations = await _api.listDoseConfirmations();
     return _MedicationData(
       medications: medications,
       confirmations: confirmations,
     );
+  }
+
+  Future<void> _reconcileReminders(List<MedicationItem> medications) async {
+    try {
+      await widget.notificationScheduler?.reconcile(medications);
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Medicamento guardado, pero no se pudo programar la alarma',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   void _reload() {
@@ -91,8 +110,7 @@ class _MedicationsScreenState extends State<MedicationsScreen> {
         return _MedicationForm(
           medication: medication,
           onSave: (item) async {
-            final savedMedication = await _api.saveMedication(item);
-            await widget.notificationScheduler?.schedule(savedMedication);
+            await _api.saveMedication(item);
           },
           onDelete: medication == null
               ? null
@@ -115,6 +133,72 @@ class _MedicationsScreenState extends State<MedicationsScreen> {
           ),
         ),
       );
+    }
+  }
+
+  Future<void> _deleteMedication(MedicationItem medication) async {
+    if (_savingIds.contains(medication.id)) {
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Eliminar medicamento'),
+        content: Text(
+          'Se eliminara ${medication.name} de tu lista y se cancelaran sus alarmas.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(context).pop(true),
+            icon: const Icon(Icons.delete),
+            label: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) {
+      return;
+    }
+
+    setState(() {
+      _savingIds.add(medication.id);
+    });
+
+    try {
+      await widget.notificationScheduler?.cancel(medication.id);
+      await _api.deleteMedication(medication.id);
+      if (!mounted) {
+        return;
+      }
+      _reload();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${medication.name} eliminado'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No se pudo eliminar el medicamento'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _savingIds.remove(medication.id);
+        });
+      }
     }
   }
 
@@ -173,6 +257,7 @@ class _MedicationsScreenState extends State<MedicationsScreen> {
                     medication: medication,
                     isSaving: _savingIds.contains(medication.id),
                     onEdit: () => _openMedicationForm(medication),
+                    onDelete: () => _deleteMedication(medication),
                     onTaken: () => _recordStatus(medication, DoseStatus.taken),
                     onPostponed: () =>
                         _recordStatus(medication, DoseStatus.postponed),
@@ -286,6 +371,7 @@ class _MedicationCard extends StatelessWidget {
     required this.medication,
     required this.isSaving,
     required this.onEdit,
+    required this.onDelete,
     required this.onTaken,
     required this.onPostponed,
     required this.onOmitted,
@@ -294,6 +380,7 @@ class _MedicationCard extends StatelessWidget {
   final MedicationItem medication;
   final bool isSaving;
   final VoidCallback onEdit;
+  final VoidCallback onDelete;
   final VoidCallback onTaken;
   final VoidCallback onPostponed;
   final VoidCallback onOmitted;
@@ -347,10 +434,20 @@ class _MedicationCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                IconButton(
-                  tooltip: 'Editar',
-                  onPressed: onEdit,
-                  icon: const Icon(Icons.edit),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      tooltip: 'Editar',
+                      onPressed: isSaving ? null : onEdit,
+                      icon: const Icon(Icons.edit),
+                    ),
+                    IconButton(
+                      tooltip: 'Eliminar',
+                      onPressed: isSaving ? null : onDelete,
+                      icon: const Icon(Icons.delete_outline),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -664,7 +761,9 @@ class _MedicationFormState extends State<_MedicationForm> {
     });
     final now = DateTime.now();
     final id = widget.medication?.id ?? _slug(_nameController.text, now);
-    final amount = double.parse(_doseController.text.trim());
+    final amount = double.parse(
+      _doseController.text.trim().replaceAll(',', '.'),
+    );
     final startDate =
         widget.medication?.effectiveSchedule.startDate ??
         DateTime(now.year, now.month, now.day);
@@ -709,9 +808,29 @@ class _MedicationFormState extends State<_MedicationForm> {
       photoPath: _photoPath,
       schedule: schedule,
     );
-    await widget.onSave(item);
-    if (mounted) {
-      Navigator.pop(context, true);
+    var saved = false;
+    try {
+      await widget.onSave(item);
+      saved = true;
+      if (mounted) {
+        Navigator.pop(context, true);
+      }
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No se pudo guardar el medicamento'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted && !saved) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
     }
   }
 
@@ -889,7 +1008,9 @@ class _MedicationFormState extends State<_MedicationForm> {
                 decimal: true,
               ),
               validator: (value) {
-                final amount = double.tryParse((value ?? '').trim());
+                final amount = double.tryParse(
+                  (value ?? '').trim().replaceAll(',', '.'),
+                );
                 return amount == null || amount <= 0
                     ? 'Ingresa una cantidad válida'
                     : null;

@@ -132,6 +132,17 @@ class LocalStore {
     );
   }
 
+  Future<void> deleteDoseConfirmationsForMedication(String medicationId) async {
+    final confirmations = await readDoseConfirmations();
+    await _writeList(
+      _confirmationsKey,
+      confirmations
+          .where((item) => item.medicationId != medicationId)
+          .map((item) => item.toJson())
+          .toList(),
+    );
+  }
+
   Future<List<DoseConfirmation>> readDoseConfirmations() {
     return _readList(
       _confirmationsKey,

@@ -50,4 +50,25 @@ void main() {
       isNull,
     );
   });
+
+  test('acepta doseAmount como texto decimal del backend', () {
+    final item = MedicationItem.fromJson({
+      'id': '10',
+      'name': 'Metformina',
+      'dose': '150 mg',
+      'doseAmount': '150.00',
+      'doseUnit': 'mg',
+      'time': '08:00',
+      'taken': false,
+      'schedule': {
+        'mode': 'fixed_times',
+        'times': ['08:00'],
+        'weekdays': [1, 2, 3, 4, 5, 6, 7],
+        'start_date': '2026-07-09',
+      },
+    });
+
+    expect(item.doseAmount, 150);
+    expect(item.effectiveSchedule.times, ['08:00']);
+  });
 }

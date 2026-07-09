@@ -150,9 +150,7 @@ class MedicationItem {
       createdAt: _parseDate(json['createdAt']),
       updatedAt: _parseDate(json['updatedAt']),
       photoPath: json['photoPath']?.toString() ?? '',
-      doseAmount:
-          (json['doseAmount'] as num?)?.toDouble() ??
-          double.tryParse(json['doseAmount']?.toString() ?? ''),
+      doseAmount: _parseDouble(json['doseAmount']),
       doseUnit: json['doseUnit']?.toString() ?? '',
       photoAvailable: json['photoAvailable'] == true,
       schedule: json['schedule'] is Map
@@ -711,6 +709,16 @@ DateTime? _parseDate(Object? value) {
     return null;
   }
   return DateTime.tryParse(value.toString());
+}
+
+double? _parseDouble(Object? value) {
+  if (value == null) {
+    return null;
+  }
+  if (value is num) {
+    return value.toDouble();
+  }
+  return double.tryParse(value.toString().replaceAll(',', '.'));
 }
 
 String _dateOnly(DateTime value) {

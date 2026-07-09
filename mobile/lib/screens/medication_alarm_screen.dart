@@ -60,7 +60,7 @@ class _MedicationAlarmScreenState extends State<MedicationAlarmScreen> {
       }
       await widget.scheduler.stopAlarm(widget.alarmId);
       if (mounted) {
-        Navigator.of(context).pop();
+        Navigator.of(context).pop(true);
       }
     } finally {
       if (mounted && _saving) {
@@ -108,40 +108,51 @@ class _MedicationAlarmScreenState extends State<MedicationAlarmScreen> {
           child: ListView(
             padding: const EdgeInsets.all(24),
             children: [
-              const Icon(Icons.alarm_on, size: 64, color: AppColors.primary),
-              const SizedBox(height: 8),
+              const Icon(Icons.alarm_on, size: 78, color: AppColors.primary),
+              const SizedBox(height: 10),
               Text(
                 'Hora de tu medicamento',
                 textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.headlineLarge,
+                style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                  fontSize: 34,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 24),
               _MedicationPhoto(path: medication.photoPath),
-              const SizedBox(height: 20),
+              const SizedBox(height: 24),
               Text(
                 medication.name,
                 textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.headlineLarge,
+                style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                  fontSize: 36,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 10),
               Text(
                 medication.dose,
                 textAlign: TextAlign.center,
-                style: Theme.of(
-                  context,
-                ).textTheme.headlineMedium?.copyWith(color: AppColors.primary),
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  color: AppColors.primary,
+                  fontSize: 30,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 14),
               Text(
                 'Toma ${_current.sequenceNumber} de '
                 '${dailyCount == 0 ? 1 : dailyCount} de hoy',
                 textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.titleLarge,
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               if (medication.instructions.isNotEmpty) ...[
-                const SizedBox(height: 18),
+                const SizedBox(height: 20),
                 Container(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(18),
                   decoration: BoxDecoration(
                     color: AppColors.surface,
                     borderRadius: BorderRadius.circular(8),
@@ -149,31 +160,57 @@ class _MedicationAlarmScreenState extends State<MedicationAlarmScreen> {
                   child: Text(
                     medication.instructions,
                     textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodyLarge,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodyLarge?.copyWith(fontSize: 22, height: 1.25),
                   ),
                 ),
               ],
               if (widget.occurrences.length > 1) ...[
-                const SizedBox(height: 12),
+                const SizedBox(height: 14),
                 Text(
                   '${_index + 1} de ${widget.occurrences.length} medicamentos',
                   textAlign: TextAlign.center,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyLarge?.copyWith(fontSize: 20),
                 ),
               ],
-              const SizedBox(height: 26),
+              const SizedBox(height: 30),
               FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(66),
+                  textStyle: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 onPressed: _saving ? null : () => _record(DoseStatus.taken),
                 icon: const Icon(Icons.check_circle),
                 label: const Text('Tomado'),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
               OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(62),
+                  textStyle: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
                 onPressed: _saving ? null : _chooseSnooze,
                 icon: const Icon(Icons.snooze),
                 label: const Text('Posponer'),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
               OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(62),
+                  textStyle: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
                 onPressed: _saving ? null : () => _record(DoseStatus.omitted),
                 icon: const Icon(Icons.cancel_outlined),
                 label: const Text('Omitir'),
@@ -199,20 +236,20 @@ class _MedicationPhoto extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         child: Image.file(
           file,
-          height: 230,
+          height: 280,
           width: double.infinity,
           fit: BoxFit.contain,
         ),
       );
     }
     return Container(
-      height: 180,
+      height: 220,
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(8),
       ),
-      child: const Icon(Icons.medication, size: 92, color: AppColors.primary),
+      child: const Icon(Icons.medication, size: 118, color: AppColors.primary),
     );
   }
 }

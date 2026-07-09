@@ -19,6 +19,7 @@ class NotificationScheduler {
   StreamSubscription<dynamic>? _ringingSubscription;
   AlarmRingingCallback? _onAlarmRinging;
   final Set<int> _handledRinging = {};
+  List<MedicationItem> _knownMedications = [];
   bool _initialized = false;
 
   Future<bool> initialize({
@@ -34,6 +35,10 @@ class NotificationScheduler {
         if (_handledRinging.add(alarm.id)) {
           final occurrences = _decodeOccurrences(alarm.payload);
           if (occurrences.isNotEmpty) {
+            if (!_isDueAlarm(occurrences)) {
+              Alarm.stop(alarm.id);
+              continue;
+            }
             _scheduleFollowingOccurrences(occurrences);
             _onAlarmRinging?.call(alarm.id, occurrences);
           } else {
@@ -55,6 +60,10 @@ class NotificationScheduler {
       if (_handledRinging.add(alarm.id)) {
         final occurrences = _decodeOccurrences(alarm.payload);
         if (occurrences.isNotEmpty) {
+          if (!_isDueAlarm(occurrences)) {
+            await Alarm.stop(alarm.id);
+            continue;
+          }
           _onAlarmRinging?.call(alarm.id, occurrences);
         }
       }
@@ -63,6 +72,7 @@ class NotificationScheduler {
   }
 
   Future<void> reconcile(List<MedicationItem> medications) async {
+    _knownMedications = List<MedicationItem>.from(medications);
     await _cancelScheduledAlarms();
     final occurrences = medications
         .map((medication) => _scheduleService.nextOccurrence(medication))
@@ -72,38 +82,52 @@ class NotificationScheduler {
   }
 
   Future<void> _cancelScheduledAlarms() async {
+    final ringing = Alarm.ringing.value.alarms;
+    final hasDueRingingAlarm = ringing.any((alarm) {
+      final occurrences = _decodeOccurrences(alarm.payload);
+      return occurrences.isNotEmpty && _isDueAlarm(occurrences);
+    });
+    if (!hasDueRingingAlarm) {
+      await _withAlarmTimeout(Alarm.stopAll());
+      return;
+    }
+
     final alarms = await Alarm.getAlarms();
     for (final alarm in alarms) {
       if (!await Alarm.isRinging(alarm.id)) {
-        await Alarm.stop(alarm.id);
+        await _withAlarmTimeout(Alarm.stop(alarm.id));
       }
     }
   }
 
   Future<void> schedule(MedicationItem medication) async {
+    _knownMedications = [
+      ..._knownMedications.where((item) => item.id != medication.id),
+      medication,
+    ];
     await cancel(medication.id);
-    final occurrence = _scheduleService.nextOccurrence(medication);
-    if (occurrence != null) {
-      await _setAlarm([occurrence]);
-    }
+    await _scheduleKnownMedications();
   }
 
   Future<void> cancel(String medicationId) async {
+    _knownMedications = _knownMedications
+        .where((item) => item.id != medicationId)
+        .toList();
     final alarms = await Alarm.getAlarms();
     for (final alarm in alarms) {
       final occurrences = _decodeOccurrences(alarm.payload);
       if (occurrences.any(
         (occurrence) => occurrence.medication.id == medicationId,
       )) {
-        await Alarm.stop(alarm.id);
+        await _withAlarmTimeout(Alarm.stop(alarm.id));
       }
     }
   }
 
-  Future<void> cancelAll() => Alarm.stopAll();
+  Future<void> cancelAll() => _withAlarmTimeout(Alarm.stopAll());
 
   Future<void> stopAlarm(int alarmId) async {
-    await Alarm.stop(alarmId);
+    await _withAlarmTimeout(Alarm.stop(alarmId));
   }
 
   Future<void> snooze(
@@ -121,22 +145,46 @@ class NotificationScheduler {
   Future<void> _scheduleFollowingOccurrences(
     List<MedicationOccurrence> current,
   ) async {
-    final next = current
+    final after = current
+        .map((occurrence) => occurrence.scheduledAt)
+        .reduce((a, b) => a.isBefore(b) ? a : b);
+    final medications = _knownMedications.isEmpty
+        ? current.map((occurrence) => occurrence.medication).toList()
+        : _knownMedications;
+    final next = medications
         .map(
-          (occurrence) => _scheduleService.nextOccurrence(
-            occurrence.medication,
-            after: occurrence.scheduledAt,
-          ),
+          (medication) =>
+              _scheduleService.nextOccurrence(medication, after: after),
         )
         .whereType<MedicationOccurrence>()
         .toList();
     await _scheduleGrouped(next);
   }
 
+  Future<void> _scheduleKnownMedications() async {
+    final occurrences = _knownMedications
+        .map((medication) => _scheduleService.nextOccurrence(medication))
+        .whereType<MedicationOccurrence>()
+        .toList();
+    await _scheduleGrouped(occurrences);
+  }
+
   Future<void> _scheduleGrouped(List<MedicationOccurrence> occurrences) async {
+    if (occurrences.isEmpty) {
+      return;
+    }
+    occurrences.sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
+    final next = occurrences.first.scheduledAt;
     final groups = <String, List<MedicationOccurrence>>{};
     for (final occurrence in occurrences) {
       final date = occurrence.scheduledAt;
+      if (date.year != next.year ||
+          date.month != next.month ||
+          date.day != next.day ||
+          date.hour != next.hour ||
+          date.minute != next.minute) {
+        continue;
+      }
       final key =
           '${date.year}-${date.month}-${date.day}-${date.hour}-${date.minute}';
       groups.putIfAbsent(key, () => []).add(occurrence);
@@ -155,31 +203,37 @@ class NotificationScheduler {
     }
     final when = occurrences.first.scheduledAt;
     final names = occurrences.map((item) => item.medication.name).join(', ');
-    await Alarm.set(
-      alarmSettings: AlarmSettings(
-        id: _alarmId(occurrences, isSnooze: isSnooze),
-        dateTime: when,
-        assetAudioPath: null,
-        loopAudio: true,
-        vibrate: true,
-        warningNotificationOnKill: false,
-        androidFullScreenIntent: true,
-        androidStopAlarmOnTermination: false,
-        volumeSettings: VolumeSettings.fade(
-          fadeDuration: const Duration(seconds: 10),
-          volume: 0.8,
-          volumeEnforced: true,
-          showSystemUI: false,
-        ),
-        notificationSettings: NotificationSettings(
-          title: 'Hora de tu medicamento',
-          body: names,
-        ),
-        payload: jsonEncode(
-          occurrences.map((item) => _occurrenceToJson(item)).toList(),
+    await _withAlarmTimeout(
+      Alarm.set(
+        alarmSettings: AlarmSettings(
+          id: _alarmId(occurrences, isSnooze: isSnooze),
+          dateTime: when,
+          assetAudioPath: null,
+          loopAudio: true,
+          vibrate: true,
+          warningNotificationOnKill: false,
+          androidFullScreenIntent: true,
+          androidStopAlarmOnTermination: false,
+          volumeSettings: VolumeSettings.fade(
+            fadeDuration: const Duration(seconds: 10),
+            volume: 0.8,
+            volumeEnforced: true,
+            showSystemUI: false,
+          ),
+          notificationSettings: NotificationSettings(
+            title: 'Hora de tu medicamento',
+            body: names,
+          ),
+          payload: jsonEncode(
+            occurrences.map((item) => _occurrenceToJson(item)).toList(),
+          ),
         ),
       ),
     );
+  }
+
+  Future<T> _withAlarmTimeout<T>(Future<T> operation) {
+    return operation.timeout(const Duration(seconds: 3));
   }
 
   Map<String, dynamic> _occurrenceToJson(MedicationOccurrence occurrence) {
@@ -212,6 +266,14 @@ class NotificationScheduler {
     } catch (_) {
       return [];
     }
+  }
+
+  bool _isDueAlarm(List<MedicationOccurrence> occurrences) {
+    final now = DateTime.now();
+    final tolerance = now.add(const Duration(minutes: 1));
+    return occurrences.any(
+      (occurrence) => !occurrence.scheduledAt.isAfter(tolerance),
+    );
   }
 
   int _alarmId(

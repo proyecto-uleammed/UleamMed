@@ -810,6 +810,31 @@ void main() {
     );
   });
 
+  testWidgets('medications screen deletes a medication from its card', (
+    WidgetTester tester,
+  ) async {
+    final api = _FakeApi();
+
+    await tester.pumpWidget(_testApp(api: api));
+    await tester.pumpAndSettle();
+    await _loginWithForm(tester);
+    await tester.tap(find.text('Medicinas'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Omeprazol'), findsOneWidget);
+
+    final deleteButton = find.byIcon(Icons.delete_outline).last;
+    await tester.ensureVisible(deleteButton);
+    await tester.pumpAndSettle();
+    await tester.tap(deleteButton);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Eliminar'));
+    await tester.pumpAndSettle();
+
+    expect(api.medications.any((item) => item.id == 'omeprazol'), isFalse);
+    expect(find.text('Omeprazol'), findsNothing);
+  });
+
   testWidgets('password recovery requests code and resets password', (
     WidgetTester tester,
   ) async {

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -329,7 +330,15 @@ class ApiService implements UleamMedApi {
       await _localStore.deleteMedication(medication.id);
     }
     await _localStore.upsertMedication(saved);
+    unawaited(_syncMedicationPhoto(saved, medication, existing));
+    return saved;
+  }
 
+  Future<void> _syncMedicationPhoto(
+    MedicationItem saved,
+    MedicationItem medication,
+    MedicationItem? existing,
+  ) async {
     try {
       final photoChanged = existing?.photoPath != medication.photoPath;
       final needsPhotoUpload =
@@ -357,9 +366,9 @@ class ApiService implements UleamMedApi {
         );
         saved = saved.copyWith(photoAvailable: false, photoPath: '');
       }
-      return _localStore.upsertMedication(saved);
+      await _localStore.upsertMedication(saved);
     } catch (_) {
-      return _localStore.upsertMedication(
+      await _localStore.upsertMedication(
         saved.copyWith(
           syncStatus: SyncStatus.pending,
           photoPath: medication.photoPath,
@@ -371,6 +380,7 @@ class ApiService implements UleamMedApi {
   @override
   Future<void> deleteMedication(String medicationId) async {
     await _localStore.deleteMedication(medicationId);
+    await _localStore.deleteDoseConfirmationsForMedication(medicationId);
     final isBackendId = int.tryParse(medicationId) != null;
     if (!isBackendId) {
       return;
@@ -694,10 +704,15 @@ class ApiService implements UleamMedApi {
     };
     for (final local in localItems) {
       if (local.syncStatus == SyncStatus.pending) {
-        byId[local.id] = local;
-      } else {
-        final backend = byId[local.id];
-        byId[local.id] = (backend ?? local).copyWith(
+        if (int.tryParse(local.id) != null) {
+          byId[local.id] = local;
+        }
+        continue;
+      }
+
+      final backend = byId[local.id];
+      if (backend != null) {
+        byId[local.id] = backend.copyWith(
           frequency: local.frequency,
           duration: local.duration,
           instructions: local.instructions,

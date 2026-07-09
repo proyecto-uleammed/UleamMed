@@ -327,6 +327,10 @@ class BackendIntegratedFlowTest(unittest.TestCase):
         self.assertEqual(second.status_code, 200)
         self.assertEqual(first.json()["id"], second.json()["id"])
 
+        medications = self.client.get("/api/v1/medications", headers=headers)
+        self.assertEqual(medications.status_code, 200)
+        self.assertTrue(medications.json()["items"][0]["taken"])
+
         events = self.client.get(
             "/api/v1/medications/dose-events",
             headers=headers,

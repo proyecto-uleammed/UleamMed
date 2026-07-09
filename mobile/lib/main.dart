@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:alarm/alarm.dart';
 import 'models/app_role.dart';
@@ -233,16 +235,24 @@ class _UleamMedAppState extends State<UleamMedApp> with WidgetsBindingObserver {
       _pendingAlarm = (alarmId, occurrences);
       return;
     }
-    navigator.push(
-      MaterialPageRoute<void>(
-        fullscreenDialog: true,
-        builder: (_) => MedicationAlarmScreen(
-          alarmId: alarmId,
-          occurrences: occurrences,
-          api: _api,
-          scheduler: _scheduler,
-        ),
-      ),
+    unawaited(
+      navigator
+          .push<bool>(
+            MaterialPageRoute<bool>(
+              fullscreenDialog: true,
+              builder: (_) => MedicationAlarmScreen(
+                alarmId: alarmId,
+                occurrences: occurrences,
+                api: _api,
+                scheduler: _scheduler,
+              ),
+            ),
+          )
+          .then((updated) {
+            if (updated == true && mounted) {
+              _openMedications();
+            }
+          }),
     );
   }
 

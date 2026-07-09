@@ -166,8 +166,15 @@ def record_dose_event(
             snoozed_until=payload.snoozed_until,
         )
         db.add(existing)
+        if payload.status.value == "taken":
+            medication.taken = True
+            db.add(medication)
         db.commit()
         db.refresh(existing)
+    elif payload.status.value == "taken" and not medication.taken:
+        medication.taken = True
+        db.add(medication)
+        db.commit()
     return _event_to_read(existing, medication.name)
 
 
