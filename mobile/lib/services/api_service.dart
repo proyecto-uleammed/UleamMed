@@ -713,6 +713,7 @@ class ApiService implements UleamMedApi {
       final backend = byId[local.id];
       if (backend != null) {
         byId[local.id] = backend.copyWith(
+          taken: local.taken || backend.taken,
           frequency: local.frequency,
           duration: local.duration,
           instructions: local.instructions,
