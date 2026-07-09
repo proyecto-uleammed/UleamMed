@@ -1,60 +1,65 @@
 import 'package:flutter/material.dart';
 
+import '../models/app_role.dart';
 import '../services/api_service.dart';
 import '../services/app_settings.dart';
-import 'roles/admin_shell.dart';
-import 'roles/caregiver_shell.dart';
 import 'roles/patient_shell.dart';
-import 'roles/professional_shell.dart';
 
-/// Enruta al panel correspondiente segun el rol activo (PB-006).
+/// Enruta usando exclusivamente el rol confirmado por el backend.
 class MainShell extends StatelessWidget {
   const MainShell({
     super.key,
     required this.api,
     required this.onLogout,
     required this.settings,
+    required this.role,
   });
 
   final UleamMedApi api;
   final Future<void> Function() onLogout;
   final AppSettingsController settings;
+  final AppRole role;
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: settings,
-      builder: (context, _) {
-        final role = settings.value.role;
-        final key = ValueKey(role);
+    if (role != AppRole.patient) {
+      return _UnsupportedRoleScreen(role: role, onLogout: onLogout);
+    }
 
-        return switch (role) {
-          AppRole.patient => PatientShell(
-            key: key,
-            api: api,
-            onLogout: onLogout,
-            settings: settings,
+    return PatientShell(api: api, onLogout: onLogout, settings: settings);
+  }
+}
+
+class _UnsupportedRoleScreen extends StatelessWidget {
+  const _UnsupportedRoleScreen({required this.role, required this.onLogout});
+
+  final AppRole role;
+  final Future<void> Function() onLogout;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Acceso no disponible'),
+        actions: [
+          IconButton(
+            tooltip: 'Cerrar sesion',
+            onPressed: onLogout,
+            icon: const Icon(Icons.logout),
           ),
-          AppRole.caregiver => CaregiverShell(
-            key: key,
-            api: api,
-            onLogout: onLogout,
-            settings: settings,
+        ],
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(
+            role == AppRole.unknown
+                ? 'Tu cuenta tiene un rol no reconocido.'
+                : 'El panel de ${role.label.toLowerCase()} aun no esta habilitado.',
+            textAlign: TextAlign.center,
           ),
-          AppRole.professional => ProfessionalShell(
-            key: key,
-            api: api,
-            onLogout: onLogout,
-            settings: settings,
-          ),
-          AppRole.admin => AdminShell(
-            key: key,
-            api: api,
-            onLogout: onLogout,
-            settings: settings,
-          ),
-        };
-      },
+        ),
+      ),
     );
   }
 }

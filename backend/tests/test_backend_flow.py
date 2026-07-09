@@ -8,7 +8,9 @@ from sqlalchemy.pool import StaticPool
 
 from backend.app.main import app
 from backend.core.database import Base, get_db
-from backend.core.security import create_access_token
+from backend.core.roles import UserRole
+from backend.core.security import create_access_token, generate_password_hash
+from backend.models.user import User
 
 
 class BackendIntegratedFlowTest(unittest.TestCase):
@@ -69,6 +71,7 @@ class BackendIntegratedFlowTest(unittest.TestCase):
         perfil = self.client.get("/api/v1/users/me", headers=headers)
         self.assertEqual(perfil.status_code, 200)
         self.assertEqual(perfil.json()["email"], "persona@uleam.edu.ec")
+        self.assertEqual(perfil.json()["role"], "patient")
 
         actualizar_vacio = self.client.patch(
             "/api/v1/users/me",
@@ -122,8 +125,23 @@ class BackendIntegratedFlowTest(unittest.TestCase):
             )
 
         self.assertEqual(respuesta.status_code, 201)
+        self.assertEqual(respuesta.json()["role"], "patient")
         send.assert_called_once()
         self.assertEqual(send.call_args.args[0].email, "bienvenida@uleam.edu.ec")
+
+    def test_registro_no_permite_elegir_roles_privilegiados(self) -> None:
+        """El rol de una cuenta publica no puede controlarse desde el cliente."""
+        respuesta = self.client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": "intruso@uleam.edu.ec",
+                "full_name": "Usuario Intruso",
+                "password": "clave-segura-123",
+                "role": "admin",
+            },
+        )
+
+        self.assertEqual(respuesta.status_code, 422)
 
     def test_recuperacion_password_con_codigo(self) -> None:
         """Valida solicitud de codigo y cambio de contrasena."""
@@ -235,6 +253,28 @@ class BackendIntegratedFlowTest(unittest.TestCase):
 
         final = self.client.get("/api/v1/medications", headers=headers)
         self.assertEqual(final.json()["items"], [])
+
+    def test_modulo_medicamentos_rechaza_roles_no_pacientes(self) -> None:
+        """Los paneles futuros no obtienen permisos de paciente por autenticarse."""
+        with self.SessionLocal() as db:
+            caregiver = User(
+                email="cuidador@uleam.edu.ec",
+                full_name="Cuidador Demo",
+                hashed_password=generate_password_hash("clave-segura-123"),
+                role=UserRole.CAREGIVER,
+            )
+            db.add(caregiver)
+            db.commit()
+            db.refresh(caregiver)
+            token = create_access_token(str(caregiver.id))
+
+        respuesta = self.client.get(
+            "/api/v1/medications",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        self.assertEqual(respuesta.status_code, 403)
+        self.assertIn("pacientes", respuesta.json()["detail"])
 
     def test_websocket_autenticado(self) -> None:
         """Valida conexion WebSocket con access token y respuesta eco."""

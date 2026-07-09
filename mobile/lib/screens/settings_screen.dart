@@ -7,7 +7,7 @@ import 'legal_screen.dart';
 import 'lock_setup_screen.dart';
 import 'reminders_screen.dart';
 
-/// Ajustes de accesibilidad y rol (PB-010/006).
+/// Ajustes de accesibilidad, recordatorios y privacidad.
 /// Las secciones de privacidad y bloqueo se agregan en la fase de privacidad.
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key, required this.settings});
@@ -32,58 +32,21 @@ class SettingsScreen extends StatelessWidget {
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: 12),
-              ...FontScaleOption.values.map(
-                (option) {
-                  final selected = current.fontScale == option;
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    child: ListTile(
-                      onTap: () => settings.setFontScale(option),
-                      leading: Text(
-                        'Aa',
-                        style: TextStyle(
-                          fontSize: 18 * option.factor,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                      title: Text(option.label),
-                      trailing: Icon(
-                        selected
-                            ? Icons.radio_button_checked
-                            : Icons.radio_button_unchecked,
-                        color: selected
-                            ? AppColors.primary
-                            : AppColors.textSecondary,
-                      ),
-                    ),
-                  );
-                },
-              ),
-              const Divider(height: 32),
-              _SectionTitle(
-                icon: Icons.badge_outlined,
-                title: 'Rol y panel',
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Cada rol abre un panel distinto con menus y acciones propias. '
-                'Puedes cambiarlo para previsualizar mientras personalizamos.',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 12),
-              ...AppRole.values.map((role) {
-                final selected = current.role == role;
+              ...FontScaleOption.values.map((option) {
+                final selected = current.fontScale == option;
                 return Card(
                   margin: const EdgeInsets.only(bottom: 8),
                   child: ListTile(
-                    onTap: () => settings.setRole(role),
-                    leading: Icon(
-                      _roleIcon(role),
-                      color: AppColors.primary,
+                    onTap: () => settings.setFontScale(option),
+                    leading: Text(
+                      'Aa',
+                      style: TextStyle(
+                        fontSize: 18 * option.factor,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primary,
+                      ),
                     ),
-                    title: Text(role.label),
-                    subtitle: Text(_rolePanelHint(role)),
+                    title: Text(option.label),
                     trailing: Icon(
                       selected
                           ? Icons.radio_button_checked
@@ -225,22 +188,4 @@ class _SectionTitle extends StatelessWidget {
       ],
     );
   }
-}
-
-IconData _roleIcon(AppRole role) {
-  return switch (role) {
-    AppRole.patient => Icons.person,
-    AppRole.caregiver => Icons.family_restroom,
-    AppRole.professional => Icons.medical_services,
-    AppRole.admin => Icons.admin_panel_settings,
-  };
-}
-
-String _rolePanelHint(AppRole role) {
-  return switch (role) {
-    AppRole.patient => 'Medicamentos, historial y consultas propias',
-    AppRole.caregiver => 'Personas a cargo, alertas y mensajes',
-    AppRole.professional => 'Pacientes, indicaciones y agenda',
-    AppRole.admin => 'Usuarios, reportes y configuracion',
-  };
 }

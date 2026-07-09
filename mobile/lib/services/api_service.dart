@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
+import '../models/app_role.dart';
 import '../models/local_models.dart';
 import 'local_store.dart';
 import 'sync_service.dart';
@@ -814,6 +815,7 @@ class AppUser {
     required this.email,
     required this.fullName,
     required this.isActive,
+    required this.role,
   });
 
   factory AppUser.fromJson(Map<String, dynamic> json) {
@@ -822,6 +824,7 @@ class AppUser {
       email: json['email'].toString(),
       fullName: json['full_name']?.toString() ?? 'Usuario',
       isActive: json['is_active'] == true,
+      role: AppRole.fromJson(json['role']),
     );
   }
 
@@ -829,6 +832,7 @@ class AppUser {
   final String email;
   final String fullName;
   final bool isActive;
+  final AppRole role;
 }
 
 class ApiException implements Exception {

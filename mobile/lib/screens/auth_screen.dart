@@ -131,7 +131,7 @@ class _AuthScreenState extends State<AuthScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              _isRegisterMode ? 'Crear cuenta' : 'Iniciar sesión',
+              _isRegisterMode ? 'Crear cuenta de paciente' : 'Iniciar sesión',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.titleLarge,
             ),

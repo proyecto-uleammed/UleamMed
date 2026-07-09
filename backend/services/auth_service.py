@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.core.config import settings
+from backend.core.roles import UserRole
 from backend.core.security import (
     create_access_token,
     create_refresh_token,
@@ -34,6 +35,7 @@ def create_user(db: Session, payload: UserCreate) -> User:
         email=payload.email.lower(),
         full_name=payload.full_name,
         hashed_password=generate_password_hash(payload.password),
+        role=UserRole.PATIENT,
     )
     db.add(user)
     db.commit()

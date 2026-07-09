@@ -11,6 +11,12 @@ Ya esta integrado en `main`:
 - Frontend Flutter dentro de `mobile/`.
 - Pantalla inicial Flutter para iniciar sesion, crear cuenta o recuperar contrasena de forma preparada.
 - Sesion movil persistida con almacenamiento seguro, restauracion automatica, refresh token y logout.
+- Rol funcional persistido en PostgreSQL:
+  - Todas las cuentas publicas se registran como `patient`.
+  - Flutter obtiene el rol desde `/api/v1/users/me`.
+  - El usuario no puede elegir ni cambiar su rol desde la aplicacion.
+  - Los paneles de cuidador, medico y administrador permanecen ocultos hasta
+    que sus permisos se implementen en backend.
 - Perfil basico editable desde Flutter usando `/api/v1/users/me`.
 - Perfil medico local-first con enfermedades, alergias, indicaciones,
   contacto de emergencia y consentimiento para compartir con cuidadores.
@@ -40,6 +46,8 @@ No romper estas reglas:
 - No subir `.env`, credenciales Firebase, llaves AWS ni secretos.
 - No asumir que todos los endpoints ya usan el MER completo. Auth, perfil y medicamentos ya usan tablas reales; dispositivos, notificaciones push y partes medicas avanzadas siguen en desarrollo/demo.
 - No reemplazar el flujo de autenticacion sin revisar `backend/core/security.py`, `backend/api/deps.py` y `mobile/lib/services/api_service.dart`.
+- No agregar nuevamente un selector local de roles. PostgreSQL y FastAPI son
+  la unica fuente valida para autorizar el panel del usuario.
 - No editar carpetas generadas de Flutter (`android`, `ios`, `macos`, `windows`, `linux`, `web`) salvo que el cambio sea especifico de plataforma.
 - No cambiar `10.0.2.2` por `127.0.0.1` para Android: el emulador usa `10.0.2.2` para llegar al backend de la computadora.
 - No tratar CI-AWS como despliegue completo. Hoy solo valida y prepara/publica imagen en ECR cuando se configuren los secretos.
@@ -114,7 +122,7 @@ La estructura MER ya fue incorporada con modelos SQLAlchemy en `backend/models` 
 
 Incluye, entre otras, estas tablas:
 
-- `users`: tabla oficial actual para auth del MVP.
+- `users`: tabla oficial para auth y rol funcional del MVP.
 - `password_reset_tokens`: codigos temporales de recuperacion.
 - `medications`: medicamentos personales creados por cada usuario.
 - `guardians`, `caregivers`, `older_adults`, `caregiver_older_adults`.
@@ -125,6 +133,10 @@ Incluye, entre otras, estas tablas:
 La linea oficial nueva usa nombres tecnicos en ingles para tablas, columnas, modelos y endpoints. Los nombres en espanol solo quedan en migraciones historicas y como referencia de transicion, no como modelos activos nuevos.
 
 Alembic toma la URL desde `DATABASE_URL`. No se deben guardar credenciales reales en `backend/alembic.ini`.
+
+Flutter no consulta directamente el Data API de Supabase. Una migracion revoca
+los permisos de `anon` y `authenticated` sobre las tablas y secuencias de
+`public`; todo acceso de la app debe pasar por FastAPI y su JWT propio.
 
 Comandos utiles:
 
@@ -348,7 +360,8 @@ Documentacion:
 
 ## Pendientes conocidos
 
-- Conectar medicamentos, cuidadores, historial, cumplimiento y notificaciones a las tablas reales del MER.
+- Implementar vinculacion, permisos y alertas reales para cuidadores.
+- Conectar historial, cumplimiento y notificaciones a las tablas reales del MER.
 - Reemplazar almacenamiento en memoria por persistencia real usando el MER.
 - Reemplazar datos semilla locales de citas, actividades y emergencias por
   endpoints reales cuando existan.

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from backend.api.deps import get_current_user
+from backend.api.deps import get_current_patient
 from backend.core.database import get_db
 from backend.models.user import User
 from backend.schemas.medication import (
@@ -26,7 +26,7 @@ router = APIRouter(prefix="/medications", tags=["medications"])
 
 @router.get("", response_model=MedicationListResponse)
 def list_my_medications(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_patient),
     db: Session = Depends(get_db),
 ) -> MedicationListResponse:
     """Lista los medicamentos programados para el usuario autenticado."""
@@ -36,7 +36,7 @@ def list_my_medications(
 @router.post("", response_model=MedicationRead, status_code=status.HTTP_201_CREATED)
 def create_my_medication(
     payload: MedicationCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_patient),
     db: Session = Depends(get_db),
 ) -> MedicationRead:
     """Crea un medicamento para el usuario autenticado."""
@@ -50,7 +50,7 @@ def create_my_medication(
 def update_my_medication(
     medication_id: int,
     payload: MedicationUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_patient),
     db: Session = Depends(get_db),
 ) -> MedicationRead:
     """Actualiza un medicamento del usuario autenticado."""
@@ -66,7 +66,7 @@ def update_my_medication(
 @router.delete("/{medication_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_my_medication(
     medication_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_patient),
     db: Session = Depends(get_db),
 ) -> None:
     """Elimina logicamente un medicamento del usuario autenticado."""
@@ -78,7 +78,7 @@ def delete_my_medication(
 @router.post("/{medication_id}/take", response_model=MedicationMarkResponse)
 def mark_my_medication(
     medication_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_patient),
     db: Session = Depends(get_db),
 ) -> MedicationMarkResponse:
     """Marca un medicamento como tomado para el usuario autenticado."""

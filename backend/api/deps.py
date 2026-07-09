@@ -3,6 +3,7 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
 from backend.core.database import get_db
+from backend.core.roles import UserRole
 from backend.core.security import decode_token
 from backend.models.user import User
 from backend.services.auth_service import get_user_by_id
@@ -44,3 +45,13 @@ def get_current_user(
         raise invalid_credentials
 
     return user
+
+
+def get_current_patient(current_user: User = Depends(get_current_user)) -> User:
+    """Autoriza unicamente cuentas con el rol funcional de paciente."""
+    if current_user.role != UserRole.PATIENT:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Esta funcion esta disponible unicamente para pacientes",
+        )
+    return current_user

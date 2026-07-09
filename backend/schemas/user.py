@@ -1,5 +1,7 @@
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from backend.core.roles import UserRole
+
 
 class UserBase(BaseModel):
     """Campos compartidos entre crear, leer y actualizar usuarios."""
@@ -21,6 +23,7 @@ class UserCreate(UserBase):
     """Datos que la app envia para registrar una cuenta."""
 
     password: str = Field(..., min_length=8, max_length=128, examples=["clave-segura-123"])
+    model_config = ConfigDict(extra="forbid")
 
 
 class UserUpdate(BaseModel):
@@ -34,6 +37,7 @@ class UserRead(UserBase):
 
     id: int
     is_active: bool
+    role: UserRole
 
     # Permite convertir modelos SQLAlchemy directamente a respuesta Pydantic.
     model_config = ConfigDict(from_attributes=True)

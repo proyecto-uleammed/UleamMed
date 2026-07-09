@@ -169,7 +169,12 @@ class _UleamMedAppState extends State<UleamMedApp> with WidgetsBindingObserver {
         onUnlocked: () => setState(() => _locked = false),
       );
     }
-    return MainShell(api: _api, onLogout: _handleLogout, settings: _settings);
+    return MainShell(
+      api: _api,
+      onLogout: _handleLogout,
+      settings: _settings,
+      role: _session!.user.role,
+    );
   }
 }
 

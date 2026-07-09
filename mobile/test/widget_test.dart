@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:uleam_med/main.dart';
+import 'package:uleam_med/models/app_role.dart';
 import 'package:uleam_med/services/api_service.dart';
 import 'package:uleam_med/services/app_settings.dart';
 import 'package:uleam_med/services/local_store.dart';
@@ -72,6 +73,7 @@ class _FakeApi implements UleamMedApi {
     email: 'roberto@uleammed.test',
     fullName: 'Roberto Andrade',
     isActive: true,
+    role: AppRole.patient,
   );
 
   @override
@@ -102,7 +104,13 @@ class _FakeApi implements UleamMedApi {
     currentSession = AppSession(
       apiUrl: 'http://localhost:8000',
       environment: 'test',
-      user: AppUser(id: 2, email: email, fullName: fullName, isActive: true),
+      user: AppUser(
+        id: 2,
+        email: email,
+        fullName: fullName,
+        isActive: true,
+        role: AppRole.patient,
+      ),
     );
     return currentSession!;
   }
@@ -129,6 +137,7 @@ class _FakeApi implements UleamMedApi {
         email: previous.user.email,
         fullName: fullName,
         isActive: previous.user.isActive,
+        role: previous.user.role,
       ),
     );
     return currentSession!;
@@ -362,6 +371,20 @@ void main() {
     expect(find.text('Iniciar sesión'), findsOneWidget);
   });
 
+  testWidgets('registration is explicitly for a patient account', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      UleamMedApp(api: _FakeApi(), settingsController: _testSettings()),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Necesito crear una cuenta'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Crear cuenta de paciente'), findsOneWidget);
+  });
+
   testWidgets('authenticates and loads home screen', (
     WidgetTester tester,
   ) async {
@@ -395,6 +418,51 @@ void main() {
 
     expect(find.text('Hola, Roberto 👋'), findsOneWidget);
     expect(find.text('Iniciar sesión'), findsNothing);
+  });
+
+  testWidgets('patient cannot change role from settings', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      UleamMedApp(api: _FakeApi(), settingsController: _testSettings()),
+    );
+    await tester.pumpAndSettle();
+    await _loginWithForm(tester);
+
+    await tester.tap(find.byIcon(Icons.settings));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Rol y panel'), findsNothing);
+    expect(find.text('Administrador'), findsNothing);
+    expect(find.text('Cuidador'), findsNothing);
+  });
+
+  testWidgets('unsupported backend role does not open patient panel', (
+    WidgetTester tester,
+  ) async {
+    const unsupportedSession = AppSession(
+      apiUrl: 'http://localhost:8000',
+      environment: 'test',
+      user: AppUser(
+        id: 3,
+        email: 'cuidador@uleammed.test',
+        fullName: 'Cuidador Demo',
+        isActive: true,
+        role: AppRole.caregiver,
+      ),
+    );
+
+    await tester.pumpWidget(
+      UleamMedApp(
+        api: _FakeApi(restoredSession: unsupportedSession),
+        settingsController: _testSettings(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Acceso no disponible'), findsOneWidget);
+    expect(find.textContaining('aun no esta habilitado'), findsOneWidget);
+    expect(find.text('Medicinas'), findsNothing);
   });
 
   testWidgets('logout returns to login screen', (WidgetTester tester) async {

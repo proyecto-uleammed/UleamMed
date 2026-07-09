@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:uleam_med/models/app_role.dart';
 import 'package:uleam_med/services/api_service.dart';
 import 'package:uleam_med/services/local_store.dart';
 
@@ -73,6 +74,7 @@ void main() {
       expect(session, isNotNull);
       expect(session!.user.email, 'roberto@uleammed.test');
       expect(session.user.fullName, 'Roberto Andrade');
+      expect(session.user.role, AppRole.patient);
     });
 
     test(
@@ -234,5 +236,6 @@ Map<String, dynamic> _userJson({required String fullName}) {
     'email': 'roberto@uleammed.test',
     'full_name': fullName,
     'is_active': true,
+    'role': 'patient',
   };
 }

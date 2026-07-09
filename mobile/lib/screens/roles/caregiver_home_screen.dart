@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../models/app_role.dart';
 import '../../services/api_service.dart';
 import '../../services/app_settings.dart';
 import '../../theme/app_theme.dart';

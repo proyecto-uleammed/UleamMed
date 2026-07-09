@@ -23,31 +23,10 @@ enum FontScaleOption {
   }
 }
 
-/// Rol visible dentro de la app (PB-006). El control real de permisos vive en
-/// el backend; aqui solo se adapta la interfaz.
-enum AppRole {
-  patient('Paciente'),
-  caregiver('Cuidador'),
-  professional('Medico'),
-  admin('Administrador');
-
-  const AppRole(this.label);
-
-  final String label;
-
-  static AppRole fromJson(Object? value) {
-    return AppRole.values.firstWhere(
-      (role) => role.name == value,
-      orElse: () => AppRole.patient,
-    );
-  }
-}
-
 @immutable
 class AppSettings {
   const AppSettings({
     this.fontScale = FontScaleOption.normal,
-    this.role = AppRole.patient,
     this.onboardingSeen = false,
     this.termsAcceptedVersion = '',
     this.appLockEnabled = false,
@@ -58,7 +37,6 @@ class AppSettings {
   factory AppSettings.fromJson(Map<String, dynamic> json) {
     return AppSettings(
       fontScale: FontScaleOption.fromJson(json['fontScale']),
-      role: AppRole.fromJson(json['role']),
       onboardingSeen: json['onboardingSeen'] == true,
       termsAcceptedVersion: json['termsAcceptedVersion']?.toString() ?? '',
       appLockEnabled: json['appLockEnabled'] == true,
@@ -68,7 +46,6 @@ class AppSettings {
   }
 
   final FontScaleOption fontScale;
-  final AppRole role;
   final bool onboardingSeen;
   final String termsAcceptedVersion;
   final bool appLockEnabled;
@@ -81,7 +58,6 @@ class AppSettings {
 
   AppSettings copyWith({
     FontScaleOption? fontScale,
-    AppRole? role,
     bool? onboardingSeen,
     String? termsAcceptedVersion,
     bool? appLockEnabled,
@@ -90,7 +66,6 @@ class AppSettings {
   }) {
     return AppSettings(
       fontScale: fontScale ?? this.fontScale,
-      role: role ?? this.role,
       onboardingSeen: onboardingSeen ?? this.onboardingSeen,
       termsAcceptedVersion: termsAcceptedVersion ?? this.termsAcceptedVersion,
       appLockEnabled: appLockEnabled ?? this.appLockEnabled,
@@ -102,7 +77,6 @@ class AppSettings {
   Map<String, dynamic> toJson() {
     return {
       'fontScale': fontScale.name,
-      'role': role.name,
       'onboardingSeen': onboardingSeen,
       'termsAcceptedVersion': termsAcceptedVersion,
       'appLockEnabled': appLockEnabled,
@@ -170,10 +144,6 @@ class AppSettingsController extends ChangeNotifier {
 
   Future<void> setFontScale(FontScaleOption option) {
     return update(_settings.copyWith(fontScale: option));
-  }
-
-  Future<void> setRole(AppRole role) {
-    return update(_settings.copyWith(role: role));
   }
 
   Future<void> markOnboardingSeen() {
