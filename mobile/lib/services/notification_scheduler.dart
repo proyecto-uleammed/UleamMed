@@ -52,21 +52,32 @@ class NotificationScheduler {
       return false;
     }
     for (final alarm in ringing) {
-      final occurrences = _decodeOccurrences(alarm.payload);
-      if (occurrences.isNotEmpty) {
-        _onAlarmRinging?.call(alarm.id, occurrences);
+      if (_handledRinging.add(alarm.id)) {
+        final occurrences = _decodeOccurrences(alarm.payload);
+        if (occurrences.isNotEmpty) {
+          _onAlarmRinging?.call(alarm.id, occurrences);
+        }
       }
     }
     return true;
   }
 
   Future<void> reconcile(List<MedicationItem> medications) async {
-    await cancelAll();
+    await _cancelScheduledAlarms();
     final occurrences = medications
         .map((medication) => _scheduleService.nextOccurrence(medication))
         .whereType<MedicationOccurrence>()
         .toList();
     await _scheduleGrouped(occurrences);
+  }
+
+  Future<void> _cancelScheduledAlarms() async {
+    final alarms = await Alarm.getAlarms();
+    for (final alarm in alarms) {
+      if (!await Alarm.isRinging(alarm.id)) {
+        await Alarm.stop(alarm.id);
+      }
+    }
   }
 
   Future<void> schedule(MedicationItem medication) async {
