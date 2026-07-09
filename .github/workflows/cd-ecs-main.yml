@@ -1,0 +1,65 @@
+name: CD ECS Main
+
+on:
+  workflow_run:
+    workflows:
+      - CI AWS ECR Main
+    types:
+      - completed
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: cd-ecs-main
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  ROL_IAM_OIDC: ${{ secrets.AWS_ROLE_ARN }}
+  ECS_CLUSTER: ${{ vars.AWS_ECS_CLUSTER }}
+  ECS_SERVICE: ${{ vars.AWS_ECS_SERVICE }}
+
+jobs:
+  desplegar_ecs:
+    name: Desplegar backend en ECS
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main')
+
+    steps:
+      - name: Validar configuracion requerida
+        run: |
+          test -n "${AWS_REGION}" || (echo "Falta variable AWS_REGION." && exit 1)
+          test -n "${ROL_IAM_OIDC}" || (echo "Falta secreto AWS_ROLE_ARN." && exit 1)
+          test -n "${ECS_CLUSTER}" || (echo "Falta variable AWS_ECS_CLUSTER." && exit 1)
+          test -n "${ECS_SERVICE}" || (echo "Falta variable AWS_ECS_SERVICE." && exit 1)
+
+      - name: Configurar credenciales AWS por OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.ROL_IAM_OIDC }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Forzar nueva implementacion del servicio ECS
+        run: |
+          aws ecs update-service \
+            --cluster "${ECS_CLUSTER}" \
+            --service "${ECS_SERVICE}" \
+            --force-new-deployment
+
+      - name: Esperar estabilidad del servicio
+        run: |
+          aws ecs wait services-stable \
+            --cluster "${ECS_CLUSTER}" \
+            --services "${ECS_SERVICE}"
+
+      - name: Publicar resumen
+        run: |
+          echo "Despliegue completado en ECS." >> "$GITHUB_STEP_SUMMARY"
+          echo "Cluster: ${ECS_CLUSTER}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Servicio: ${ECS_SERVICE}" >> "$GITHUB_STEP_SUMMARY"
