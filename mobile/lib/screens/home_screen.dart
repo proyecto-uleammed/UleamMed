@@ -56,11 +56,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final textScale = MediaQuery.textScalerOf(context).scale(1.0);
+    final expandedHeight = 210.0 + (textScale - 1.0) * 56;
+
     return Scaffold(
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
-            expandedHeight: 210,
+            expandedHeight: expandedHeight,
             pinned: true,
             actions: [
               if (widget.settings != null)
