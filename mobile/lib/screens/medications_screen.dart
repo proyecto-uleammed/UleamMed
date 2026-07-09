@@ -5,12 +5,14 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../services/api_service.dart';
+import '../services/notification_scheduler.dart';
 import '../theme/app_theme.dart';
 
 class MedicationsScreen extends StatefulWidget {
-  const MedicationsScreen({super.key, this.api});
+  const MedicationsScreen({super.key, this.api, this.notificationScheduler});
 
   final UleamMedApi? api;
+  final NotificationScheduler? notificationScheduler;
 
   @override
   State<MedicationsScreen> createState() => _MedicationsScreenState();
@@ -23,6 +25,7 @@ class _MedicationsScreenState extends State<MedicationsScreen> {
 
   Future<_MedicationData> _loadData() async {
     final medications = await _api.listMedications();
+    await widget.notificationScheduler?.reconcile(medications);
     final confirmations = await _api.listDoseConfirmations();
     return _MedicationData(
       medications: medications,
@@ -88,11 +91,13 @@ class _MedicationsScreenState extends State<MedicationsScreen> {
         return _MedicationForm(
           medication: medication,
           onSave: (item) async {
-            await _api.saveMedication(item);
+            final savedMedication = await _api.saveMedication(item);
+            await widget.notificationScheduler?.schedule(savedMedication);
           },
           onDelete: medication == null
               ? null
               : () async {
+                  await widget.notificationScheduler?.cancel(medication.id);
                   await _api.deleteMedication(medication.id);
                 },
         );
@@ -121,6 +126,8 @@ class _MedicationsScreenState extends State<MedicationsScreen> {
         return '$name marcado como omitido';
       case DoseStatus.postponed:
         return '$name pospuesto';
+      case DoseStatus.missed:
+        return '$name no fue confirmado';
     }
   }
 
@@ -166,18 +173,11 @@ class _MedicationsScreenState extends State<MedicationsScreen> {
                     medication: medication,
                     isSaving: _savingIds.contains(medication.id),
                     onEdit: () => _openMedicationForm(medication),
-                    onTaken: () => _recordStatus(
-                      medication,
-                      DoseStatus.taken,
-                    ),
-                    onPostponed: () => _recordStatus(
-                      medication,
-                      DoseStatus.postponed,
-                    ),
-                    onOmitted: () => _recordStatus(
-                      medication,
-                      DoseStatus.omitted,
-                    ),
+                    onTaken: () => _recordStatus(medication, DoseStatus.taken),
+                    onPostponed: () =>
+                        _recordStatus(medication, DoseStatus.postponed),
+                    onOmitted: () =>
+                        _recordStatus(medication, DoseStatus.omitted),
                   ),
                 ),
               const SizedBox(height: 20),
@@ -338,9 +338,7 @@ class _MedicationCard extends StatelessWidget {
                       ],
                       const SizedBox(height: 8),
                       Chip(
-                        label: Text(
-                          medication.taken ? 'Tomado' : 'Pendiente',
-                        ),
+                        label: Text(medication.taken ? 'Tomado' : 'Pendiente'),
                         avatar: Icon(
                           medication.taken ? Icons.check : Icons.schedule,
                           size: 18,
@@ -453,7 +451,10 @@ class _ConfirmationHistory extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Historial de tomas', style: Theme.of(context).textTheme.headlineMedium),
+        Text(
+          'Historial de tomas',
+          style: Theme.of(context).textTheme.headlineMedium,
+        ),
         const SizedBox(height: 10),
         if (confirmations.isEmpty)
           Text(
@@ -461,7 +462,9 @@ class _ConfirmationHistory extends StatelessWidget {
             style: Theme.of(context).textTheme.bodyMedium,
           )
         else
-          ...confirmations.take(6).map(
+          ...confirmations
+              .take(6)
+              .map(
                 (confirmation) => ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: Icon(
@@ -486,6 +489,8 @@ class _ConfirmationHistory extends StatelessWidget {
         return Icons.cancel;
       case DoseStatus.postponed:
         return Icons.snooze;
+      case DoseStatus.missed:
+        return Icons.schedule;
     }
   }
 
@@ -497,6 +502,8 @@ class _ConfirmationHistory extends StatelessWidget {
         return 'Omitido';
       case DoseStatus.postponed:
         return 'Pospuesto';
+      case DoseStatus.missed:
+        return 'No confirmado';
     }
   }
 
@@ -508,11 +515,7 @@ class _ConfirmationHistory extends StatelessWidget {
 }
 
 class _MedicationForm extends StatefulWidget {
-  const _MedicationForm({
-    required this.onSave,
-    this.medication,
-    this.onDelete,
-  });
+  const _MedicationForm({required this.onSave, this.medication, this.onDelete});
 
   final MedicationItem? medication;
   final Future<void> Function(MedicationItem medication) onSave;
@@ -522,28 +525,46 @@ class _MedicationForm extends StatefulWidget {
   State<_MedicationForm> createState() => _MedicationFormState();
 }
 
+enum _DurationMode { days, endDate, permanent }
+
 class _MedicationFormState extends State<_MedicationForm> {
   final _formKey = GlobalKey<FormState>();
   late final _nameController = TextEditingController(
     text: widget.medication?.name ?? '',
   );
   late final _doseController = TextEditingController(
-    text: widget.medication?.dose ?? '',
-  );
-  late final _timeController = TextEditingController(
-    text: widget.medication?.time ?? '',
-  );
-  late final _frequencyController = TextEditingController(
-    text: widget.medication?.frequency ?? 'Diario',
-  );
-  late final _durationController = TextEditingController(
-    text: widget.medication?.duration ?? '',
+    text:
+        widget.medication?.doseAmount?.toString() ??
+        _numericDose(widget.medication?.dose),
   );
   late final _instructionsController = TextEditingController(
     text: widget.medication?.instructions ?? '',
   );
   late bool _isImportant = widget.medication?.isImportant ?? true;
   late String _photoPath = widget.medication?.photoPath ?? '';
+  late String _doseUnit = widget.medication?.doseUnit.isNotEmpty == true
+      ? widget.medication!.doseUnit
+      : 'mg';
+  late MedicationScheduleMode _scheduleMode =
+      widget.medication?.effectiveSchedule.mode ??
+      MedicationScheduleMode.fixedTimes;
+  late int _intervalHours =
+      widget.medication?.effectiveSchedule.intervalHours ?? 12;
+  late List<String> _times = List<String>.from(
+    widget.medication?.effectiveSchedule.times ?? const ['08:00'],
+  );
+  late final Set<int> _weekdays = Set<int>.from(
+    widget.medication?.effectiveSchedule.weekdays ??
+        const [1, 2, 3, 4, 5, 6, 7],
+  );
+  late _DurationMode _durationMode =
+      widget.medication?.effectiveSchedule.endDate == null
+      ? _DurationMode.permanent
+      : _DurationMode.endDate;
+  late DateTime _endDate =
+      widget.medication?.effectiveSchedule.endDate ??
+      DateTime.now().add(const Duration(days: 7));
+  int _durationDays = 7;
   final _picker = ImagePicker();
   bool _isSaving = false;
 
@@ -551,9 +572,6 @@ class _MedicationFormState extends State<_MedicationForm> {
   void dispose() {
     _nameController.dispose();
     _doseController.dispose();
-    _timeController.dispose();
-    _frequencyController.dispose();
-    _durationController.dispose();
     _instructionsController.dispose();
     super.dispose();
   }
@@ -568,12 +586,10 @@ class _MedicationFormState extends State<_MedicationForm> {
       if (picked == null) {
         return;
       }
-      final directory = await getApplicationDocumentsDirectory();
+      final directory = await getTemporaryDirectory();
       final fileName =
           'med_${DateTime.now().millisecondsSinceEpoch}${_extension(picked.name)}';
-      final saved = await File(
-        picked.path,
-      ).copy('${directory.path}/$fileName');
+      final saved = await File(picked.path).copy('${directory.path}/$fileName');
       if (mounted) {
         setState(() => _photoPath = saved.path);
       }
@@ -633,7 +649,14 @@ class _MedicationFormState extends State<_MedicationForm> {
   }
 
   Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) {
+    if (!_formKey.currentState!.validate() ||
+        _weekdays.isEmpty ||
+        _times.isEmpty) {
+      if (_weekdays.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Selecciona al menos un día')),
+        );
+      }
       return;
     }
     setState(() {
@@ -641,20 +664,50 @@ class _MedicationFormState extends State<_MedicationForm> {
     });
     final now = DateTime.now();
     final id = widget.medication?.id ?? _slug(_nameController.text, now);
+    final amount = double.parse(_doseController.text.trim());
+    final startDate =
+        widget.medication?.effectiveSchedule.startDate ??
+        DateTime(now.year, now.month, now.day);
+    final endDate = switch (_durationMode) {
+      _DurationMode.permanent => null,
+      _DurationMode.days => startDate.add(Duration(days: _durationDays - 1)),
+      _DurationMode.endDate => _endDate,
+    };
+    final sortedTimes = List<String>.from(_times)..sort();
+    final schedule = MedicationSchedule(
+      mode: _scheduleMode,
+      intervalHours: _scheduleMode == MedicationScheduleMode.interval
+          ? _intervalHours
+          : null,
+      times: _scheduleMode == MedicationScheduleMode.interval
+          ? [sortedTimes.first]
+          : sortedTimes,
+      weekdays: _weekdays.toList()..sort(),
+      startDate: startDate,
+      endDate: endDate,
+    );
+    final dose = '${_formatAmount(amount)} $_doseUnit';
     final item = MedicationItem(
       id: id,
       name: _nameController.text.trim(),
-      dose: _doseController.text.trim(),
-      time: _timeController.text.trim(),
+      dose: dose,
+      doseAmount: amount,
+      doseUnit: _doseUnit,
+      time: schedule.times.first,
       taken: widget.medication?.taken ?? false,
-      frequency: _frequencyController.text.trim(),
-      duration: _durationController.text.trim(),
+      frequency: _scheduleMode == MedicationScheduleMode.interval
+          ? 'Cada $_intervalHours horas'
+          : '${schedule.times.length} veces al día',
+      duration: endDate == null
+          ? 'Permanente'
+          : '${endDate.difference(startDate).inDays + 1} días',
       instructions: _instructionsController.text.trim(),
       isImportant: _isImportant,
       syncStatus: SyncStatus.pending,
       createdAt: widget.medication?.createdAt ?? now,
       updatedAt: now,
       photoPath: _photoPath,
+      schedule: schedule,
     );
     await widget.onSave(item);
     if (mounted) {
@@ -679,6 +732,78 @@ class _MedicationFormState extends State<_MedicationForm> {
         .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
         .replaceAll(RegExp(r'^-|-$'), '');
     return '${normalized.isEmpty ? 'medicamento' : normalized}-${now.millisecondsSinceEpoch}';
+  }
+
+  static String _numericDose(String? value) {
+    return RegExp(
+          r'\d+(?:[.,]\d+)?',
+        ).firstMatch(value ?? '')?.group(0)?.replaceAll(',', '.') ??
+        '';
+  }
+
+  String _formatAmount(double value) {
+    return value == value.roundToDouble()
+        ? value.toInt().toString()
+        : value.toString();
+  }
+
+  Future<void> _pickTime({int? index}) async {
+    final current = index == null ? _times.first : _times[index];
+    final parts = current.split(':');
+    final selected = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(
+        hour: int.tryParse(parts.first) ?? 8,
+        minute: int.tryParse(parts.last) ?? 0,
+      ),
+      helpText: 'Selecciona la hora de la toma',
+    );
+    if (selected == null) {
+      return;
+    }
+    final value =
+        '${selected.hour.toString().padLeft(2, '0')}:'
+        '${selected.minute.toString().padLeft(2, '0')}';
+    setState(() {
+      if (index == null) {
+        _times.add(value);
+      } else {
+        _times[index] = value;
+      }
+      _times = _times.toSet().toList()..sort();
+    });
+  }
+
+  Future<void> _pickEndDate() async {
+    final selected = await showDatePicker(
+      context: context,
+      initialDate: _endDate,
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 3650)),
+      helpText: 'Selecciona la fecha final',
+    );
+    if (selected != null) {
+      setState(() => _endDate = selected);
+    }
+  }
+
+  String get _scheduleSummary {
+    final amount = _doseController.text.trim().isEmpty
+        ? 'Dosis pendiente'
+        : '${_doseController.text.trim()} $_doseUnit';
+    final timeText = _scheduleMode == MedicationScheduleMode.interval
+        ? 'cada $_intervalHours horas desde ${_times.first}'
+        : 'a las ${(List<String>.from(_times)..sort()).join(' y ')}';
+    final dayText = _weekdays.length == 7
+        ? 'todos los días'
+        : '${_weekdays.length} días por semana';
+    final durationText = switch (_durationMode) {
+      _DurationMode.permanent => 'sin fecha final',
+      _DurationMode.days => 'durante $_durationDays días',
+      _DurationMode.endDate =>
+        'hasta ${_endDate.day}/${_endDate.month}/${_endDate.year}',
+    };
+    return '$amount, $timeText, $dayText, $durationText.';
   }
 
   @override
@@ -757,30 +882,201 @@ class _MedicationFormState extends State<_MedicationForm> {
             ),
             _FormField(
               controller: _doseController,
-              label: 'Dosis',
+              label: 'Cantidad',
               icon: Icons.science,
-              hint: 'Ej. 500 mg',
-              validator: _required,
+              hint: 'Ej. 150',
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              validator: (value) {
+                final amount = double.tryParse((value ?? '').trim());
+                return amount == null || amount <= 0
+                    ? 'Ingresa una cantidad válida'
+                    : null;
+              },
             ),
-            _FormField(
-              controller: _timeController,
-              label: 'Horario',
-              icon: Icons.schedule,
-              hint: 'Ej. 08:00',
-              validator: _required,
+            DropdownButtonFormField<String>(
+              initialValue: _doseUnit,
+              decoration: const InputDecoration(
+                labelText: 'Unidad',
+                prefixIcon: Icon(Icons.straighten),
+                border: OutlineInputBorder(),
+              ),
+              items:
+                  const ['mg', 'g', 'mcg', 'ml', 'tableta', 'gotas', 'unidades']
+                      .map(
+                        (unit) =>
+                            DropdownMenuItem(value: unit, child: Text(unit)),
+                      )
+                      .toList(),
+              onChanged: (value) => setState(() => _doseUnit = value ?? 'mg'),
             ),
-            _FormField(
-              controller: _frequencyController,
-              label: 'Frecuencia',
-              icon: Icons.repeat,
-              hint: 'Diario, cada 8 horas...',
+            const SizedBox(height: 18),
+            Text('Frecuencia', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 8),
+            SegmentedButton<MedicationScheduleMode>(
+              segments: const [
+                ButtonSegment(
+                  value: MedicationScheduleMode.interval,
+                  icon: Icon(Icons.repeat),
+                  label: Text('Cada X horas'),
+                ),
+                ButtonSegment(
+                  value: MedicationScheduleMode.fixedTimes,
+                  icon: Icon(Icons.schedule),
+                  label: Text('Horas específicas'),
+                ),
+              ],
+              selected: {_scheduleMode},
+              onSelectionChanged: (selection) {
+                setState(() => _scheduleMode = selection.first);
+              },
             ),
-            _FormField(
-              controller: _durationController,
-              label: 'Duracion',
-              icon: Icons.calendar_today,
-              hint: '7 dias, permanente...',
+            const SizedBox(height: 14),
+            if (_scheduleMode == MedicationScheduleMode.interval)
+              DropdownButtonFormField<int>(
+                initialValue: _intervalHours,
+                decoration: const InputDecoration(
+                  labelText: 'Intervalo',
+                  prefixIcon: Icon(Icons.timelapse),
+                  border: OutlineInputBorder(),
+                ),
+                items: const [2, 4, 6, 8, 12, 24]
+                    .map(
+                      (hours) => DropdownMenuItem(
+                        value: hours,
+                        child: Text('Cada $hours horas'),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (value) {
+                  setState(() => _intervalHours = value ?? 12);
+                },
+              ),
+            const SizedBox(height: 12),
+            Text(
+              _scheduleMode == MedicationScheduleMode.interval
+                  ? 'Hora inicial'
+                  : 'Horas de toma',
+              style: Theme.of(context).textTheme.titleMedium,
             ),
+            const SizedBox(height: 6),
+            ..._times.asMap().entries.map(
+              (entry) => ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(
+                  Icons.access_time,
+                  color: AppColors.primary,
+                ),
+                title: Text(entry.value),
+                trailing:
+                    _scheduleMode == MedicationScheduleMode.fixedTimes &&
+                        _times.length > 1
+                    ? IconButton(
+                        tooltip: 'Quitar hora',
+                        onPressed: () {
+                          setState(() => _times.removeAt(entry.key));
+                        },
+                        icon: const Icon(Icons.delete_outline),
+                      )
+                    : const Icon(Icons.edit),
+                onTap: () => _pickTime(index: entry.key),
+              ),
+            ),
+            if (_scheduleMode == MedicationScheduleMode.fixedTimes &&
+                _times.length < 12)
+              OutlinedButton.icon(
+                onPressed: _pickTime,
+                icon: const Icon(Icons.add_alarm),
+                label: const Text('Agregar otra hora'),
+              ),
+            const SizedBox(height: 16),
+            Text(
+              'Días de la semana',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children:
+                  const [
+                    (1, 'Lun'),
+                    (2, 'Mar'),
+                    (3, 'Mié'),
+                    (4, 'Jue'),
+                    (5, 'Vie'),
+                    (6, 'Sáb'),
+                    (7, 'Dom'),
+                  ].map((day) {
+                    final selected = _weekdays.contains(day.$1);
+                    return FilterChip(
+                      label: Text(day.$2),
+                      selected: selected,
+                      onSelected: (_) {
+                        setState(() {
+                          selected
+                              ? _weekdays.remove(day.$1)
+                              : _weekdays.add(day.$1);
+                        });
+                      },
+                    );
+                  }).toList(),
+            ),
+            const SizedBox(height: 18),
+            Text('Duración', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 8),
+            SegmentedButton<_DurationMode>(
+              segments: const [
+                ButtonSegment(value: _DurationMode.days, label: Text('Días')),
+                ButtonSegment(
+                  value: _DurationMode.endDate,
+                  label: Text('Fecha final'),
+                ),
+                ButtonSegment(
+                  value: _DurationMode.permanent,
+                  label: Text('Permanente'),
+                ),
+              ],
+              selected: {_durationMode},
+              onSelectionChanged: (selection) {
+                setState(() => _durationMode = selection.first);
+              },
+            ),
+            if (_durationMode == _DurationMode.days)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Cantidad de días'),
+                subtitle: Text('$_durationDays días'),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      tooltip: 'Restar día',
+                      onPressed: _durationDays > 1
+                          ? () => setState(() => _durationDays--)
+                          : null,
+                      icon: const Icon(Icons.remove_circle_outline),
+                    ),
+                    IconButton(
+                      tooltip: 'Agregar día',
+                      onPressed: () => setState(() => _durationDays++),
+                      icon: const Icon(Icons.add_circle_outline),
+                    ),
+                  ],
+                ),
+              ),
+            if (_durationMode == _DurationMode.endDate)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.calendar_today),
+                title: const Text('Fecha final'),
+                subtitle: Text(
+                  '${_endDate.day}/${_endDate.month}/${_endDate.year}',
+                ),
+                trailing: const Icon(Icons.edit_calendar),
+                onTap: _pickEndDate,
+              ),
             _FormField(
               controller: _instructionsController,
               label: 'Instrucciones',
@@ -790,13 +1086,26 @@ class _MedicationFormState extends State<_MedicationForm> {
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('Toma importante'),
-              subtitle: const Text('Puede generar alerta al cuidador en fases online.'),
+              subtitle: const Text(
+                'Puede generar alerta al cuidador en fases online.',
+              ),
               value: _isImportant,
               onChanged: (value) {
                 setState(() {
                   _isImportant = value;
                 });
               },
+            ),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                _scheduleSummary,
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
             ),
             const SizedBox(height: 12),
             FilledButton.icon(
@@ -834,6 +1143,7 @@ class _FormField extends StatelessWidget {
     this.hint,
     this.maxLines = 1,
     this.validator,
+    this.keyboardType,
   });
 
   final TextEditingController controller;
@@ -842,6 +1152,7 @@ class _FormField extends StatelessWidget {
   final String? hint;
   final int maxLines;
   final FormFieldValidator<String>? validator;
+  final TextInputType? keyboardType;
 
   @override
   Widget build(BuildContext context) {
@@ -850,6 +1161,7 @@ class _FormField extends StatelessWidget {
       child: TextFormField(
         controller: controller,
         maxLines: maxLines,
+        keyboardType: keyboardType,
         decoration: InputDecoration(
           labelText: label,
           hintText: hint,

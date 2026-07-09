@@ -2,14 +2,24 @@ import 'package:flutter/material.dart';
 
 import '../services/api_service.dart';
 import '../services/app_settings.dart';
+import '../services/notification_scheduler.dart';
+import '../services/permission_service.dart';
 import '../theme/app_theme.dart';
 import 'settings_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key, required this.api, this.settings});
+  const ProfileScreen({
+    super.key,
+    required this.api,
+    this.settings,
+    this.permissionService,
+    this.notificationScheduler,
+  });
 
   final UleamMedApi api;
   final AppSettingsController? settings;
+  final PermissionService? permissionService;
+  final NotificationScheduler? notificationScheduler;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -142,7 +152,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => SettingsScreen(settings: widget.settings!),
+                    builder: (_) => SettingsScreen(
+                      settings: widget.settings!,
+                      api: widget.api,
+                      permissionService: widget.permissionService,
+                      notificationScheduler: widget.notificationScheduler,
+                    ),
                   ),
                 );
               },

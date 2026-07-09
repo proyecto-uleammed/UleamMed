@@ -14,7 +14,8 @@ enum SyncStatus {
 enum DoseStatus {
   taken,
   omitted,
-  postponed;
+  postponed,
+  missed;
 
   static DoseStatus fromJson(Object? value) {
     return DoseStatus.values.firstWhere(
@@ -128,6 +129,10 @@ class MedicationItem {
     this.createdAt,
     this.updatedAt,
     this.photoPath = '',
+    this.doseAmount,
+    this.doseUnit = '',
+    this.photoAvailable = false,
+    this.schedule,
   });
 
   factory MedicationItem.fromJson(Map<String, dynamic> json) {
@@ -145,6 +150,16 @@ class MedicationItem {
       createdAt: _parseDate(json['createdAt']),
       updatedAt: _parseDate(json['updatedAt']),
       photoPath: json['photoPath']?.toString() ?? '',
+      doseAmount:
+          (json['doseAmount'] as num?)?.toDouble() ??
+          double.tryParse(json['doseAmount']?.toString() ?? ''),
+      doseUnit: json['doseUnit']?.toString() ?? '',
+      photoAvailable: json['photoAvailable'] == true,
+      schedule: json['schedule'] is Map
+          ? MedicationSchedule.fromJson(
+              Map<String, dynamic>.from(json['schedule'] as Map),
+            )
+          : null,
     );
   }
 
@@ -161,6 +176,19 @@ class MedicationItem {
   final DateTime? createdAt;
   final DateTime? updatedAt;
   final String photoPath;
+  final double? doseAmount;
+  final String doseUnit;
+  final bool photoAvailable;
+  final MedicationSchedule? schedule;
+
+  MedicationSchedule get effectiveSchedule =>
+      schedule ??
+      MedicationSchedule(
+        mode: MedicationScheduleMode.fixedTimes,
+        times: [time],
+        weekdays: const [1, 2, 3, 4, 5, 6, 7],
+        startDate: createdAt ?? DateTime.now(),
+      );
 
   MedicationItem copyWith({
     String? id,
@@ -176,6 +204,10 @@ class MedicationItem {
     DateTime? createdAt,
     DateTime? updatedAt,
     String? photoPath,
+    double? doseAmount,
+    String? doseUnit,
+    bool? photoAvailable,
+    MedicationSchedule? schedule,
   }) {
     return MedicationItem(
       id: id ?? this.id,
@@ -191,6 +223,10 @@ class MedicationItem {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       photoPath: photoPath ?? this.photoPath,
+      doseAmount: doseAmount ?? this.doseAmount,
+      doseUnit: doseUnit ?? this.doseUnit,
+      photoAvailable: photoAvailable ?? this.photoAvailable,
+      schedule: schedule ?? this.schedule,
     );
   }
 
@@ -209,39 +245,79 @@ class MedicationItem {
       'createdAt': createdAt?.toIso8601String(),
       'updatedAt': updatedAt?.toIso8601String(),
       'photoPath': photoPath,
+      'doseAmount': doseAmount,
+      'doseUnit': doseUnit,
+      'photoAvailable': photoAvailable,
+      'schedule': schedule?.toJson(),
     };
+  }
+}
+
+enum MedicationScheduleMode {
+  interval,
+  fixedTimes;
+
+  String get apiValue => this == interval ? 'interval' : 'fixed_times';
+
+  static MedicationScheduleMode fromJson(Object? value) {
+    return value == 'interval' ? interval : fixedTimes;
   }
 }
 
 class MedicationSchedule {
   const MedicationSchedule({
-    required this.medicationId,
-    required this.time,
-    this.frequency = 'Diario',
-    this.instructions = '',
+    required this.mode,
+    required this.times,
+    required this.weekdays,
+    required this.startDate,
+    this.intervalHours,
+    this.endDate,
   });
 
   factory MedicationSchedule.fromJson(Map<String, dynamic> json) {
     return MedicationSchedule(
-      medicationId: json['medicationId'].toString(),
-      time: json['time'].toString(),
-      frequency: json['frequency']?.toString() ?? 'Diario',
-      instructions: json['instructions']?.toString() ?? '',
+      mode: MedicationScheduleMode.fromJson(json['mode']),
+      intervalHours: (json['interval_hours'] as num?)?.toInt(),
+      times: (json['times'] as List? ?? const [])
+          .map((value) => value.toString())
+          .toList(),
+      weekdays: (json['weekdays'] as List? ?? const [1, 2, 3, 4, 5, 6, 7])
+          .map((value) => (value as num).toInt())
+          .toList(),
+      startDate: _parseDate(json['start_date']) ?? DateTime.now(),
+      endDate: _parseDate(json['end_date']),
     );
   }
 
-  final String medicationId;
-  final String time;
-  final String frequency;
-  final String instructions;
+  final MedicationScheduleMode mode;
+  final int? intervalHours;
+  final List<String> times;
+  final List<int> weekdays;
+  final DateTime startDate;
+  final DateTime? endDate;
 
   Map<String, dynamic> toJson() {
     return {
-      'medicationId': medicationId,
-      'time': time,
-      'frequency': frequency,
-      'instructions': instructions,
+      'mode': mode.apiValue,
+      'interval_hours': intervalHours,
+      'times': times,
+      'weekdays': weekdays,
+      'start_date': _dateOnly(startDate),
+      'end_date': endDate == null ? null : _dateOnly(endDate!),
     };
+  }
+
+  String get summary {
+    final dayText = weekdays.length == 7
+        ? 'todos los días'
+        : '${weekdays.length} días por semana';
+    final endText = endDate == null
+        ? 'sin fecha final'
+        : 'hasta ${_dateOnly(endDate!)}';
+    if (mode == MedicationScheduleMode.interval) {
+      return 'Cada $intervalHours horas desde ${times.first}, $dayText, $endText';
+    }
+    return 'A las ${times.join(' y ')}, $dayText, $endText';
   }
 }
 
@@ -254,6 +330,9 @@ class DoseConfirmation {
     required this.recordedAt,
     this.note = '',
     this.syncStatus = SyncStatus.pending,
+    this.scheduledAt,
+    this.sequenceNumber = 1,
+    this.snoozedUntil,
   });
 
   factory DoseConfirmation.fromJson(Map<String, dynamic> json) {
@@ -265,6 +344,12 @@ class DoseConfirmation {
       recordedAt: _parseDate(json['recordedAt']) ?? DateTime.now(),
       note: json['note']?.toString() ?? '',
       syncStatus: SyncStatus.fromJson(json['syncStatus']),
+      scheduledAt: _parseDate(json['scheduledAt'] ?? json['scheduled_at']),
+      sequenceNumber:
+          ((json['sequenceNumber'] ?? json['sequence_number']) as num?)
+              ?.toInt() ??
+          1,
+      snoozedUntil: _parseDate(json['snoozedUntil'] ?? json['snoozed_until']),
     );
   }
 
@@ -275,6 +360,9 @@ class DoseConfirmation {
   final DateTime recordedAt;
   final String note;
   final SyncStatus syncStatus;
+  final DateTime? scheduledAt;
+  final int sequenceNumber;
+  final DateTime? snoozedUntil;
 
   DoseConfirmation copyWith({SyncStatus? syncStatus}) {
     return DoseConfirmation(
@@ -285,6 +373,9 @@ class DoseConfirmation {
       recordedAt: recordedAt,
       note: note,
       syncStatus: syncStatus ?? this.syncStatus,
+      scheduledAt: scheduledAt,
+      sequenceNumber: sequenceNumber,
+      snoozedUntil: snoozedUntil,
     );
   }
 
@@ -297,6 +388,9 @@ class DoseConfirmation {
       'recordedAt': recordedAt.toIso8601String(),
       'note': note,
       'syncStatus': syncStatus.name,
+      'scheduledAt': scheduledAt?.toIso8601String(),
+      'sequenceNumber': sequenceNumber,
+      'snoozedUntil': snoozedUntil?.toIso8601String(),
     };
   }
 }
@@ -617,4 +711,10 @@ DateTime? _parseDate(Object? value) {
     return null;
   }
   return DateTime.tryParse(value.toString());
+}
+
+String _dateOnly(DateTime value) {
+  final month = value.month.toString().padLeft(2, '0');
+  final day = value.day.toString().padLeft(2, '0');
+  return '${value.year}-$month-$day';
 }

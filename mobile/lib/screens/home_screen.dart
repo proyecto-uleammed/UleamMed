@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../services/app_settings.dart';
+import '../services/notification_scheduler.dart';
+import '../services/permission_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/action_card.dart';
 import '../widgets/upcoming_doses.dart';
@@ -20,12 +22,16 @@ class HomeScreen extends StatefulWidget {
     required this.onLogout,
     this.settings,
     this.onOpenTab,
+    this.permissionService,
+    this.notificationScheduler,
   });
 
   final UleamMedApi? api;
   final Future<void> Function() onLogout;
   final AppSettingsController? settings;
   final ValueChanged<int>? onOpenTab;
+  final PermissionService? permissionService;
+  final NotificationScheduler? notificationScheduler;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -64,8 +70,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) =>
-                            SettingsScreen(settings: widget.settings!),
+                        builder: (_) => SettingsScreen(
+                          settings: widget.settings!,
+                          api: _api,
+                          permissionService: widget.permissionService,
+                          notificationScheduler: widget.notificationScheduler,
+                        ),
                       ),
                     );
                   },
@@ -76,7 +86,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 onPressed: () async {
                   await Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => ProfileScreen(api: _api)),
+                    MaterialPageRoute(
+                      builder: (_) => ProfileScreen(
+                        api: _api,
+                        settings: widget.settings,
+                        permissionService: widget.permissionService,
+                        notificationScheduler: widget.notificationScheduler,
+                      ),
+                    ),
                   );
                   if (mounted) {
                     _refreshSession();
@@ -173,7 +190,11 @@ class _HomeScreenState extends State<HomeScreen> {
                           await Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (_) => MedicationsScreen(api: _api),
+                              builder: (_) => MedicationsScreen(
+                                api: _api,
+                                notificationScheduler:
+                                    widget.notificationScheduler,
+                              ),
                             ),
                           );
                           if (mounted) {
@@ -192,7 +213,12 @@ class _HomeScreenState extends State<HomeScreen> {
                       await Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => ProfileScreen(api: _api),
+                          builder: (_) => ProfileScreen(
+                            api: _api,
+                            settings: widget.settings,
+                            permissionService: widget.permissionService,
+                            notificationScheduler: widget.notificationScheduler,
+                          ),
                         ),
                       );
                       if (mounted) {

@@ -32,8 +32,19 @@ Ya esta integrado en `main`:
   - `PATCH /api/v1/medications/{medication_id}`
   - `DELETE /api/v1/medications/{medication_id}`
   - `POST /api/v1/medications/{medication_id}/take`
+  - `POST /api/v1/medications/{medication_id}/dose-events`
+  - `GET /api/v1/medications/dose-events`
+  - Subida, descarga y eliminacion autenticada de fotos.
   - Flutter no envia `user_id`; el backend toma el usuario desde el token.
   - El Home actualiza el resumen, por ejemplo `3 de 4 tomados hoy`.
+  - Dosis estructurada, horarios por intervalo u horas especificas, dias de
+    semana y duracion.
+- Alarmas medicas Android:
+  - Sonido y vibracion continuos hasta confirmar.
+  - Pantalla completa sobre el bloqueo con medicamento, dosis, foto e
+    instrucciones.
+  - Acciones `Tomado`, `Posponer` y `Omitir`.
+  - Funcionan offline, se restauran al reiniciar y se separan por usuario.
 - Citas y contactos de emergencia leen desde almacenamiento local con datos
   semilla para funcionar offline.
 - Notificaciones y dispositivos demo en memoria.
@@ -140,6 +151,8 @@ Incluye, entre otras, estas tablas:
 - `users`: tabla oficial para auth y rol funcional del MVP.
 - `password_reset_tokens`: codigos temporales de recuperacion.
 - `medications`: medicamentos personales creados por cada usuario.
+- `medication_schedules` y `medication_schedule_times`: horario estructurado.
+- `medication_dose_events`: tomas idempotentes para sincronizacion offline.
 - `caregiver_invitations`: codigos HMAC temporales; nunca guarda el codigo real.
 - `patient_caregiver_links`: solicitudes y vinculos directos entre cuentas.
 - `caregiver_join_attempts`: intentos usados para limitar ataques al codigo.
@@ -215,6 +228,10 @@ Variables principales:
 - `CAREGIVER_JOIN_MAX_ATTEMPTS`: intentos fallidos antes del bloqueo temporal.
 - `CAREGIVER_JOIN_WINDOW_MINUTES`: ventana usada para limitar intentos.
 - `FIREBASE_CREDENTIALS`: ruta al JSON de Firebase Admin SDK.
+- `SUPABASE_URL`: URL del proyecto para Storage.
+- `SUPABASE_SERVICE_ROLE_KEY`: clave privada usada solo por FastAPI.
+- `SUPABASE_MEDICATION_BUCKET`: bucket privado, por defecto
+  `medication-photos`.
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`: credenciales SMTP para correos reales.
 - `SMTP_FROM_EMAIL`, `SMTP_FROM_NAME`, `SMTP_USE_TLS`: remitente y seguridad SMTP.
 - `CORS_ORIGINS`: origenes permitidos para Flutter Web; en desarrollo puede usarse `*`.
@@ -323,11 +340,15 @@ flutter run -d emulator-5554 --dart-define=ULEAMMED_API_URL=http://10.0.2.2:8000
 1. Levantar backend en puerto `8000`.
 2. Abrir app Flutter en Android Emulator.
 3. Home muestra `Backend conectado`.
-4. Entrar a Medicamentos.
-5. Presionar `Marcar` en Omeprazol.
-6. El medicamento cambia a `Tomado`.
-7. El contador pasa de `2 de 4` a `3 de 4`.
-8. Al volver al Home, el card de Medicamentos tambien muestra `3 de 4 tomados hoy`.
+4. El paciente habilita notificaciones, alarmas exactas y pantalla completa.
+5. Crear un medicamento con dosis, frecuencia, dias y duracion.
+6. Confirmar que la alarma aparece en pantalla completa y sigue sonando hasta
+   elegir `Tomado`, `Posponer` u `Omitir`.
+7. Editar o eliminar el medicamento y confirmar que el aviso se reprograma o
+   cancela.
+8. El medicamento cambia a `Tomado`.
+9. El contador pasa de `2 de 4` a `3 de 4`.
+10. Al volver al Home, el card de Medicamentos tambien muestra `3 de 4 tomados hoy`.
 
 ## Validaciones antes de subir cambios
 
@@ -389,8 +410,11 @@ Documentacion:
 ## Pendientes conocidos
 
 - Implementar alertas y mensajes reales para cuidadores.
-- Agregar permisos por modulo cuando citas y perfil medico sean datos online.
-- Conectar historial, cumplimiento y notificaciones a las tablas reales del MER.
+- Agregar permisos adicionales solo cuando una funcion real los necesite.
+- Crear el bucket privado `medication-photos` cuando se configure
+  `SUPABASE_SERVICE_ROLE_KEY`:
+  `.venv/bin/python -m backend.scripts.ensure_medication_storage`.
+- Conectar el panel de cumplimiento a `medication_dose_events`.
 - Reemplazar almacenamiento en memoria por persistencia real usando el MER.
 - Reemplazar datos semilla locales de citas, actividades y emergencias por
   endpoints reales cuando existan.

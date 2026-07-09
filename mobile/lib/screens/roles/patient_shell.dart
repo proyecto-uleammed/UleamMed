@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../services/api_service.dart';
 import '../../services/app_settings.dart';
+import '../../services/notification_scheduler.dart';
+import '../../services/permission_service.dart';
 import '../../widgets/role_shell_scaffold.dart';
 import '../appointments_screen.dart';
 import '../history_screen.dart';
@@ -16,17 +18,24 @@ class PatientShell extends StatelessWidget {
     required this.api,
     required this.onLogout,
     required this.settings,
+    required this.permissionService,
+    required this.notificationScheduler,
+    this.initialTab = 0,
   });
 
   final UleamMedApi api;
   final Future<void> Function() onLogout;
   final AppSettingsController settings;
+  final PermissionService permissionService;
+  final NotificationScheduler notificationScheduler;
+  final int initialTab;
 
   @override
   Widget build(BuildContext context) {
     return RoleShellScaffold(
       api: api,
       settings: settings,
+      initialIndex: initialTab,
       destinations: const [
         NavigationDestination(
           icon: Icon(Icons.home_outlined),
@@ -59,11 +68,21 @@ class PatientShell extends StatelessWidget {
           api: api,
           onLogout: onLogout,
           settings: settings,
+          permissionService: permissionService,
+          notificationScheduler: notificationScheduler,
         ),
-        MedicationsScreen(api: api),
+        MedicationsScreen(
+          api: api,
+          notificationScheduler: notificationScheduler,
+        ),
         HistoryScreen(api: api),
         AppointmentsScreen(api: api),
-        ProfileScreen(api: api, settings: settings),
+        ProfileScreen(
+          api: api,
+          settings: settings,
+          permissionService: permissionService,
+          notificationScheduler: notificationScheduler,
+        ),
       ],
     );
   }
@@ -74,11 +93,15 @@ class _PatientHomeTab extends StatelessWidget {
     required this.api,
     required this.onLogout,
     required this.settings,
+    required this.permissionService,
+    required this.notificationScheduler,
   });
 
   final UleamMedApi api;
   final Future<void> Function() onLogout;
   final AppSettingsController settings;
+  final PermissionService permissionService;
+  final NotificationScheduler notificationScheduler;
 
   @override
   Widget build(BuildContext context) {
@@ -86,6 +109,8 @@ class _PatientHomeTab extends StatelessWidget {
       api: api,
       onLogout: onLogout,
       settings: settings,
+      permissionService: permissionService,
+      notificationScheduler: notificationScheduler,
       onOpenTab: (index) => openRoleTab(context, index),
     );
   }

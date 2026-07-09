@@ -50,6 +50,7 @@ class _UpcomingDosesState extends State<UpcomingDoses> {
       DoseStatus.taken => '${med.name}: marcado como tomado',
       DoseStatus.omitted => '${med.name}: marcado como omitido',
       DoseStatus.postponed => '${med.name}: pospuesto',
+      DoseStatus.missed => '${med.name}: no confirmado',
     };
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
@@ -98,9 +99,8 @@ class _UpcomingDosesState extends State<UpcomingDoses> {
           return const SizedBox.shrink();
         }
         final meds = snapshot.data ?? const [];
-        final pending =
-            meds.where((m) => !m.taken).toList()
-              ..sort((a, b) => _minutesOf(a.time).compareTo(_minutesOf(b.time)));
+        final pending = meds.where((m) => !m.taken).toList()
+          ..sort((a, b) => _minutesOf(a.time).compareTo(_minutesOf(b.time)));
         final next = pending.take(3).toList();
 
         return Column(
@@ -135,13 +135,15 @@ class _UpcomingDosesState extends State<UpcomingDoses> {
                     'hora de tu siguiente medicamento, aparecera aqui.',
               )
             else
-              ...next.map((med) => _DoseCard(
-                    med: med,
-                    enabled: !_working,
-                    onTaken: () => _record(med, DoseStatus.taken),
-                    onPostpone: () => _postpone(med),
-                    onOmit: () => _record(med, DoseStatus.omitted),
-                  )),
+              ...next.map(
+                (med) => _DoseCard(
+                  med: med,
+                  enabled: !_working,
+                  onTaken: () => _record(med, DoseStatus.taken),
+                  onPostpone: () => _postpone(med),
+                  onOmit: () => _record(med, DoseStatus.omitted),
+                ),
+              ),
           ],
         );
       },

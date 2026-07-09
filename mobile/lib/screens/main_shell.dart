@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../models/app_role.dart';
 import '../services/api_service.dart';
 import '../services/app_settings.dart';
+import '../services/notification_scheduler.dart';
+import '../services/permission_service.dart';
 import 'roles/caregiver_shell.dart';
 import 'roles/patient_shell.dart';
 
@@ -14,17 +16,30 @@ class MainShell extends StatelessWidget {
     required this.onLogout,
     required this.settings,
     required this.role,
+    required this.permissionService,
+    required this.notificationScheduler,
+    this.patientInitialTab = 0,
   });
 
   final UleamMedApi api;
   final Future<void> Function() onLogout;
   final AppSettingsController settings;
   final AppRole role;
+  final PermissionService permissionService;
+  final NotificationScheduler notificationScheduler;
+  final int patientInitialTab;
 
   @override
   Widget build(BuildContext context) {
     if (role == AppRole.patient) {
-      return PatientShell(api: api, onLogout: onLogout, settings: settings);
+      return PatientShell(
+        api: api,
+        onLogout: onLogout,
+        settings: settings,
+        permissionService: permissionService,
+        notificationScheduler: notificationScheduler,
+        initialTab: patientInitialTab,
+      );
     }
     if (role == AppRole.caregiver) {
       return CaregiverShell(api: api, onLogout: onLogout, settings: settings);

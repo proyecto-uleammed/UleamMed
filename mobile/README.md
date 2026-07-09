@@ -27,9 +27,11 @@ Pantallas y flujos incluidos:
 - Inicio de sesion y registro con confirmacion de contrasena, requisitos y
   aceptacion de terminos; recuperacion de contrasena por codigo de 6 digitos.
 - Perfil medico editable y ajustes de accesibilidad (escala de fuente),
-  recordatorios, bloqueo por PIN y terminos.
-- Medicamentos local-first con CRUD, horarios, instrucciones, foto del
-  medicamento y confirmacion de toma como tomado, omitido o pospuesto.
+  permisos de recordatorios, bloqueo por PIN y terminos.
+- Medicamentos local-first con CRUD, dosis estructurada, intervalos u horas
+  especificas, dias, duracion, foto y eventos de toma idempotentes.
+- Alarmas Android persistentes con sonido, vibracion, pantalla completa,
+  agrupacion de tomas y acciones `Tomado`, `Posponer` y `Omitir`.
 - Historial cronologico de tomas con cumplimiento semanal y filtros.
 - Condiciones y alergias estructuradas con nivel de severidad (color + texto).
 - Consultas CRUD con pestañas de proximas y pasadas, date/time picker, detalle,
@@ -59,13 +61,17 @@ Endpoints usados actualmente:
 - `GET /api/v1/users/me`
 - `PATCH /api/v1/users/me`
 - `GET /api/v1/medications`
+- `POST /api/v1/medications`
+- `PATCH /api/v1/medications/{medication_id}`
+- `DELETE /api/v1/medications/{medication_id}`
 - `POST /api/v1/medications/{medication_id}/take`
+- `POST /api/v1/medications/{medication_id}/dose-events`
+- `GET /api/v1/medications/dose-events`
+- `POST|GET|DELETE /api/v1/medications/{medication_id}/photo`
 
-La app guarda `access_token` y `refresh_token` con `flutter_secure_storage`, restaura la sesion al abrir, renueva el access token cuando recibe `401` y limpia la sesion al cerrar sesion. La recuperacion de contrasena solicita un codigo de 6 digitos y permite guardar una nueva contrasena. Tambien conserva un modo demo manual para desarrollo:
-
-```text
-roberto@uleammed.demo
-```
+La app guarda `access_token` y `refresh_token` con
+`flutter_secure_storage`, restaura la sesion al abrir, renueva el access token
+cuando recibe `401` y limpia sesion, cache y alarmas al cerrar sesion.
 
 ## Modo offline actual
 
@@ -124,7 +130,7 @@ flutter build apk --debug
 - Medicamentos conserva los endpoints demo existentes y agrega cache local.
 - Citas y emergencias ya leen desde store local, aunque aun usan datos semilla.
 - Si se cambia un contrato del backend, actualizar `api_service.dart` y los tests.
-- Los recordatorios funcionan en la app (proximas tomas en el inicio + posponer).
-  Las notificaciones del sistema (con la app cerrada) son el siguiente paso y
-  requieren configuracion nativa de `flutter_local_notifications` en Gradle y
-  `AndroidManifest.xml`; se dejaron fuera del MVP para no romper el build de CI.
+- Los pacientes deben habilitar notificaciones, alarmas exactas y pantalla
+  completa. Las alarmas funcionan sin internet y se restauran tras reiniciar.
+- No solicitar almacenamiento general ni ubicacion. Las fotos usan el selector
+  del sistema y los permisos se consultan siempre desde Android.

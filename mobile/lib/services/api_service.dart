@@ -1,14 +1,16 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../models/app_role.dart';
 import '../models/caregiving_models.dart';
 import '../models/local_models.dart';
 import 'local_store.dart';
-import 'sync_service.dart';
 
 export '../models/local_models.dart';
 export '../models/caregiving_models.dart';
@@ -41,6 +43,16 @@ abstract class UleamMedApi {
     String medicationId,
     DoseStatus status,
   );
+  Future<MedicationMarkResult> recordScheduledDose({
+    required String medicationId,
+    required DoseStatus status,
+    required DateTime scheduledAt,
+    required int sequenceNumber,
+    DateTime? snoozedUntil,
+  }) {
+    return recordMedicationStatus(medicationId, status);
+  }
+
   Future<List<DoseConfirmation>> listDoseConfirmations();
   Future<List<Appointment>> listAppointments();
   Future<Appointment> saveAppointment(Appointment appointment);
@@ -73,15 +85,12 @@ class ApiService implements UleamMedApi {
   }) : _client = client ?? http.Client(),
        _baseUrl = baseUrl ?? _defaultBaseUrl,
        _tokenStore = tokenStore ?? SecureTokenStore(),
-       _localStore = localStore ?? LocalStore() {
-    _syncService = SyncService(localStore: _localStore);
-  }
+       _localStore = localStore ?? LocalStore();
 
   final http.Client _client;
   final String _baseUrl;
   final TokenStore _tokenStore;
   final LocalStore _localStore;
-  late final SyncService _syncService;
   String? _accessToken;
   String? _refreshToken;
 
@@ -224,10 +233,15 @@ class ApiService implements UleamMedApi {
 
   @override
   Future<void> logout() async {
+    final activeUserId = await _localStore.readActiveUserId();
     _accessToken = null;
     _refreshToken = null;
     await _tokenStore.clear();
+    await _localStore.clearUserData();
     await _localStore.clearActiveUserId();
+    if (activeUserId != null) {
+      await _clearPhotoCache(activeUserId);
+    }
   }
 
   @override
@@ -247,7 +261,9 @@ class ApiService implements UleamMedApi {
 
     try {
       final backendItems = await _loadBackendMedications();
-      final merged = _mergeMedications(localItems, backendItems);
+      final merged = await _cacheMedicationPhotos(
+        _mergeMedications(localItems, backendItems),
+      );
       await _localStore.saveMedications(merged);
       return merged;
     } catch (_) {
@@ -262,25 +278,36 @@ class ApiService implements UleamMedApi {
 
   @override
   Future<MedicationItem> saveMedication(MedicationItem medication) async {
+    MedicationItem? existing;
+    for (final item in await _localStore.readMedications()) {
+      if (item.id == medication.id) {
+        existing = item;
+        break;
+      }
+    }
     final localPending = await _localStore.upsertMedication(
       medication.copyWith(syncStatus: SyncStatus.pending),
     );
+    final isBackendId = int.tryParse(medication.id) != null;
+    final uri = isBackendId
+        ? Uri.parse('$_baseUrl/api/v1/medications/${medication.id}')
+        : Uri.parse('$_baseUrl/api/v1/medications');
+    final body = {
+      'name': medication.name,
+      'dose': medication.dose,
+      'doseAmount': medication.doseAmount,
+      'doseUnit': medication.doseUnit,
+      'time': medication.time,
+      'frequency': medication.frequency,
+      'duration': medication.duration,
+      'instructions': medication.instructions,
+      'isImportant': medication.isImportant,
+      'schedule': medication.effectiveSchedule.toJson(),
+      if (isBackendId) 'taken': medication.taken,
+    };
+    late final Map<String, dynamic> data;
     try {
-      final isBackendId = int.tryParse(medication.id) != null;
-      final uri = isBackendId
-          ? Uri.parse('$_baseUrl/api/v1/medications/${medication.id}')
-          : Uri.parse('$_baseUrl/api/v1/medications');
-      final body = {
-        'name': medication.name,
-        'dose': medication.dose,
-        'time': medication.time,
-        'frequency': medication.frequency,
-        'duration': medication.duration,
-        'instructions': medication.instructions,
-        'isImportant': medication.isImportant,
-        if (isBackendId) 'taken': medication.taken,
-      };
-      final data = isBackendId
+      data = isBackendId
           ? await _patchAuthorizedJson(
               uri,
               body: body,
@@ -291,15 +318,53 @@ class ApiService implements UleamMedApi {
               body: body,
               fallback: 'No se pudo crear el medicamento',
             );
-      final saved = MedicationItem.fromJson(
-        data,
-      ).copyWith(syncStatus: SyncStatus.synced);
-      if (!isBackendId) {
-        await _localStore.deleteMedication(medication.id);
+    } catch (_) {
+      return localPending;
+    }
+
+    var saved = MedicationItem.fromJson(
+      data,
+    ).copyWith(syncStatus: SyncStatus.synced, photoPath: medication.photoPath);
+    if (!isBackendId) {
+      await _localStore.deleteMedication(medication.id);
+    }
+    await _localStore.upsertMedication(saved);
+
+    try {
+      final photoChanged = existing?.photoPath != medication.photoPath;
+      final needsPhotoUpload =
+          medication.photoPath.isNotEmpty &&
+          File(medication.photoPath).existsSync() &&
+          (photoChanged || !saved.photoAvailable);
+      if (needsPhotoUpload) {
+        final photoData = await _uploadMedicationPhoto(
+          saved.id,
+          medication.photoPath,
+        );
+        final cachedPath = await _storePhotoCopy(
+          medication.photoPath,
+          saved.id,
+        );
+        saved = MedicationItem.fromJson(
+          photoData,
+        ).copyWith(syncStatus: SyncStatus.synced, photoPath: cachedPath);
+      } else if (photoChanged &&
+          existing?.photoAvailable == true &&
+          medication.photoPath.isEmpty) {
+        await _deleteAuthorized(
+          Uri.parse('$_baseUrl/api/v1/medications/${saved.id}/photo'),
+          fallback: 'No se pudo eliminar la foto',
+        );
+        saved = saved.copyWith(photoAvailable: false, photoPath: '');
       }
       return _localStore.upsertMedication(saved);
     } catch (_) {
-      return localPending;
+      return _localStore.upsertMedication(
+        saved.copyWith(
+          syncStatus: SyncStatus.pending,
+          photoPath: medication.photoPath,
+        ),
+      );
     }
   }
 
@@ -325,6 +390,22 @@ class ApiService implements UleamMedApi {
     String medicationId,
     DoseStatus status,
   ) async {
+    return recordScheduledDose(
+      medicationId: medicationId,
+      status: status,
+      scheduledAt: DateTime.now(),
+      sequenceNumber: 1,
+    );
+  }
+
+  @override
+  Future<MedicationMarkResult> recordScheduledDose({
+    required String medicationId,
+    required DoseStatus status,
+    required DateTime scheduledAt,
+    required int sequenceNumber,
+    DateTime? snoozedUntil,
+  }) async {
     final medications = await listMedications();
     final medication = medications.firstWhere(
       (item) => item.id == medicationId,
@@ -335,31 +416,43 @@ class ApiService implements UleamMedApi {
       syncStatus: SyncStatus.pending,
     );
     await _localStore.upsertMedication(updated);
-    await _localStore.addDoseConfirmation(
-      DoseConfirmation(
-        id: '${medication.id}-${DateTime.now().microsecondsSinceEpoch}',
-        medicationId: medication.id,
-        medicationName: medication.name,
-        status: status,
-        recordedAt: DateTime.now(),
-      ),
+    final confirmation = DoseConfirmation(
+      id: '${medication.id}-${scheduledAt.toUtc().millisecondsSinceEpoch}',
+      medicationId: medication.id,
+      medicationName: medication.name,
+      status: status,
+      recordedAt: DateTime.now(),
+      scheduledAt: scheduledAt,
+      sequenceNumber: sequenceNumber,
+      snoozedUntil: snoozedUntil,
     );
+    await _localStore.upsertDoseConfirmation(confirmation);
 
     final localResult = await _medicationResultFor(updated.id);
-    if (status != DoseStatus.taken) {
+    if (int.tryParse(medicationId) == null) {
       return localResult;
     }
 
     try {
-      final data = await _postAuthorizedJson(
-        Uri.parse('$_baseUrl/api/v1/medications/$medicationId/take'),
-        fallback: 'No se pudo marcar el medicamento',
+      await _postAuthorizedJson(
+        Uri.parse('$_baseUrl/api/v1/medications/$medicationId/dose-events'),
+        body: {
+          'client_event_id': confirmation.id,
+          'scheduled_at': scheduledAt.toUtc().toIso8601String(),
+          'sequence_number': sequenceNumber,
+          'status': status.name,
+          'acted_at': confirmation.recordedAt.toUtc().toIso8601String(),
+          'snoozed_until': snoozedUntil?.toUtc().toIso8601String(),
+        },
+        fallback: 'No se pudo sincronizar la toma',
       );
-      final backendResult = MedicationMarkResult.fromJson(data);
+      await _localStore.upsertDoseConfirmation(
+        confirmation.copyWith(syncStatus: SyncStatus.synced),
+      );
       await _localStore.upsertMedication(
-        backendResult.medication.copyWith(syncStatus: SyncStatus.synced),
+        updated.copyWith(syncStatus: SyncStatus.synced),
       );
-      return backendResult;
+      return _medicationResultFor(updated.id);
     } catch (_) {
       return localResult;
     }
@@ -503,16 +596,69 @@ class ApiService implements UleamMedApi {
   }
 
   @override
-  Future<SyncSummary> synchronizePendingChanges() {
-    return _syncService.synchronizePending();
+  Future<SyncSummary> synchronizePendingChanges() async {
+    var processed = 0;
+    final medications = await _localStore.readMedications();
+    for (final medication in medications.where(
+      (item) => item.syncStatus == SyncStatus.pending,
+    )) {
+      final saved = await saveMedication(medication);
+      if (saved.syncStatus == SyncStatus.synced) {
+        processed++;
+      }
+    }
+    final confirmations = await _localStore.readDoseConfirmations();
+    for (final confirmation in confirmations.where(
+      (item) => item.syncStatus == SyncStatus.pending,
+    )) {
+      if (int.tryParse(confirmation.medicationId) == null ||
+          confirmation.scheduledAt == null) {
+        continue;
+      }
+      try {
+        await _postAuthorizedJson(
+          Uri.parse(
+            '$_baseUrl/api/v1/medications/'
+            '${confirmation.medicationId}/dose-events',
+          ),
+          body: {
+            'client_event_id': confirmation.id,
+            'scheduled_at': confirmation.scheduledAt!.toUtc().toIso8601String(),
+            'sequence_number': confirmation.sequenceNumber,
+            'status': confirmation.status.name,
+            'acted_at': confirmation.recordedAt.toUtc().toIso8601String(),
+            'snoozed_until': confirmation.snoozedUntil
+                ?.toUtc()
+                .toIso8601String(),
+          },
+          fallback: 'No se pudo sincronizar la toma',
+        );
+        await _localStore.upsertDoseConfirmation(
+          confirmation.copyWith(syncStatus: SyncStatus.synced),
+        );
+        processed++;
+      } catch (_) {
+        // Conserva el evento pendiente para el siguiente intento.
+      }
+    }
+    final pending = await _localStore.pendingSyncCount();
+    return SyncSummary(
+      processed: processed,
+      pending: pending,
+      message: pending == 0
+          ? 'Todo está sincronizado.'
+          : 'Quedan $pending cambios por sincronizar.',
+    );
   }
 
   Future<AppSession> _finalizeSession(AppSession session) async {
     final userId = session.user.id.toString();
     final previousUserId = await _localStore.readActiveUserId();
     if (previousUserId != null && previousUserId != userId) {
+      _localStore.scopeToUser(previousUserId);
       await _localStore.clearUserData();
     }
+    _localStore.scopeToUser(userId);
     await _localStore.saveActiveUserId(userId);
 
     return session;
@@ -556,10 +702,120 @@ class ApiService implements UleamMedApi {
           duration: local.duration,
           instructions: local.instructions,
           isImportant: local.isImportant,
+          photoPath: local.photoPath,
         );
       }
     }
     return byId.values.toList()..sort((a, b) => a.time.compareTo(b.time));
+  }
+
+  Future<List<MedicationItem>> _cacheMedicationPhotos(
+    List<MedicationItem> medications,
+  ) async {
+    final result = <MedicationItem>[];
+    for (final medication in medications) {
+      if (!medication.photoAvailable ||
+          (medication.photoPath.isNotEmpty &&
+              File(medication.photoPath).existsSync())) {
+        result.add(medication);
+        continue;
+      }
+      try {
+        final bytes = await _getAuthorizedBytes(
+          Uri.parse('$_baseUrl/api/v1/medications/${medication.id}/photo'),
+        );
+        final root = await getApplicationDocumentsDirectory();
+        final userId = await _localStore.readActiveUserId() ?? 'unknown';
+        final directory = Directory('${root.path}/medication_photos/$userId');
+        await directory.create(recursive: true);
+        final file = File('${directory.path}/${medication.id}.jpg');
+        await file.writeAsBytes(bytes, flush: true);
+        result.add(medication.copyWith(photoPath: file.path));
+      } catch (_) {
+        result.add(medication);
+      }
+    }
+    return result;
+  }
+
+  Future<String> _storePhotoCopy(String sourcePath, String medicationId) async {
+    final root = await getApplicationDocumentsDirectory();
+    final userId = await _localStore.readActiveUserId() ?? 'unknown';
+    final directory = Directory('${root.path}/medication_photos/$userId');
+    await directory.create(recursive: true);
+    final extension = sourcePath.toLowerCase().split('.').last;
+    final safeExtension = {'jpg', 'jpeg', 'png', 'webp'}.contains(extension)
+        ? extension
+        : 'jpg';
+    final destination = '${directory.path}/$medicationId.$safeExtension';
+    await File(sourcePath).copy(destination);
+    return destination;
+  }
+
+  Future<void> _clearPhotoCache(String userId) async {
+    final root = await getApplicationDocumentsDirectory();
+    final directory = Directory('${root.path}/medication_photos/$userId');
+    if (await directory.exists()) {
+      await directory.delete(recursive: true);
+    }
+  }
+
+  Future<Map<String, dynamic>> _uploadMedicationPhoto(
+    String medicationId,
+    String path,
+  ) async {
+    Future<http.StreamedResponse> send(String token) async {
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$_baseUrl/api/v1/medications/$medicationId/photo'),
+      );
+      request.headers['Authorization'] = 'Bearer $token';
+      request.files.add(
+        await http.MultipartFile.fromPath(
+          'photo',
+          path,
+          contentType: _photoContentType(path),
+        ),
+      );
+      return _client.send(request);
+    }
+
+    var response = await send(await _ensureAccessToken());
+    if (response.statusCode == 401 && await _refreshAccessToken()) {
+      response = await send(await _ensureAccessToken());
+    }
+    final body = await response.stream.bytesToString();
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw ApiException('No se pudo subir la foto', response.statusCode);
+    }
+    final decoded = jsonDecode(body);
+    return Map<String, dynamic>.from(decoded as Map);
+  }
+
+  MediaType _photoContentType(String path) {
+    final extension = path.toLowerCase().split('.').last;
+    return switch (extension) {
+      'png' => MediaType('image', 'png'),
+      'webp' => MediaType('image', 'webp'),
+      _ => MediaType('image', 'jpeg'),
+    };
+  }
+
+  Future<List<int>> _getAuthorizedBytes(Uri uri) async {
+    var response = await _client.get(
+      uri,
+      headers: _authorizedHeaders(await _ensureAccessToken()),
+    );
+    if (response.statusCode == 401 && await _refreshAccessToken()) {
+      response = await _client.get(
+        uri,
+        headers: _authorizedHeaders(await _ensureAccessToken()),
+      );
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw ApiException('No se pudo descargar la foto', response.statusCode);
+    }
+    return response.bodyBytes;
   }
 
   Future<MedicationMarkResult> _medicationResultFor(String medicationId) async {

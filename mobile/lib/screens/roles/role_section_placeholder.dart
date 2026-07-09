@@ -54,10 +54,7 @@ class RoleSectionPlaceholder extends StatelessWidget {
             'personalizaremos en el siguiente paso.',
             style: Theme.of(context).textTheme.bodyMedium,
           ),
-          if (actions.isNotEmpty) ...[
-            const SizedBox(height: 20),
-            ...actions,
-          ],
+          if (actions.isNotEmpty) ...[const SizedBox(height: 20), ...actions],
         ],
       ),
     );

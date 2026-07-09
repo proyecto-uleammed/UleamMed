@@ -80,11 +80,19 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
       final uri = Uri(scheme: 'tel', path: phone);
       final launched = await launchUrl(uri);
       if (!launched && mounted) {
-        showAppSnackBar(context, 'No se pudo iniciar la llamada', isError: true);
+        showAppSnackBar(
+          context,
+          'No se pudo iniciar la llamada',
+          isError: true,
+        );
       }
     } catch (_) {
       if (mounted) {
-        showAppSnackBar(context, 'No se pudo iniciar la llamada', isError: true);
+        showAppSnackBar(
+          context,
+          'No se pudo iniciar la llamada',
+          isError: true,
+        );
       }
     }
   }
@@ -123,7 +131,9 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
         future: _data,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const LoadingView(message: 'Cargando datos de emergencia...');
+            return const LoadingView(
+              message: 'Cargando datos de emergencia...',
+            );
           }
           if (snapshot.hasError) {
             return ErrorStateView(
@@ -140,7 +150,9 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
               _EmergencyHeader(
                 primaryContact: primary,
                 onCall911: () => _call('911'),
-                onCallPrimary: primary == null ? null : () => _call(primary.phone),
+                onCallPrimary: primary == null
+                    ? null
+                    : () => _call(primary.phone),
               ),
               const SizedBox(height: 20),
               _MedicalKeyData(data: data),
@@ -302,12 +314,16 @@ class _MedicalKeyData extends StatelessWidget {
           _KeyRow(
             icon: Icons.bloodtype,
             label: 'Tipo de sangre',
-            value: profile.bloodType.isEmpty ? 'No registrado' : profile.bloodType,
+            value: profile.bloodType.isEmpty
+                ? 'No registrado'
+                : profile.bloodType,
           ),
           _KeyRow(
             icon: Icons.warning_amber,
             label: 'Alergias',
-            value: profile.allergies.isEmpty ? 'Ninguna registrada' : profile.allergies,
+            value: profile.allergies.isEmpty
+                ? 'Ninguna registrada'
+                : profile.allergies,
             highlight: profile.allergies.isNotEmpty,
           ),
           _KeyRow(
@@ -359,7 +375,11 @@ class _MedicalKeyData extends StatelessWidget {
           const SizedBox(height: 12),
           Row(
             children: [
-              const Icon(Icons.update, size: 16, color: AppColors.textSecondary),
+              const Icon(
+                Icons.update,
+                size: 16,
+                color: AppColors.textSecondary,
+              ),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
@@ -458,7 +478,9 @@ class _ContactCard extends StatelessWidget {
               : AppColors.primary.withValues(alpha: 0.15),
           child: Icon(
             contact.isPrimary ? Icons.star : Icons.person,
-            color: contact.isPrimary ? const Color(0xFFC62828) : AppColors.primary,
+            color: contact.isPrimary
+                ? const Color(0xFFC62828)
+                : AppColors.primary,
           ),
         ),
         title: Text(

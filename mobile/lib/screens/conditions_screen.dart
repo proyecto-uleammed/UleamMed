@@ -34,9 +34,7 @@ class _ConditionsScreenState extends State<ConditionsScreen> {
         kind: kind,
         entry: entry,
         onSave: (item) => _api.saveHealthEntry(item),
-        onDelete: entry == null
-            ? null
-            : () => _api.deleteHealthEntry(entry.id),
+        onDelete: entry == null ? null : () => _api.deleteHealthEntry(entry.id),
       ),
     );
 
@@ -400,8 +398,9 @@ class _HealthEntryFormState extends State<_HealthEntryForm> {
                 ),
                 border: const OutlineInputBorder(),
               ),
-              validator: (value) =>
-                  (value ?? '').trim().isEmpty ? 'Este campo es obligatorio' : null,
+              validator: (value) => (value ?? '').trim().isEmpty
+                  ? 'Este campo es obligatorio'
+                  : null,
             ),
             const SizedBox(height: 12),
             Text(

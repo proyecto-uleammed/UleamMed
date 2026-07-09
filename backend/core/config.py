@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     CAREGIVER_JOIN_MAX_ATTEMPTS: int = 5
     CAREGIVER_JOIN_WINDOW_MINUTES: int = 15
     FIREBASE_CREDENTIALS: str | None = None
+    SUPABASE_URL: str | None = None
+    SUPABASE_SERVICE_ROLE_KEY: str | None = None
+    SUPABASE_MEDICATION_BUCKET: str = "medication-photos"
     CORS_ORIGINS: str = "*"
     ENVIRONMENT: str = "development"
 

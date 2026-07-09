@@ -386,9 +386,7 @@ class _AppointmentDetail extends StatelessWidget {
               Expanded(
                 child: FilledButton.icon(
                   onPressed: onToggleCompleted,
-                  icon: Icon(
-                    appointment.completed ? Icons.undo : Icons.check,
-                  ),
+                  icon: Icon(appointment.completed ? Icons.undo : Icons.check),
                   label: Text(
                     appointment.completed
                         ? 'Marcar pendiente'

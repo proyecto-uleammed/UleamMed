@@ -14,12 +14,14 @@ class RoleShellScaffold extends StatefulWidget {
     required this.settings,
     required this.destinations,
     required this.tabs,
+    this.initialIndex = 0,
   });
 
   final UleamMedApi api;
   final AppSettingsController settings;
   final List<NavigationDestination> destinations;
   final List<Widget> tabs;
+  final int initialIndex;
 
   @override
   State<RoleShellScaffold> createState() => _RoleShellScaffoldState();
@@ -29,11 +31,12 @@ class _RoleShellScaffoldState extends State<RoleShellScaffold> {
   final ConnectivityService _connectivity = ConnectivityService();
   StreamSubscription<NetworkStatus>? _networkSubscription;
   NetworkStatus _lastStatus = NetworkStatus.online;
-  int _index = 0;
+  late int _index;
 
   @override
   void initState() {
     super.initState();
+    _index = widget.initialIndex.clamp(0, widget.tabs.length - 1);
     _networkSubscription = _connectivity.watchStatus().listen((status) {
       if (status == NetworkStatus.online &&
           _lastStatus == NetworkStatus.offline) {
@@ -67,9 +70,7 @@ class _RoleShellScaffoldState extends State<RoleShellScaffold> {
   @override
   Widget build(BuildContext context) {
     final tabs = widget.tabs
-        .map(
-          (tab) => _RoleTabHost(onOpenTab: _goTo, child: tab),
-        )
+        .map((tab) => _RoleTabHost(onOpenTab: _goTo, child: tab))
         .toList();
 
     return Scaffold(

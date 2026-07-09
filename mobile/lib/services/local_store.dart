@@ -37,6 +37,7 @@ class LocalStore {
     : _jsonStore = jsonStore ?? SecureJsonStore();
 
   final JsonStore _jsonStore;
+  String? _userId;
 
   static const _medicalProfileKey = 'uleammed_medical_profile';
   static const _medicationsKey = 'uleammed_medications';
@@ -51,14 +52,18 @@ class LocalStore {
   /// Borra los datos locales del usuario al cambiar de cuenta o registrarse.
   Future<void> clearUserData() async {
     await Future.wait([
-      _jsonStore.delete(_medicalProfileKey),
-      _jsonStore.delete(_medicationsKey),
-      _jsonStore.delete(_confirmationsKey),
-      _jsonStore.delete(_appointmentsKey),
-      _jsonStore.delete(_emergencyContactsKey),
-      _jsonStore.delete(_legacyCaregiverPermissionsKey),
-      _jsonStore.delete(_healthEntriesKey),
+      _jsonStore.delete(_key(_medicalProfileKey)),
+      _jsonStore.delete(_key(_medicationsKey)),
+      _jsonStore.delete(_key(_confirmationsKey)),
+      _jsonStore.delete(_key(_appointmentsKey)),
+      _jsonStore.delete(_key(_emergencyContactsKey)),
+      _jsonStore.delete(_key(_legacyCaregiverPermissionsKey)),
+      _jsonStore.delete(_key(_healthEntriesKey)),
     ]);
+  }
+
+  void scopeToUser(String userId) {
+    _userId = userId;
   }
 
   Future<String?> readActiveUserId() {
@@ -135,8 +140,19 @@ class LocalStore {
   }
 
   Future<void> addDoseConfirmation(DoseConfirmation confirmation) async {
+    await upsertDoseConfirmation(confirmation);
+  }
+
+  Future<void> upsertDoseConfirmation(DoseConfirmation confirmation) async {
     final confirmations = await readDoseConfirmations();
-    confirmations.insert(0, confirmation);
+    final index = confirmations.indexWhere(
+      (item) => item.id == confirmation.id,
+    );
+    if (index >= 0) {
+      confirmations[index] = confirmation;
+    } else {
+      confirmations.insert(0, confirmation);
+    }
     await _writeList(
       _confirmationsKey,
       confirmations.map((item) => item.toJson()).toList(),
@@ -269,7 +285,7 @@ class LocalStore {
   }
 
   Future<Map<String, dynamic>?> _readObject(String key) async {
-    final raw = await _jsonStore.read(key);
+    final raw = await _jsonStore.read(_key(key));
     if (raw == null || raw.trim().isEmpty) {
       return null;
     }
@@ -284,7 +300,7 @@ class LocalStore {
     String key,
     T Function(Map<String, dynamic> json) fromJson,
   ) async {
-    final raw = await _jsonStore.read(key);
+    final raw = await _jsonStore.read(_key(key));
     if (raw == null || raw.trim().isEmpty) {
       return [];
     }
@@ -298,10 +314,15 @@ class LocalStore {
   }
 
   Future<void> _writeObject(String key, Map<String, dynamic> value) {
-    return _jsonStore.write(key, jsonEncode(value));
+    return _jsonStore.write(_key(key), jsonEncode(value));
   }
 
   Future<void> _writeList(String key, List<Map<String, dynamic>> value) {
-    return _jsonStore.write(key, jsonEncode(value));
+    return _jsonStore.write(_key(key), jsonEncode(value));
+  }
+
+  String _key(String base) {
+    final userId = _userId;
+    return userId == null ? base : '$base:$userId';
   }
 }

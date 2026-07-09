@@ -53,11 +53,7 @@ class AdminShell extends StatelessWidget {
         ),
       ],
       tabs: [
-        AdminHomeScreen(
-          api: api,
-          onLogout: onLogout,
-          settings: settings,
-        ),
+        AdminHomeScreen(api: api, onLogout: onLogout, settings: settings),
         const RoleSectionPlaceholder(
           title: 'Gestion de usuarios',
           description:

@@ -1,18 +1,30 @@
 import 'package:flutter/material.dart';
 
 import '../services/app_settings.dart';
+import '../services/api_service.dart';
+import '../services/notification_scheduler.dart';
+import '../services/permission_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_states.dart';
 import 'legal_screen.dart';
 import 'lock_setup_screen.dart';
-import 'reminders_screen.dart';
+import 'permissions_screen.dart';
 
 /// Ajustes de accesibilidad, recordatorios y privacidad.
 /// Las secciones de privacidad y bloqueo se agregan en la fase de privacidad.
 class SettingsScreen extends StatelessWidget {
-  const SettingsScreen({super.key, required this.settings});
+  const SettingsScreen({
+    super.key,
+    required this.settings,
+    this.api,
+    this.permissionService,
+    this.notificationScheduler,
+  });
 
   final AppSettingsController settings;
+  final UleamMedApi? api;
+  final PermissionService? permissionService;
+  final NotificationScheduler? notificationScheduler;
 
   @override
   Widget build(BuildContext context) {
@@ -64,29 +76,30 @@ class SettingsScreen extends StatelessWidget {
                 title: 'Recordatorios',
               ),
               const SizedBox(height: 8),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Recordatorios de tomas'),
-                subtitle: const Text(
-                  'Muestra tus proximas tomas en el inicio.',
+              if (api != null &&
+                  permissionService != null &&
+                  notificationScheduler != null)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.admin_panel_settings_outlined),
+                  title: const Text('Permisos y recordatorios'),
+                  subtitle: const Text(
+                    'Revisa notificaciones y alarmas exactas.',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => PermissionsScreen(
+                          permissions: permissionService!,
+                          scheduler: notificationScheduler!,
+                          api: api!,
+                        ),
+                      ),
+                    );
+                  },
                 ),
-                value: current.remindersEnabled,
-                onChanged: (enabled) => settings.setRemindersEnabled(enabled),
-              ),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.info_outline),
-                title: const Text('Como funcionan los recordatorios'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => RemindersScreen(settings: settings),
-                    ),
-                  );
-                },
-              ),
               const Divider(height: 32),
               _SectionTitle(
                 icon: Icons.lock_outline,

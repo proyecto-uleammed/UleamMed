@@ -12,3 +12,4 @@ bcrypt
 python-multipart
 firebase-admin
 websockets
+supabase==2.31.0

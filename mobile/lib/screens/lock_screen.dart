@@ -5,11 +5,7 @@ import '../theme/app_theme.dart';
 
 /// Pantalla de desbloqueo por PIN al abrir la app o tras inactividad (PB-054).
 class LockScreen extends StatefulWidget {
-  const LockScreen({
-    super.key,
-    required this.onUnlocked,
-    this.lockService,
-  });
+  const LockScreen({super.key, required this.onUnlocked, this.lockService});
 
   final VoidCallback onUnlocked;
   final LockService? lockService;
@@ -60,11 +56,7 @@ class _LockScreenState extends State<LockScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
-                  Icons.lock,
-                  size: 72,
-                  color: AppColors.primary,
-                ),
+                const Icon(Icons.lock, size: 72, color: AppColors.primary),
                 const SizedBox(height: 16),
                 Text(
                   'Ingresa tu PIN',

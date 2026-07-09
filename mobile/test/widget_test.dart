@@ -3,9 +3,12 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:uleam_med/main.dart';
 import 'package:uleam_med/models/app_role.dart';
+import 'package:uleam_med/screens/permissions_screen.dart';
 import 'package:uleam_med/services/api_service.dart';
 import 'package:uleam_med/services/app_settings.dart';
 import 'package:uleam_med/services/local_store.dart';
+import 'package:uleam_med/services/notification_scheduler.dart';
+import 'package:uleam_med/services/permission_service.dart';
 
 class _MemoryJsonStore implements JsonStore {
   final Map<String, String> values = {};
@@ -28,6 +31,109 @@ AppSettingsController _testSettings() {
   final store = _MemoryJsonStore();
   store.values['uleammed_app_settings'] = '{"onboardingSeen":true}';
   return AppSettingsController(AppSettingsService(store: store));
+}
+
+class _FakePermissionService implements PermissionService {
+  _FakePermissionService({
+    this.snapshot = const ReminderPermissionSnapshot(
+      notifications: AppPermissionState.granted,
+      exactAlarms: AppPermissionState.granted,
+      fullScreen: AppPermissionState.granted,
+    ),
+  });
+
+  ReminderPermissionSnapshot snapshot;
+  bool openedSettings = false;
+
+  @override
+  Future<ReminderPermissionSnapshot> check() async => snapshot;
+
+  @override
+  Future<bool> openSettings() async {
+    openedSettings = true;
+    return true;
+  }
+
+  @override
+  Future<AppPermissionState> requestExactAlarms() async {
+    snapshot = ReminderPermissionSnapshot(
+      notifications: snapshot.notifications,
+      exactAlarms: AppPermissionState.granted,
+      fullScreen: snapshot.fullScreen,
+    );
+    return AppPermissionState.granted;
+  }
+
+  @override
+  Future<AppPermissionState> requestNotifications() async {
+    snapshot = ReminderPermissionSnapshot(
+      notifications: AppPermissionState.granted,
+      exactAlarms: snapshot.exactAlarms,
+      fullScreen: snapshot.fullScreen,
+    );
+    return AppPermissionState.granted;
+  }
+
+  @override
+  Future<AppPermissionState> requestFullScreen() async {
+    snapshot = ReminderPermissionSnapshot(
+      notifications: snapshot.notifications,
+      exactAlarms: snapshot.exactAlarms,
+      fullScreen: AppPermissionState.granted,
+    );
+    return AppPermissionState.granted;
+  }
+}
+
+class _FakeNotificationScheduler extends NotificationScheduler {
+  final List<String> scheduled = [];
+  bool cancelledAll = false;
+
+  @override
+  Future<bool> initialize({
+    VoidCallback? onOpenMedications,
+    AlarmRingingCallback? onAlarmRinging,
+  }) async => false;
+
+  @override
+  Future<void> reconcile(List<MedicationItem> medications) async {
+    scheduled
+      ..clear()
+      ..addAll(medications.map((item) => item.id));
+  }
+
+  @override
+  Future<void> schedule(MedicationItem medication) async {
+    scheduled
+      ..remove(medication.id)
+      ..add(medication.id);
+  }
+
+  @override
+  Future<void> cancel(String medicationId) async {
+    scheduled.remove(medicationId);
+  }
+
+  @override
+  Future<void> cancelAll() async {
+    cancelledAll = true;
+    scheduled.clear();
+  }
+}
+
+Widget _testApp({
+  required UleamMedApi api,
+  AppSettingsController? settingsController,
+  PermissionService? permissionService,
+  NotificationScheduler? notificationScheduler,
+}) {
+  return UleamMedApp(
+    api: api,
+    settingsController: settingsController ?? _testSettings(),
+    permissionService: permissionService ?? _FakePermissionService(),
+    notificationScheduler:
+        notificationScheduler ?? _FakeNotificationScheduler(),
+  );
 }
 
 Future<void> _loginWithForm(WidgetTester tester) async {
@@ -229,6 +335,17 @@ class _FakeApi implements UleamMedApi {
   }
 
   @override
+  Future<MedicationMarkResult> recordScheduledDose({
+    required String medicationId,
+    required DoseStatus status,
+    required DateTime scheduledAt,
+    required int sequenceNumber,
+    DateTime? snoozedUntil,
+  }) {
+    return recordMedicationStatus(medicationId, status);
+  }
+
+  @override
   Future<List<DoseConfirmation>> listDoseConfirmations() async {
     return confirmations;
   }
@@ -424,9 +541,7 @@ void main() {
   testWidgets('shows login when there is no stored session', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(
-      UleamMedApp(api: _FakeApi(), settingsController: _testSettings()),
-    );
+    await tester.pumpWidget(_testApp(api: _FakeApi()));
     await tester.pumpAndSettle();
 
     expect(find.text('Iniciar sesión'), findsOneWidget);
@@ -435,9 +550,7 @@ void main() {
   testWidgets('registration is explicitly for a patient account', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(
-      UleamMedApp(api: _FakeApi(), settingsController: _testSettings()),
-    );
+    await tester.pumpWidget(_testApp(api: _FakeApi()));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Necesito crear una cuenta'));
@@ -449,9 +562,7 @@ void main() {
   testWidgets('registration allows selecting caregiver account', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(
-      UleamMedApp(api: _FakeApi(), settingsController: _testSettings()),
-    );
+    await tester.pumpWidget(_testApp(api: _FakeApi()));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Necesito crear una cuenta'));
@@ -465,9 +576,7 @@ void main() {
   testWidgets('authenticates and loads home screen', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(
-      UleamMedApp(api: _FakeApi(), settingsController: _testSettings()),
-    );
+    await tester.pumpWidget(_testApp(api: _FakeApi()));
     await tester.pumpAndSettle();
 
     await _loginWithForm(tester);
@@ -476,11 +585,73 @@ void main() {
     expect(find.text('Medicamentos'), findsWidgets);
   });
 
+  testWidgets('patient completes required reminder permissions', (
+    WidgetTester tester,
+  ) async {
+    final permissions = _FakePermissionService(
+      snapshot: const ReminderPermissionSnapshot(
+        notifications: AppPermissionState.denied,
+        exactAlarms: AppPermissionState.denied,
+        fullScreen: AppPermissionState.denied,
+      ),
+    );
+
+    await tester.pumpWidget(
+      _testApp(api: _FakeApi(), permissionService: permissions),
+    );
+    await tester.pumpAndSettle();
+    await _loginWithForm(tester);
+
+    expect(find.text('Activa tus recordatorios'), findsOneWidget);
+    expect(find.text('Hola, Roberto 👋'), findsNothing);
+
+    for (var index = 0; index < 3; index++) {
+      final allow = find.widgetWithText(OutlinedButton, 'Permitir').first;
+      await tester.ensureVisible(allow);
+      await tester.tap(allow);
+      await tester.pumpAndSettle();
+    }
+    final continueButton = find.widgetWithText(FilledButton, 'Continuar');
+    await tester.ensureVisible(continueButton);
+    await tester.tap(continueButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Hola, Roberto 👋'), findsOneWidget);
+  });
+
+  testWidgets('permanently denied permission opens Android settings', (
+    WidgetTester tester,
+  ) async {
+    final permissions = _FakePermissionService(
+      snapshot: const ReminderPermissionSnapshot(
+        notifications: AppPermissionState.permanentlyDenied,
+        exactAlarms: AppPermissionState.granted,
+        fullScreen: AppPermissionState.granted,
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PermissionsScreen(
+          permissions: permissions,
+          scheduler: _FakeNotificationScheduler(),
+          api: _FakeApi(),
+          onComplete: () {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Abrir ajustes'));
+    await tester.pumpAndSettle();
+
+    expect(permissions.openedSettings, isTrue);
+  });
+
   testWidgets('restores stored session on app start', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
-      UleamMedApp(
+      _testApp(
         api: _FakeApi(
           restoredSession: const AppSession(
             apiUrl: 'http://localhost:8000',
@@ -488,7 +659,6 @@ void main() {
             user: _FakeApi._testUser,
           ),
         ),
-        settingsController: _testSettings(),
       ),
     );
     await tester.pumpAndSettle();
@@ -500,9 +670,7 @@ void main() {
   testWidgets('patient cannot change role from settings', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(
-      UleamMedApp(api: _FakeApi(), settingsController: _testSettings()),
-    );
+    await tester.pumpWidget(_testApp(api: _FakeApi()));
     await tester.pumpAndSettle();
     await _loginWithForm(tester);
 
@@ -530,10 +698,7 @@ void main() {
     );
 
     await tester.pumpWidget(
-      UleamMedApp(
-        api: _FakeApi(restoredSession: unsupportedSession),
-        settingsController: _testSettings(),
-      ),
+      _testApp(api: _FakeApi(restoredSession: unsupportedSession)),
     );
     await tester.pumpAndSettle();
 
@@ -558,9 +723,7 @@ void main() {
     );
     final api = _FakeApi(restoredSession: caregiverSession);
 
-    await tester.pumpWidget(
-      UleamMedApp(api: api, settingsController: _testSettings()),
-    );
+    await tester.pumpWidget(_testApp(api: api));
     await tester.pumpAndSettle();
 
     expect(find.text('Panel Cuidador'), findsOneWidget);
@@ -581,9 +744,10 @@ void main() {
 
   testWidgets('logout returns to login screen', (WidgetTester tester) async {
     final api = _FakeApi();
+    final scheduler = _FakeNotificationScheduler();
 
     await tester.pumpWidget(
-      UleamMedApp(api: api, settingsController: _testSettings()),
+      _testApp(api: api, notificationScheduler: scheduler),
     );
     await tester.pumpAndSettle();
     await _loginWithForm(tester);
@@ -591,15 +755,14 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(api.didLogout, isTrue);
+    expect(scheduler.cancelledAll, isTrue);
     expect(find.text('Iniciar sesión'), findsOneWidget);
   });
 
   testWidgets('profile screen shows and updates user name', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(
-      UleamMedApp(api: _FakeApi(), settingsController: _testSettings()),
-    );
+    await tester.pumpWidget(_testApp(api: _FakeApi()));
     await tester.pumpAndSettle();
     await _loginWithForm(tester);
 
@@ -625,9 +788,7 @@ void main() {
   ) async {
     final api = _FakeApi();
 
-    await tester.pumpWidget(
-      UleamMedApp(api: api, settingsController: _testSettings()),
-    );
+    await tester.pumpWidget(_testApp(api: api));
     await tester.pumpAndSettle();
     await _loginWithForm(tester);
 
@@ -652,9 +813,7 @@ void main() {
   testWidgets('password recovery requests code and resets password', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(
-      UleamMedApp(api: _FakeApi(), settingsController: _testSettings()),
-    );
+    await tester.pumpWidget(_testApp(api: _FakeApi()));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Olvide mi contrasena'));

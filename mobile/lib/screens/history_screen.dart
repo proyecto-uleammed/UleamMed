@@ -142,10 +142,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
         widgets.add(
           Padding(
             padding: const EdgeInsets.only(top: 12, bottom: 6),
-            child: Text(
-              dayKey,
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
+            child: Text(dayKey, style: Theme.of(context).textTheme.titleLarge),
           ),
         );
       }
@@ -393,10 +390,8 @@ class _Filters extends StatelessWidget {
                 child: Text('Todos los medicamentos'),
               ),
               ...medications.map(
-                (name) => DropdownMenuItem<String?>(
-                  value: name,
-                  child: Text(name),
-                ),
+                (name) =>
+                    DropdownMenuItem<String?>(value: name, child: Text(name)),
               ),
             ],
             onChanged: onMedicationChanged,
@@ -439,6 +434,8 @@ class _HistoryTile extends StatelessWidget {
         return (const Color(0xFFC62828), Icons.cancel, 'Omitido');
       case DoseStatus.postponed:
         return (const Color(0xFFF57F17), Icons.snooze, 'Pospuesto');
+      case DoseStatus.missed:
+        return (const Color(0xFF616161), Icons.schedule, 'No confirmado');
     }
   }
 

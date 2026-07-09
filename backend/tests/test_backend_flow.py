@@ -280,6 +280,100 @@ class BackendIntegratedFlowTest(unittest.TestCase):
         final = self.client.get("/api/v1/medications", headers=headers)
         self.assertEqual(final.json()["items"], [])
 
+    def test_horario_estructurado_y_evento_idempotente(self) -> None:
+        """Guarda dos tomas diarias y evita duplicar eventos offline."""
+        access_token = self._create_user_and_token()
+        headers = {"Authorization": f"Bearer {access_token}"}
+        creado = self.client.post(
+            "/api/v1/medications",
+            headers=headers,
+            json={
+                "name": "Antibiotico",
+                "doseAmount": 150,
+                "doseUnit": "mg",
+                "instructions": "Tomar despues de comer",
+                "schedule": {
+                    "mode": "interval",
+                    "interval_hours": 12,
+                    "times": ["08:00"],
+                    "weekdays": [1, 2, 3, 4, 5, 6, 7],
+                    "start_date": "2026-07-09",
+                },
+            },
+        )
+        self.assertEqual(creado.status_code, 201)
+        self.assertEqual(creado.json()["dose"], "150 mg")
+        self.assertEqual(creado.json()["schedule"]["interval_hours"], 12)
+
+        medication_id = creado.json()["id"]
+        event = {
+            "client_event_id": "evento-tablet-0001",
+            "scheduled_at": "2026-07-09T08:00:00Z",
+            "sequence_number": 1,
+            "status": "taken",
+            "acted_at": "2026-07-09T08:01:00Z",
+        }
+        first = self.client.post(
+            f"/api/v1/medications/{medication_id}/dose-events",
+            headers=headers,
+            json=event,
+        )
+        second = self.client.post(
+            f"/api/v1/medications/{medication_id}/dose-events",
+            headers=headers,
+            json=event,
+        )
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(first.json()["id"], second.json()["id"])
+
+        events = self.client.get(
+            "/api/v1/medications/dose-events",
+            headers=headers,
+        )
+        self.assertEqual(events.status_code, 200)
+        self.assertEqual(len(events.json()), 1)
+
+    def test_foto_de_medicamento_se_mantiene_privada_en_backend(self) -> None:
+        """La foto pasa por FastAPI y no expone una URL publica."""
+        access_token = self._create_user_and_token()
+        headers = {"Authorization": f"Bearer {access_token}"}
+        creado = self.client.post(
+            "/api/v1/medications",
+            headers=headers,
+            json={"name": "Losartan", "dose": "50 mg", "time": "08:00"},
+        )
+        medication_id = creado.json()["id"]
+
+        with (
+            patch(
+                "backend.api.v1.endpoints.medications.upload_medication_photo",
+                return_value=f"users/1/medications/{medication_id}/foto.jpg",
+            ),
+            patch(
+                "backend.api.v1.endpoints.medications.delete_medication_photo",
+            ),
+        ):
+            uploaded = self.client.post(
+                f"/api/v1/medications/{medication_id}/photo",
+                headers=headers,
+                files={"photo": ("foto.jpg", b"imagen", "image/jpeg")},
+            )
+        self.assertEqual(uploaded.status_code, 200)
+        self.assertTrue(uploaded.json()["photoAvailable"])
+        self.assertNotIn("photo_path", uploaded.json())
+
+        with patch(
+            "backend.api.v1.endpoints.medications.download_medication_photo",
+            return_value=b"imagen",
+        ):
+            downloaded = self.client.get(
+                f"/api/v1/medications/{medication_id}/photo",
+                headers=headers,
+            )
+        self.assertEqual(downloaded.status_code, 200)
+        self.assertEqual(downloaded.content, b"imagen")
+
     def test_modulo_medicamentos_rechaza_roles_no_pacientes(self) -> None:
         """Los paneles futuros no obtienen permisos de paciente por autenticarse."""
         with self.SessionLocal() as db:
