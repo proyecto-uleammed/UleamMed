@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../models/app_role.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import 'legal_screen.dart';
@@ -30,6 +31,7 @@ class _AuthScreenState extends State<AuthScreen> {
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _acceptedTerms = false;
+  AppRole _registrationRole = AppRole.patient;
   String? _error;
 
   @override
@@ -58,6 +60,7 @@ class _AuthScreenState extends State<AuthScreen> {
           email: _emailController.text.trim(),
           password: _passwordController.text,
           fullName: _nameController.text.trim(),
+          accountType: _registrationRole,
         );
       }
 
@@ -131,7 +134,11 @@ class _AuthScreenState extends State<AuthScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              _isRegisterMode ? 'Crear cuenta de paciente' : 'Iniciar sesión',
+              _isRegisterMode
+                  ? _registrationRole == AppRole.caregiver
+                        ? 'Crear cuenta de cuidador'
+                        : 'Crear cuenta de paciente'
+                  : 'Iniciar sesión',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.titleLarge,
             ),
@@ -158,6 +165,39 @@ class _AuthScreenState extends State<AuthScreen> {
                         }
                         return null;
                       },
+                    ),
+                    const SizedBox(height: 14),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Tipo de cuenta',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: SegmentedButton<AppRole>(
+                        showSelectedIcon: false,
+                        segments: const [
+                          ButtonSegment(
+                            value: AppRole.patient,
+                            icon: Icon(Icons.person),
+                            label: Text('Paciente'),
+                          ),
+                          ButtonSegment(
+                            value: AppRole.caregiver,
+                            icon: Icon(Icons.family_restroom),
+                            label: Text('Cuidador'),
+                          ),
+                        ],
+                        selected: {_registrationRole},
+                        onSelectionChanged: (selection) {
+                          setState(() {
+                            _registrationRole = selection.first;
+                          });
+                        },
+                      ),
                     ),
                     const SizedBox(height: 14),
                   ],

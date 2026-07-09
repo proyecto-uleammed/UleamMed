@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from backend.core.roles import UserRole
+from backend.core.roles import PublicAccountType, UserRole
 
 
 class UserBase(BaseModel):
@@ -23,6 +23,7 @@ class UserCreate(UserBase):
     """Datos que la app envia para registrar una cuenta."""
 
     password: str = Field(..., min_length=8, max_length=128, examples=["clave-segura-123"])
+    account_type: PublicAccountType = PublicAccountType.PATIENT
     model_config = ConfigDict(extra="forbid")
 
 

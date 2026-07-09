@@ -35,7 +35,7 @@ def create_user(db: Session, payload: UserCreate) -> User:
         email=payload.email.lower(),
         full_name=payload.full_name,
         hashed_password=generate_password_hash(payload.password),
-        role=UserRole.PATIENT,
+        role=UserRole(payload.account_type.value),
     )
     db.add(user)
     db.commit()

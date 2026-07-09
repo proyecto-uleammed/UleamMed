@@ -1,3 +1,4 @@
+from datetime import UTC, datetime, timedelta
 import unittest
 from unittest.mock import patch
 
@@ -10,6 +11,7 @@ from backend.app.main import app
 from backend.core.database import Base, get_db
 from backend.core.roles import UserRole
 from backend.core.security import create_access_token, generate_password_hash
+from backend.models.caregiver_invitation import CaregiverInvitation
 from backend.models.user import User
 
 
@@ -39,29 +41,46 @@ class BackendIntegratedFlowTest(unittest.TestCase):
     def tearDown(self) -> None:
         """Limpia dependencias sobrescritas despues de cada prueba."""
         app.dependency_overrides.clear()
+        self.client.close()
         Base.metadata.drop_all(bind=self.engine)
+        self.engine.dispose()
 
     def _create_user_and_token(self) -> str:
         """Registra un usuario demo y devuelve su access token."""
-        registro = self.client.post(
-            "/api/v1/auth/register",
-            json={
-                "email": "persona@uleam.edu.ec",
-                "full_name": "Persona Demo",
-                "password": "clave-segura-123",
-            },
+        _, token = self._create_account_and_token(
+            email="persona@uleam.edu.ec",
+            full_name="Persona Demo",
         )
-        self.assertEqual(registro.status_code, 201)
+        return token
 
+    def _create_account_and_token(
+        self,
+        *,
+        email: str,
+        full_name: str,
+        account_type: str = "patient",
+    ) -> tuple[dict, str]:
+        """Crea una cuenta del rol solicitado y devuelve su token."""
+        with patch("backend.api.v1.endpoints.auth.send_welcome_email"):
+            registro = self.client.post(
+                "/api/v1/auth/register",
+                json={
+                    "email": email,
+                    "full_name": full_name,
+                    "password": "clave-segura-123",
+                    "account_type": account_type,
+                },
+            )
+        self.assertEqual(registro.status_code, 201)
         login = self.client.post(
             "/api/v1/auth/login",
             json={
-                "email": "persona@uleam.edu.ec",
+                "email": email,
                 "password": "clave-segura-123",
             },
         )
         self.assertEqual(login.status_code, 200)
-        return login.json()["access_token"]
+        return registro.json(), login.json()["access_token"]
 
     def test_flujo_rest_principal(self) -> None:
         """Valida auth, perfil, dispositivos y notificaciones demo."""
@@ -137,11 +156,18 @@ class BackendIntegratedFlowTest(unittest.TestCase):
                 "email": "intruso@uleam.edu.ec",
                 "full_name": "Usuario Intruso",
                 "password": "clave-segura-123",
-                "role": "admin",
+                "account_type": "admin",
             },
         )
 
         self.assertEqual(respuesta.status_code, 422)
+
+        caregiver, _ = self._create_account_and_token(
+            email="cuidador-registro@uleam.edu.ec",
+            full_name="Cuidador Registro",
+            account_type="caregiver",
+        )
+        self.assertEqual(caregiver["role"], "caregiver")
 
     def test_recuperacion_password_con_codigo(self) -> None:
         """Valida solicitud de codigo y cambio de contrasena."""
@@ -275,6 +301,242 @@ class BackendIntegratedFlowTest(unittest.TestCase):
 
         self.assertEqual(respuesta.status_code, 403)
         self.assertIn("pacientes", respuesta.json()["detail"])
+
+    def test_vinculacion_cuidador_requiere_aprobacion_y_respeta_revocacion(
+        self,
+    ) -> None:
+        """Valida el flujo completo sin permitir acceso anticipado o cruzado."""
+        _, patient_token = self._create_account_and_token(
+            email="paciente-vinculo@uleam.edu.ec",
+            full_name="Paciente Vinculo",
+        )
+        _, caregiver_token = self._create_account_and_token(
+            email="cuidador-vinculo@uleam.edu.ec",
+            full_name="Cuidador Vinculo",
+            account_type="caregiver",
+        )
+        _, other_caregiver_token = self._create_account_and_token(
+            email="otro-cuidador@uleam.edu.ec",
+            full_name="Otro Cuidador",
+            account_type="caregiver",
+        )
+        patient_headers = {"Authorization": f"Bearer {patient_token}"}
+        caregiver_headers = {"Authorization": f"Bearer {caregiver_token}"}
+        other_headers = {"Authorization": f"Bearer {other_caregiver_token}"}
+
+        medication = self.client.post(
+            "/api/v1/medications",
+            headers=patient_headers,
+            json={
+                "name": "Losartan",
+                "dose": "50 mg",
+                "time": "08:00",
+            },
+        )
+        self.assertEqual(medication.status_code, 201)
+
+        invitation = self.client.post(
+            "/api/v1/caregiving/invitations",
+            headers=patient_headers,
+        )
+        self.assertEqual(invitation.status_code, 201)
+        code = invitation.json()["code"]
+        self.assertEqual(len(code.replace("-", "")), 8)
+
+        with self.SessionLocal() as db:
+            stored = db.get(CaregiverInvitation, invitation.json()["id"])
+            self.assertIsNotNone(stored)
+            self.assertNotEqual(stored.code_digest, code.replace("-", ""))
+            self.assertEqual(len(stored.code_digest), 64)
+
+        redeemed = self.client.post(
+            "/api/v1/caregiving/invitations/redeem",
+            headers=caregiver_headers,
+            json={"code": code},
+        )
+        self.assertEqual(redeemed.status_code, 200)
+        self.assertEqual(redeemed.json()["status"], "pending")
+        link_id = redeemed.json()["id"]
+        patient_id = redeemed.json()["counterpart_user_id"]
+
+        before_approval = self.client.get(
+            f"/api/v1/caregiving/patients/{patient_id}/medications",
+            headers=caregiver_headers,
+        )
+        self.assertEqual(before_approval.status_code, 404)
+
+        caregiver_cannot_approve = self.client.post(
+            f"/api/v1/caregiving/links/{link_id}/approve",
+            headers=caregiver_headers,
+        )
+        self.assertEqual(caregiver_cannot_approve.status_code, 403)
+
+        patient_links = self.client.get(
+            "/api/v1/caregiving/links",
+            headers=patient_headers,
+        )
+        self.assertEqual(patient_links.status_code, 200)
+        self.assertEqual(patient_links.json()["items"][0]["id"], link_id)
+        self.assertEqual(
+            patient_links.json()["items"][0]["counterpart_email_masked"],
+            "c***@uleam.edu.ec",
+        )
+
+        approved = self.client.post(
+            f"/api/v1/caregiving/links/{link_id}/approve",
+            headers=patient_headers,
+        )
+        self.assertEqual(approved.status_code, 200)
+        self.assertEqual(approved.json()["status"], "active")
+
+        patients = self.client.get(
+            "/api/v1/caregiving/patients",
+            headers=caregiver_headers,
+        )
+        self.assertEqual(patients.status_code, 200)
+        self.assertEqual(patients.json()["items"][0]["id"], patient_id)
+
+        shared_medications = self.client.get(
+            f"/api/v1/caregiving/patients/{patient_id}/medications",
+            headers=caregiver_headers,
+        )
+        self.assertEqual(shared_medications.status_code, 200)
+        self.assertEqual(shared_medications.json()["items"][0]["name"], "Losartan")
+
+        unrelated_access = self.client.get(
+            f"/api/v1/caregiving/patients/{patient_id}/medications",
+            headers=other_headers,
+        )
+        self.assertEqual(unrelated_access.status_code, 404)
+
+        reused = self.client.post(
+            "/api/v1/caregiving/invitations/redeem",
+            headers=other_headers,
+            json={"code": code},
+        )
+        self.assertEqual(reused.status_code, 400)
+
+        revoked = self.client.delete(
+            f"/api/v1/caregiving/links/{link_id}",
+            headers=patient_headers,
+        )
+        self.assertEqual(revoked.status_code, 204)
+
+        after_revocation = self.client.get(
+            f"/api/v1/caregiving/patients/{patient_id}/medications",
+            headers=caregiver_headers,
+        )
+        self.assertEqual(after_revocation.status_code, 404)
+
+    def test_invitacion_cancelada_expirada_y_aprobacion_ajena(self) -> None:
+        """Valida cancelacion, expiracion y propiedad de solicitudes."""
+        _, patient_token = self._create_account_and_token(
+            email="paciente-codigos@uleam.edu.ec",
+            full_name="Paciente Codigos",
+        )
+        _, other_patient_token = self._create_account_and_token(
+            email="otro-paciente@uleam.edu.ec",
+            full_name="Otro Paciente",
+        )
+        _, caregiver_token = self._create_account_and_token(
+            email="cuidador-codigos@uleam.edu.ec",
+            full_name="Cuidador Codigos",
+            account_type="caregiver",
+        )
+        patient_headers = {"Authorization": f"Bearer {patient_token}"}
+        other_patient_headers = {"Authorization": f"Bearer {other_patient_token}"}
+        caregiver_headers = {"Authorization": f"Bearer {caregiver_token}"}
+
+        canceled = self.client.post(
+            "/api/v1/caregiving/invitations",
+            headers=patient_headers,
+        )
+        canceled_code = canceled.json()["code"]
+        cancel_response = self.client.delete(
+            f"/api/v1/caregiving/invitations/{canceled.json()['id']}",
+            headers=patient_headers,
+        )
+        self.assertEqual(cancel_response.status_code, 204)
+        invalid_canceled = self.client.post(
+            "/api/v1/caregiving/invitations/redeem",
+            headers=caregiver_headers,
+            json={"code": canceled_code},
+        )
+        self.assertEqual(invalid_canceled.status_code, 400)
+
+        expired = self.client.post(
+            "/api/v1/caregiving/invitations",
+            headers=patient_headers,
+        )
+        with self.SessionLocal() as db:
+            stored = db.get(CaregiverInvitation, expired.json()["id"])
+            stored.expires_at = datetime.now(UTC) - timedelta(minutes=1)
+            db.add(stored)
+            db.commit()
+        invalid_expired = self.client.post(
+            "/api/v1/caregiving/invitations/redeem",
+            headers=caregiver_headers,
+            json={"code": expired.json()["code"]},
+        )
+        self.assertEqual(invalid_expired.status_code, 400)
+
+        obsolete = self.client.post(
+            "/api/v1/caregiving/invitations",
+            headers=patient_headers,
+        )
+        valid = self.client.post(
+            "/api/v1/caregiving/invitations",
+            headers=patient_headers,
+        )
+        invalid_obsolete = self.client.post(
+            "/api/v1/caregiving/invitations/redeem",
+            headers=caregiver_headers,
+            json={"code": obsolete.json()["code"]},
+        )
+        self.assertEqual(invalid_obsolete.status_code, 400)
+
+        pending = self.client.post(
+            "/api/v1/caregiving/invitations/redeem",
+            headers=caregiver_headers,
+            json={"code": valid.json()["code"]},
+        )
+        link_id = pending.json()["id"]
+        foreign_approval = self.client.post(
+            f"/api/v1/caregiving/links/{link_id}/approve",
+            headers=other_patient_headers,
+        )
+        self.assertEqual(foreign_approval.status_code, 404)
+
+        rejected = self.client.post(
+            f"/api/v1/caregiving/links/{link_id}/reject",
+            headers=patient_headers,
+        )
+        self.assertEqual(rejected.status_code, 200)
+        self.assertEqual(rejected.json()["status"], "rejected")
+
+    def test_limite_de_intentos_de_codigo(self) -> None:
+        """Bloquea temporalmente intentos repetidos del cuidador."""
+        _, caregiver_token = self._create_account_and_token(
+            email="cuidador-intentos@uleam.edu.ec",
+            full_name="Cuidador Intentos",
+            account_type="caregiver",
+        )
+        headers = {"Authorization": f"Bearer {caregiver_token}"}
+
+        for _ in range(5):
+            invalid = self.client.post(
+                "/api/v1/caregiving/invitations/redeem",
+                headers=headers,
+                json={"code": "ABCD2345"},
+            )
+            self.assertEqual(invalid.status_code, 400)
+
+        blocked = self.client.post(
+            "/api/v1/caregiving/invitations/redeem",
+            headers=headers,
+            json={"code": "WXYZ6789"},
+        )
+        self.assertEqual(blocked.status_code, 429)
 
     def test_websocket_autenticado(self) -> None:
         """Valida conexion WebSocket con access token y respuesta eco."""

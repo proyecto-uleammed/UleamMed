@@ -5,11 +5,13 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/app_role.dart';
+import '../models/caregiving_models.dart';
 import '../models/local_models.dart';
 import 'local_store.dart';
 import 'sync_service.dart';
 
 export '../models/local_models.dart';
+export '../models/caregiving_models.dart';
 
 abstract class UleamMedApi {
   Future<AppSession?> restoreSession();
@@ -18,6 +20,7 @@ abstract class UleamMedApi {
     required String email,
     required String password,
     required String fullName,
+    AppRole accountType = AppRole.patient,
   });
   Future<AppSession> loadAppSession();
   Future<AppSession> updateProfile({required String fullName});
@@ -48,9 +51,15 @@ abstract class UleamMedApi {
   Future<List<HealthEntry>> listHealthEntries();
   Future<HealthEntry> saveHealthEntry(HealthEntry entry);
   Future<void> deleteHealthEntry(String entryId);
-  Future<List<CaregiverPermission>> listCaregivers();
-  Future<CaregiverPermission> saveCaregiver(CaregiverPermission caregiver);
-  Future<void> deleteCaregiver(String caregiverId);
+  Future<CaregiverInvitation> createCaregiverInvitation();
+  Future<void> cancelCaregiverInvitation(int invitationId);
+  Future<CaregiverLink> redeemCaregiverInvitation(String code);
+  Future<List<CaregiverLink>> listCaregivingLinks();
+  Future<CaregiverLink> approveCaregiverLink(int linkId);
+  Future<CaregiverLink> rejectCaregiverLink(int linkId);
+  Future<void> revokeCaregiverLink(int linkId);
+  Future<List<CaregiverPatient>> listCaregiverPatients();
+  Future<List<MedicationItem>> listCaregiverPatientMedications(int patientId);
   Future<int> pendingSyncCount();
   Future<SyncSummary> synchronizePendingChanges();
 }
@@ -130,7 +139,11 @@ class ApiService implements UleamMedApi {
     required String email,
     required String password,
     required String fullName,
+    AppRole accountType = AppRole.patient,
   }) async {
+    if (accountType != AppRole.patient && accountType != AppRole.caregiver) {
+      throw const ApiException('Tipo de cuenta no permitido');
+    }
     final response = await _client.post(
       Uri.parse('$_baseUrl/api/v1/auth/register'),
       headers: _jsonHeaders,
@@ -138,6 +151,7 @@ class ApiService implements UleamMedApi {
         'email': email,
         'password': password,
         'full_name': fullName,
+        'account_type': accountType.name,
       }),
     );
 
@@ -299,6 +313,7 @@ class ApiService implements UleamMedApi {
     try {
       await _deleteAuthorized(
         Uri.parse('$_baseUrl/api/v1/medications/$medicationId'),
+        fallback: 'No se pudo eliminar el medicamento',
       );
     } catch (_) {
       // La eliminacion local se conserva para no bloquear el flujo offline.
@@ -401,18 +416,85 @@ class ApiService implements UleamMedApi {
   }
 
   @override
-  Future<List<CaregiverPermission>> listCaregivers() {
-    return _localStore.readCaregiverPermissions();
+  Future<CaregiverInvitation> createCaregiverInvitation() async {
+    final data = await _postAuthorizedJson(
+      Uri.parse('$_baseUrl/api/v1/caregiving/invitations'),
+      fallback: 'No se pudo generar el codigo',
+    );
+    return CaregiverInvitation.fromJson(data);
   }
 
   @override
-  Future<CaregiverPermission> saveCaregiver(CaregiverPermission caregiver) {
-    return _localStore.upsertCaregiverPermission(caregiver);
+  Future<void> cancelCaregiverInvitation(int invitationId) {
+    return _deleteAuthorized(
+      Uri.parse('$_baseUrl/api/v1/caregiving/invitations/$invitationId'),
+      fallback: 'No se pudo cancelar el codigo',
+    );
   }
 
   @override
-  Future<void> deleteCaregiver(String caregiverId) {
-    return _localStore.deleteCaregiverPermission(caregiverId);
+  Future<CaregiverLink> redeemCaregiverInvitation(String code) async {
+    final data = await _postAuthorizedJson(
+      Uri.parse('$_baseUrl/api/v1/caregiving/invitations/redeem'),
+      body: {'code': code.trim()},
+      fallback: 'No se pudo enviar la solicitud',
+    );
+    return CaregiverLink.fromJson(data);
+  }
+
+  @override
+  Future<List<CaregiverLink>> listCaregivingLinks() async {
+    final data = await _getAuthorizedJson(
+      Uri.parse('$_baseUrl/api/v1/caregiving/links'),
+      fallback: 'No se pudieron cargar los vinculos',
+    );
+    return _decodeList(data, CaregiverLink.fromJson);
+  }
+
+  @override
+  Future<CaregiverLink> approveCaregiverLink(int linkId) async {
+    final data = await _postAuthorizedJson(
+      Uri.parse('$_baseUrl/api/v1/caregiving/links/$linkId/approve'),
+      fallback: 'No se pudo aprobar al cuidador',
+    );
+    return CaregiverLink.fromJson(data);
+  }
+
+  @override
+  Future<CaregiverLink> rejectCaregiverLink(int linkId) async {
+    final data = await _postAuthorizedJson(
+      Uri.parse('$_baseUrl/api/v1/caregiving/links/$linkId/reject'),
+      fallback: 'No se pudo rechazar la solicitud',
+    );
+    return CaregiverLink.fromJson(data);
+  }
+
+  @override
+  Future<void> revokeCaregiverLink(int linkId) {
+    return _deleteAuthorized(
+      Uri.parse('$_baseUrl/api/v1/caregiving/links/$linkId'),
+      fallback: 'No se pudo revocar el acceso',
+    );
+  }
+
+  @override
+  Future<List<CaregiverPatient>> listCaregiverPatients() async {
+    final data = await _getAuthorizedJson(
+      Uri.parse('$_baseUrl/api/v1/caregiving/patients'),
+      fallback: 'No se pudieron cargar los pacientes',
+    );
+    return _decodeList(data, CaregiverPatient.fromJson);
+  }
+
+  @override
+  Future<List<MedicationItem>> listCaregiverPatientMedications(
+    int patientId,
+  ) async {
+    final data = await _getAuthorizedJson(
+      Uri.parse('$_baseUrl/api/v1/caregiving/patients/$patientId/medications'),
+      fallback: 'No se pudieron cargar los medicamentos',
+    );
+    return _decodeList(data, MedicationItem.fromJson);
   }
 
   @override
@@ -644,7 +726,7 @@ class ApiService implements UleamMedApi {
     );
   }
 
-  Future<void> _deleteAuthorized(Uri uri) async {
+  Future<void> _deleteAuthorized(Uri uri, {required String fallback}) async {
     final token = await _ensureAccessToken();
     var response = await _client.delete(
       uri,
@@ -668,13 +750,24 @@ class ApiService implements UleamMedApi {
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw ApiException(
-        _errorMessageFromResponse(
-          response,
-          'No se pudo eliminar el medicamento',
-        ),
+        _errorMessageFromResponse(response, fallback),
         response.statusCode,
       );
     }
+  }
+
+  List<T> _decodeList<T>(
+    Map<String, dynamic> data,
+    T Function(Map<String, dynamic>) fromJson,
+  ) {
+    final items = data['items'];
+    if (items is! List) {
+      throw const ApiException('Respuesta inesperada del backend');
+    }
+    return items
+        .whereType<Map>()
+        .map((item) => fromJson(Map<String, dynamic>.from(item)))
+        .toList();
   }
 
   Future<Map<String, dynamic>> _authorizedJson({

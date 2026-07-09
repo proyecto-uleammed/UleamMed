@@ -1,108 +1,200 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_states.dart';
 
-class _PermissionType {
-  const _PermissionType({
-    required this.label,
-    required this.icon,
-    required this.get,
-    required this.set,
-  });
-
-  final String label;
-  final IconData icon;
-  final bool Function(CaregiverPermission) get;
-  final CaregiverPermission Function(CaregiverPermission, bool) set;
-}
-
-final List<_PermissionType> _permissionTypes = [
-  _PermissionType(
-    label: 'Medicamentos',
-    icon: Icons.medication,
-    get: (c) => c.canViewMedications,
-    set: (c, v) => c.copyWith(canViewMedications: v),
-  ),
-  _PermissionType(
-    label: 'Consultas',
-    icon: Icons.event,
-    get: (c) => c.canViewAppointments,
-    set: (c, v) => c.copyWith(canViewAppointments: v),
-  ),
-  _PermissionType(
-    label: 'Condiciones y alergias',
-    icon: Icons.health_and_safety,
-    get: (c) => c.canViewConditions,
-    set: (c, v) => c.copyWith(canViewConditions: v),
-  ),
-  _PermissionType(
-    label: 'Datos de emergencia',
-    icon: Icons.emergency,
-    get: (c) => c.canViewEmergency,
-    set: (c, v) => c.copyWith(canViewEmergency: v),
-  ),
-  _PermissionType(
-    label: 'Alertas y avisos',
-    icon: Icons.notifications_active,
-    get: (c) => c.canReceiveAlerts,
-    set: (c, v) => c.copyWith(canReceiveAlerts: v),
-  ),
-];
-
-/// Cuidadores: invitacion y permisos por tipo de informacion
-/// (PB-041/044/015).
 class CaregiversScreen extends StatefulWidget {
-  const CaregiversScreen({super.key, this.api});
+  const CaregiversScreen({super.key, required this.api});
 
-  final UleamMedApi? api;
+  final UleamMedApi api;
 
   @override
   State<CaregiversScreen> createState() => _CaregiversScreenState();
 }
 
 class _CaregiversScreenState extends State<CaregiversScreen> {
-  late final UleamMedApi _api = widget.api ?? ApiService();
-  late Future<List<CaregiverPermission>> _caregivers = _api.listCaregivers();
+  late Future<List<CaregiverLink>> _links = widget.api.listCaregivingLinks();
+  bool _generatingCode = false;
 
   void _reload() {
     setState(() {
-      _caregivers = _api.listCaregivers();
+      _links = widget.api.listCaregivingLinks();
     });
   }
 
-  Future<void> _openForm([CaregiverPermission? caregiver]) async {
-    final saved = await showModalBottomSheet<bool>(
+  Future<void> _generateCode() async {
+    setState(() => _generatingCode = true);
+    try {
+      final invitation = await widget.api.createCaregiverInvitation();
+      if (!mounted) {
+        return;
+      }
+      await _showInvitation(invitation);
+    } on ApiException catch (error) {
+      if (mounted) {
+        showAppSnackBar(context, error.message, isError: true);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _generatingCode = false);
+      }
+    }
+  }
+
+  Future<void> _showInvitation(CaregiverInvitation invitation) async {
+    await showDialog<void>(
       context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (context) => _CaregiverForm(
-        caregiver: caregiver,
-        onSave: (item) => _api.saveCaregiver(item),
-        onDelete: caregiver == null
-            ? null
-            : () => _api.deleteCaregiver(caregiver.id),
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Código para tu cuidador'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SelectableText(
+                invitation.code,
+                style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Válido hasta ${_formatDateTime(invitation.expiresAt)}. '
+                'Solo puede usarse una vez.',
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+          actions: [
+            IconButton(
+              tooltip: 'Copiar código',
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: invitation.code));
+                if (mounted) {
+                  showAppSnackBar(context, 'Código copiado');
+                }
+              },
+              icon: const Icon(Icons.copy),
+            ),
+            TextButton(
+              onPressed: () async {
+                try {
+                  await widget.api.cancelCaregiverInvitation(invitation.id);
+                  if (dialogContext.mounted) {
+                    Navigator.pop(dialogContext);
+                  }
+                  if (mounted) {
+                    showAppSnackBar(context, 'Código cancelado');
+                  }
+                } on ApiException catch (error) {
+                  if (mounted) {
+                    showAppSnackBar(context, error.message, isError: true);
+                  }
+                }
+              },
+              child: const Text('Cancelar código'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Listo'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _approve(CaregiverLink link) async {
+    await _runLinkAction(
+      () => widget.api.approveCaregiverLink(link.id),
+      'Cuidador aprobado',
+    );
+  }
+
+  Future<void> _reject(CaregiverLink link) async {
+    await _runLinkAction(
+      () => widget.api.rejectCaregiverLink(link.id),
+      'Solicitud rechazada',
+    );
+  }
+
+  Future<void> _revoke(CaregiverLink link) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Revocar acceso'),
+        content: Text(
+          '${link.counterpartName} dejará de ver tus medicamentos.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Revocar'),
+          ),
+        ],
       ),
     );
-    if (saved == true && mounted) {
+    if (confirmed != true) {
+      return;
+    }
+    await _runLinkAction(() async {
+      await widget.api.revokeCaregiverLink(link.id);
+      return link;
+    }, 'Acceso revocado');
+  }
+
+  Future<void> _runLinkAction(
+    Future<CaregiverLink> Function() action,
+    String successMessage,
+  ) async {
+    try {
+      await action();
+      if (!mounted) {
+        return;
+      }
       _reload();
-      showAppSnackBar(context, 'Cambios guardados');
+      showAppSnackBar(context, successMessage);
+    } on ApiException catch (error) {
+      if (mounted) {
+        showAppSnackBar(context, error.message, isError: true);
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Cuidadores')),
-      floatingActionButton: FloatingActionButton.extended(
-        heroTag: 'fab-caregivers',
-        onPressed: () => _openForm(),
-        icon: const Icon(Icons.person_add),
-        label: const Text('Invitar'),
+      appBar: AppBar(
+        title: const Text('Cuidadores'),
+        actions: [
+          IconButton(
+            tooltip: 'Actualizar',
+            onPressed: _reload,
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
       ),
-      body: FutureBuilder<List<CaregiverPermission>>(
-        future: _caregivers,
+      floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'generate-caregiver-code',
+        onPressed: _generatingCode ? null : _generateCode,
+        icon: _generatingCode
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Icon(Icons.key),
+        label: const Text('Generar código'),
+      ),
+      body: FutureBuilder<List<CaregiverLink>>(
+        future: _links,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const LoadingView();
@@ -110,33 +202,41 @@ class _CaregiversScreenState extends State<CaregiversScreen> {
           if (snapshot.hasError) {
             return ErrorStateView(onRetry: _reload);
           }
-          final caregivers = snapshot.data ?? const [];
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-            children: [
-              _SharedSummary(caregivers: caregivers),
-              const SizedBox(height: 16),
-              Text(
-                'Personas invitadas',
-                style: Theme.of(context).textTheme.headlineMedium,
-              ),
-              const SizedBox(height: 8),
-              if (caregivers.isEmpty)
-                const EmptyStateView(
-                  icon: Icons.family_restroom,
-                  title: 'Aun no invitas cuidadores',
-                  message:
-                      'Invita a un familiar o cuidador y elige que informacion '
-                      'puede ver.',
-                )
-              else
-                ...caregivers.map(
-                  (caregiver) => _CaregiverCard(
-                    caregiver: caregiver,
-                    onTap: () => _openForm(caregiver),
+          final visibleLinks = (snapshot.data ?? const [])
+              .where(
+                (link) =>
+                    link.status == CaregiverLinkStatus.pending ||
+                    link.status == CaregiverLinkStatus.active,
+              )
+              .toList();
+          if (visibleLinks.isEmpty) {
+            return const EmptyStateView(
+              icon: Icons.family_restroom,
+              title: 'Aún no tienes cuidadores',
+              message:
+                  'Genera un código y compártelo con la persona que te ayudará.',
+            );
+          }
+          return RefreshIndicator(
+            onRefresh: () async => _reload(),
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+              children: [
+                Text(
+                  'Personas vinculadas',
+                  style: Theme.of(context).textTheme.headlineMedium,
+                ),
+                const SizedBox(height: 12),
+                ...visibleLinks.map(
+                  (link) => _CaregiverLinkCard(
+                    link: link,
+                    onApprove: () => _approve(link),
+                    onReject: () => _reject(link),
+                    onRevoke: () => _revoke(link),
                   ),
                 ),
-            ],
+              ],
+            ),
           );
         },
       ),
@@ -144,298 +244,96 @@ class _CaregiversScreenState extends State<CaregiversScreen> {
   }
 }
 
-class _SharedSummary extends StatelessWidget {
-  const _SharedSummary({required this.caregivers});
+class _CaregiverLinkCard extends StatelessWidget {
+  const _CaregiverLinkCard({
+    required this.link,
+    required this.onApprove,
+    required this.onReject,
+    required this.onRevoke,
+  });
 
-  final List<CaregiverPermission> caregivers;
+  final CaregiverLink link;
+  final VoidCallback onApprove;
+  final VoidCallback onReject;
+  final VoidCallback onRevoke;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.privacy_tip, color: AppColors.primary),
-              const SizedBox(width: 8),
-              Text(
-                'Informacion compartida',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          ..._permissionTypes.map((type) {
-            final count = caregivers.where((c) => type.get(c)).length;
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Row(
+    final pending = link.status == CaregiverLinkStatus.pending;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const CircleAvatar(child: Icon(Icons.person)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        link.counterpartName,
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      Text(link.counterpartEmailMasked),
+                    ],
+                  ),
+                ),
+                Chip(label: Text(pending ? 'Pendiente' : 'Activo')),
+              ],
+            ),
+            const SizedBox(height: 12),
+            const Row(
+              children: [
+                Icon(Icons.medication_outlined, size: 20),
+                SizedBox(width: 8),
+                Expanded(child: Text('Consulta de medicamentos')),
+              ],
+            ),
+            const SizedBox(height: 14),
+            if (pending)
+              Row(
                 children: [
-                  Icon(type.icon, size: 20, color: AppColors.textSecondary),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text(type.label)),
-                  Text(
-                    count == 0 ? 'Nadie' : '$count persona(s)',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: count == 0
-                          ? AppColors.textSecondary
-                          : AppColors.primary,
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: onReject,
+                      child: const Text('Rechazar'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: onApprove,
+                      child: const Text('Aprobar'),
                     ),
                   ),
                 ],
+              )
+            else
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: onRevoke,
+                  icon: const Icon(Icons.link_off),
+                  label: const Text('Revocar acceso'),
+                ),
               ),
-            );
-          }),
-        ],
-      ),
-    );
-  }
-}
-
-class _CaregiverCard extends StatelessWidget {
-  const _CaregiverCard({required this.caregiver, required this.onTap});
-
-  final CaregiverPermission caregiver;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final isPending = caregiver.status == 'pendiente';
-    final contact = caregiver.caregiverEmail.isNotEmpty
-        ? caregiver.caregiverEmail
-        : caregiver.caregiverPhone;
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        onTap: onTap,
-        leading: CircleAvatar(
-          backgroundColor: AppColors.primary.withValues(alpha: 0.15),
-          child: const Icon(Icons.person, color: AppColors.primary),
-        ),
-        title: Text(
-          caregiver.caregiverName,
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(contact),
-            const SizedBox(height: 4),
-            Text('${caregiver.sharedCount} tipos de informacion compartidos'),
-          ],
-        ),
-        trailing: Chip(
-          label: Text(isPending ? 'Pendiente' : 'Activo'),
-          backgroundColor: isPending
-              ? const Color(0xFFFFF3E0)
-              : const Color(0xFFE8F5E9),
-        ),
-      ),
-    );
-  }
-}
-
-class _CaregiverForm extends StatefulWidget {
-  const _CaregiverForm({required this.onSave, this.caregiver, this.onDelete});
-
-  final CaregiverPermission? caregiver;
-  final Future<void> Function(CaregiverPermission caregiver) onSave;
-  final Future<void> Function()? onDelete;
-
-  @override
-  State<_CaregiverForm> createState() => _CaregiverFormState();
-}
-
-class _CaregiverFormState extends State<_CaregiverForm> {
-  final _formKey = GlobalKey<FormState>();
-  late final _nameController = TextEditingController(
-    text: widget.caregiver?.caregiverName ?? '',
-  );
-  late final _emailController = TextEditingController(
-    text: widget.caregiver?.caregiverEmail ?? '',
-  );
-  late final _phoneController = TextEditingController(
-    text: widget.caregiver?.caregiverPhone ?? '',
-  );
-  late CaregiverPermission _draft =
-      widget.caregiver ??
-      const CaregiverPermission(
-        id: '',
-        caregiverName: '',
-        caregiverEmail: '',
-      );
-  bool _isSaving = false;
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _emailController.dispose();
-    _phoneController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
-    final email = _emailController.text.trim();
-    final phone = _phoneController.text.trim();
-    if (email.isEmpty && phone.isEmpty) {
-      showAppSnackBar(
-        context,
-        'Ingresa un correo o un telefono',
-        isError: true,
-      );
-      return;
-    }
-
-    final shared = _permissionTypes
-        .where((type) => type.get(_draft))
-        .map((type) => type.label)
-        .toList();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Confirmar informacion compartida'),
-        content: Text(
-          shared.isEmpty
-              ? 'Este cuidador no vera ninguna informacion. Deseas continuar?'
-              : 'Compartiras: ${shared.join(', ')}.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Revisar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Confirmar'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) {
-      return;
-    }
-
-    setState(() => _isSaving = true);
-    final id =
-        widget.caregiver?.id ??
-        'cuidador-${DateTime.now().millisecondsSinceEpoch}';
-    final caregiver = _draft.copyWith(
-      id: id,
-      caregiverName: _nameController.text.trim(),
-      caregiverEmail: email,
-      caregiverPhone: phone,
-      status: widget.caregiver?.status ?? 'pendiente',
-    );
-    await widget.onSave(caregiver);
-    if (mounted) {
-      Navigator.pop(context, true);
-    }
-  }
-
-  Future<void> _delete() async {
-    setState(() => _isSaving = true);
-    await widget.onDelete?.call();
-    if (mounted) {
-      Navigator.pop(context, true);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(
-        left: 20,
-        right: 20,
-        top: 20,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-      ),
-      child: Form(
-        key: _formKey,
-        child: ListView(
-          shrinkWrap: true,
-          children: [
-            Text(
-              widget.caregiver == null ? 'Invitar cuidador' : 'Editar cuidador',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _nameController,
-              decoration: const InputDecoration(
-                labelText: 'Nombre',
-                prefixIcon: Icon(Icons.person),
-                border: OutlineInputBorder(),
-              ),
-              validator: (value) =>
-                  (value ?? '').trim().isEmpty ? 'Ingresa el nombre' : null,
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _emailController,
-              keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(
-                labelText: 'Correo (opcional si hay telefono)',
-                prefixIcon: Icon(Icons.email),
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _phoneController,
-              keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(
-                labelText: 'Telefono (opcional si hay correo)',
-                prefixIcon: Icon(Icons.phone),
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Que puede ver este cuidador',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 4),
-            ..._permissionTypes.map(
-              (type) => SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                secondary: Icon(type.icon, color: AppColors.primary),
-                title: Text(type.label),
-                value: type.get(_draft),
-                onChanged: (value) {
-                  setState(() {
-                    _draft = type.set(_draft, value);
-                  });
-                },
-              ),
-            ),
-            const SizedBox(height: 12),
-            FilledButton.icon(
-              onPressed: _isSaving ? null : _save,
-              icon: const Icon(Icons.save),
-              label: const Text('Guardar'),
-            ),
-            if (widget.onDelete != null) ...[
-              const SizedBox(height: 8),
-              OutlinedButton.icon(
-                onPressed: _isSaving ? null : _delete,
-                icon: const Icon(Icons.delete),
-                label: const Text('Quitar cuidador'),
-              ),
-            ],
           ],
         ),
       ),
     );
   }
+}
+
+String _formatDateTime(DateTime value) {
+  final local = value.toLocal();
+  final day = local.day.toString().padLeft(2, '0');
+  final month = local.month.toString().padLeft(2, '0');
+  final hour = local.hour.toString().padLeft(2, '0');
+  final minute = local.minute.toString().padLeft(2, '0');
+  return '$day/$month a las $hour:$minute';
 }

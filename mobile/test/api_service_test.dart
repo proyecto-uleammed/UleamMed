@@ -158,6 +158,126 @@ void main() {
       expect(tokenStore.wasCleared, isTrue);
       expect(tokenStore.tokens, isNull);
     });
+
+    test('registers a caregiver account explicitly', () async {
+      final tokenStore = _MemoryTokenStore();
+      final api = ApiService(
+        baseUrl: 'http://localhost:8000',
+        tokenStore: tokenStore,
+        localStore: LocalStore(jsonStore: _MemoryJsonStore()),
+        client: MockClient((request) async {
+          if (request.url.path == '/api/v1/auth/register') {
+            expect(jsonDecode(request.body)['account_type'], 'caregiver');
+            return _jsonResponse({
+              ..._userJson(fullName: 'Carla Cuidadora'),
+              'role': 'caregiver',
+            }, statusCode: 201);
+          }
+          if (request.url.path == '/api/v1/auth/login') {
+            return _jsonResponse({
+              'access_token': 'access-ok',
+              'refresh_token': 'refresh-ok',
+            });
+          }
+          if (request.url.path == '/health') {
+            return _jsonResponse({'environment': 'test'});
+          }
+          if (request.url.path == '/api/v1/users/me') {
+            return _jsonResponse({
+              ..._userJson(fullName: 'Carla Cuidadora'),
+              'role': 'caregiver',
+            });
+          }
+          return _jsonResponse({'detail': 'No encontrado'}, statusCode: 404);
+        }),
+      );
+
+      final session = await api.register(
+        email: 'carla@uleammed.test',
+        password: 'clave-segura-123',
+        fullName: 'Carla Cuidadora',
+        accountType: AppRole.caregiver,
+      );
+
+      expect(session.user.role, AppRole.caregiver);
+      expect(tokenStore.tokens?.refreshToken, 'refresh-ok');
+    });
+  });
+
+  group('ApiService caregiving', () {
+    test(
+      'maps invitation, links, patients and read-only medications',
+      () async {
+        final api = ApiService(
+          baseUrl: 'http://localhost:8000',
+          tokenStore: _MemoryTokenStore(
+            const AuthTokens(
+              accessToken: 'access-ok',
+              refreshToken: 'refresh-ok',
+            ),
+          ),
+          localStore: LocalStore(jsonStore: _MemoryJsonStore()),
+          client: MockClient((request) async {
+            expect(request.headers['authorization'], 'Bearer access-ok');
+            if (request.url.path == '/api/v1/caregiving/invitations' &&
+                request.method == 'POST') {
+              return _jsonResponse({
+                'id': 7,
+                'code': 'ABCD-2345',
+                'expires_at': '2026-07-09T12:00:00Z',
+              }, statusCode: 201);
+            }
+            if (request.url.path == '/api/v1/caregiving/invitations/redeem') {
+              expect(jsonDecode(request.body), {'code': 'ABCD-2345'});
+              return _jsonResponse(_linkJson());
+            }
+            if (request.url.path == '/api/v1/caregiving/links') {
+              return _jsonResponse({
+                'items': [_linkJson()],
+              });
+            }
+            if (request.url.path == '/api/v1/caregiving/patients') {
+              return _jsonResponse({
+                'items': [
+                  {'id': 1, 'full_name': 'Roberto Andrade'},
+                ],
+              });
+            }
+            if (request.url.path ==
+                '/api/v1/caregiving/patients/1/medications') {
+              return _jsonResponse({
+                'items': [
+                  {
+                    'id': '9',
+                    'name': 'Losartan',
+                    'dose': '50 mg',
+                    'time': '08:00',
+                    'taken': false,
+                    'frequency': 'Diario',
+                    'duration': '',
+                    'instructions': '',
+                    'isImportant': true,
+                  },
+                ],
+              });
+            }
+            return _jsonResponse({'detail': 'No encontrado'}, statusCode: 404);
+          }),
+        );
+
+        final invitation = await api.createCaregiverInvitation();
+        final redeemed = await api.redeemCaregiverInvitation('ABCD-2345');
+        final links = await api.listCaregivingLinks();
+        final patients = await api.listCaregiverPatients();
+        final medications = await api.listCaregiverPatientMedications(1);
+
+        expect(invitation.code, 'ABCD-2345');
+        expect(redeemed.status, CaregiverLinkStatus.pending);
+        expect(links, hasLength(1));
+        expect(patients.single.fullName, 'Roberto Andrade');
+        expect(medications.single.name, 'Losartan');
+      },
+    );
   });
 
   group('ApiService offline data', () {
@@ -237,5 +357,18 @@ Map<String, dynamic> _userJson({required String fullName}) {
     'full_name': fullName,
     'is_active': true,
     'role': 'patient',
+  };
+}
+
+Map<String, dynamic> _linkJson() {
+  return {
+    'id': 4,
+    'status': 'pending',
+    'counterpart_user_id': 1,
+    'counterpart_name': 'Roberto Andrade',
+    'counterpart_email_masked': 'r***@uleammed.test',
+    'requested_at': '2026-07-08T12:00:00Z',
+    'decided_at': null,
+    'revoked_at': null,
   };
 }

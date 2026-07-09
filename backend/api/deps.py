@@ -55,3 +55,28 @@ def get_current_patient(current_user: User = Depends(get_current_user)) -> User:
             detail="Esta funcion esta disponible unicamente para pacientes",
         )
     return current_user
+
+
+def get_current_caregiver(current_user: User = Depends(get_current_user)) -> User:
+    """Autoriza unicamente cuentas con el rol funcional de cuidador."""
+    if current_user.role != UserRole.CAREGIVER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Esta funcion esta disponible unicamente para cuidadores",
+        )
+    return current_user
+
+
+def get_current_caregiving_user(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    """Autoriza usuarios que participan en una vinculacion de cuidado."""
+    if current_user.role not in {
+        UserRole.PATIENT,
+        UserRole.CAREGIVER,
+    }:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tu rol no participa en vinculos de cuidado",
+        )
+    return current_user

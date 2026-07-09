@@ -8,3 +8,10 @@ class UserRole(StrEnum):
     CAREGIVER = "caregiver"
     PROFESSIONAL = "professional"
     ADMIN = "admin"
+
+
+class PublicAccountType(StrEnum):
+    """Roles que una persona puede elegir durante el registro publico."""
+
+    PATIENT = UserRole.PATIENT
+    CAREGIVER = UserRole.CAREGIVER

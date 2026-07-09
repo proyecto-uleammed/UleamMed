@@ -28,6 +28,13 @@ class CaregiverHomeScreen extends StatefulWidget {
 
 class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
   late final Future<AppSession> _session = widget.api.loadAppSession();
+  late Future<List<CaregiverLink>> _links = widget.api.listCaregivingLinks();
+
+  void _reloadLinks() {
+    setState(() {
+      _links = widget.api.listCaregivingLinks();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,6 +45,11 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
             expandedHeight: 200,
             pinned: true,
             actions: [
+              IconButton(
+                tooltip: 'Actualizar',
+                onPressed: _reloadLinks,
+                icon: const Icon(Icons.refresh),
+              ),
               IconButton(
                 tooltip: 'Ajustes',
                 onPressed: () => Navigator.push(
@@ -108,21 +120,38 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Row(
-                    children: [
-                      RoleSummaryCard(
-                        icon: Icons.family_restroom,
-                        label: 'Personas a cargo',
-                        value: '0',
-                      ),
-                      SizedBox(width: 12),
-                      RoleSummaryCard(
-                        icon: Icons.notifications_active,
-                        label: 'Alertas hoy',
-                        value: '0',
-                        color: Color(0xFFC62828),
-                      ),
-                    ],
+                  FutureBuilder<List<CaregiverLink>>(
+                    future: _links,
+                    builder: (context, snapshot) {
+                      final links = snapshot.data ?? const [];
+                      final active = links
+                          .where(
+                            (link) => link.status == CaregiverLinkStatus.active,
+                          )
+                          .length;
+                      final pending = links
+                          .where(
+                            (link) =>
+                                link.status == CaregiverLinkStatus.pending,
+                          )
+                          .length;
+                      return Row(
+                        children: [
+                          RoleSummaryCard(
+                            icon: Icons.family_restroom,
+                            label: 'Personas a cargo',
+                            value: '$active',
+                          ),
+                          const SizedBox(width: 12),
+                          RoleSummaryCard(
+                            icon: Icons.hourglass_top,
+                            label: 'Pendientes',
+                            value: '$pending',
+                            color: const Color(0xFFEF6C00),
+                          ),
+                        ],
+                      );
+                    },
                   ),
                   const SizedBox(height: 24),
                   Text(
@@ -133,23 +162,9 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
                   ActionCard(
                     icon: Icons.people,
                     title: 'Personas a cargo',
-                    subtitle: 'Ver salud y medicamentos compartidos',
+                    subtitle: 'Vincular y consultar medicamentos',
                     color: AppColors.primary,
                     onTap: () => openRoleTab(context, 1),
-                  ),
-                  ActionCard(
-                    icon: Icons.warning_amber,
-                    title: 'Alertas',
-                    subtitle: 'Tomas omitidas y avisos importantes',
-                    color: const Color(0xFFC62828),
-                    onTap: () => openRoleTab(context, 2),
-                  ),
-                  ActionCard(
-                    icon: Icons.forum_outlined,
-                    title: 'Mensajes',
-                    subtitle: 'Comunicacion con pacientes y medicos',
-                    color: AppColors.primaryLight,
-                    onTap: () => openRoleTab(context, 3),
                   ),
                 ],
               ),

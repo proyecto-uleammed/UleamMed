@@ -100,6 +100,7 @@ class _FakeApi implements UleamMedApi {
     required String email,
     required String password,
     required String fullName,
+    AppRole accountType = AppRole.patient,
   }) async {
     currentSession = AppSession(
       apiUrl: 'http://localhost:8000',
@@ -109,7 +110,7 @@ class _FakeApi implements UleamMedApi {
         email: email,
         fullName: fullName,
         isActive: true,
-        role: AppRole.patient,
+        role: accountType,
       ),
     );
     return currentSession!;
@@ -319,29 +320,89 @@ class _FakeApi implements UleamMedApi {
     healthEntries.removeWhere((e) => e.id == entryId);
   }
 
-  final List<CaregiverPermission> caregivers = [];
+  final List<CaregiverLink> caregivingLinks = [];
+  final List<CaregiverPatient> caregiverPatients = [];
 
   @override
-  Future<List<CaregiverPermission>> listCaregivers() async {
-    return caregivers;
+  Future<CaregiverInvitation> createCaregiverInvitation() async {
+    return CaregiverInvitation(
+      id: 1,
+      code: 'ABCD-2345',
+      expiresAt: DateTime(2026, 7, 9, 12),
+    );
   }
 
   @override
-  Future<CaregiverPermission> saveCaregiver(
-    CaregiverPermission caregiver,
+  Future<void> cancelCaregiverInvitation(int invitationId) async {}
+
+  @override
+  Future<CaregiverLink> redeemCaregiverInvitation(String code) async {
+    final link = CaregiverLink(
+      id: 1,
+      status: CaregiverLinkStatus.pending,
+      counterpartUserId: 1,
+      counterpartName: 'Roberto Andrade',
+      counterpartEmailMasked: 'r***@uleammed.test',
+      requestedAt: DateTime(2026, 7, 8),
+    );
+    caregivingLinks
+      ..removeWhere((item) => item.id == link.id)
+      ..add(link);
+    return link;
+  }
+
+  @override
+  Future<List<CaregiverLink>> listCaregivingLinks() async {
+    return caregivingLinks;
+  }
+
+  @override
+  Future<CaregiverLink> approveCaregiverLink(int linkId) async {
+    final current = caregivingLinks.firstWhere((item) => item.id == linkId);
+    final updated = CaregiverLink(
+      id: current.id,
+      status: CaregiverLinkStatus.active,
+      counterpartUserId: current.counterpartUserId,
+      counterpartName: current.counterpartName,
+      counterpartEmailMasked: current.counterpartEmailMasked,
+      requestedAt: current.requestedAt,
+      decidedAt: DateTime(2026, 7, 8, 12),
+    );
+    caregivingLinks[caregivingLinks.indexOf(current)] = updated;
+    return updated;
+  }
+
+  @override
+  Future<CaregiverLink> rejectCaregiverLink(int linkId) async {
+    final current = caregivingLinks.firstWhere((item) => item.id == linkId);
+    final updated = CaregiverLink(
+      id: current.id,
+      status: CaregiverLinkStatus.rejected,
+      counterpartUserId: current.counterpartUserId,
+      counterpartName: current.counterpartName,
+      counterpartEmailMasked: current.counterpartEmailMasked,
+      requestedAt: current.requestedAt,
+      decidedAt: DateTime(2026, 7, 8, 12),
+    );
+    caregivingLinks[caregivingLinks.indexOf(current)] = updated;
+    return updated;
+  }
+
+  @override
+  Future<void> revokeCaregiverLink(int linkId) async {
+    caregivingLinks.removeWhere((item) => item.id == linkId);
+  }
+
+  @override
+  Future<List<CaregiverPatient>> listCaregiverPatients() async {
+    return caregiverPatients;
+  }
+
+  @override
+  Future<List<MedicationItem>> listCaregiverPatientMedications(
+    int patientId,
   ) async {
-    final index = caregivers.indexWhere((c) => c.id == caregiver.id);
-    if (index >= 0) {
-      caregivers[index] = caregiver;
-    } else {
-      caregivers.add(caregiver);
-    }
-    return caregiver;
-  }
-
-  @override
-  Future<void> deleteCaregiver(String caregiverId) async {
-    caregivers.removeWhere((c) => c.id == caregiverId);
+    return medications;
   }
 
   @override
@@ -383,6 +444,22 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Crear cuenta de paciente'), findsOneWidget);
+  });
+
+  testWidgets('registration allows selecting caregiver account', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      UleamMedApp(api: _FakeApi(), settingsController: _testSettings()),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Necesito crear una cuenta'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cuidador'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Crear cuenta de cuidador'), findsOneWidget);
   });
 
   testWidgets('authenticates and loads home screen', (
@@ -445,10 +522,10 @@ void main() {
       environment: 'test',
       user: AppUser(
         id: 3,
-        email: 'cuidador@uleammed.test',
-        fullName: 'Cuidador Demo',
+        email: 'admin@uleammed.test',
+        fullName: 'Admin Demo',
         isActive: true,
-        role: AppRole.caregiver,
+        role: AppRole.admin,
       ),
     );
 
@@ -463,6 +540,43 @@ void main() {
     expect(find.text('Acceso no disponible'), findsOneWidget);
     expect(find.textContaining('aun no esta habilitado'), findsOneWidget);
     expect(find.text('Medicinas'), findsNothing);
+  });
+
+  testWidgets('caregiver role opens its own panel and can redeem a code', (
+    WidgetTester tester,
+  ) async {
+    const caregiverSession = AppSession(
+      apiUrl: 'http://localhost:8000',
+      environment: 'test',
+      user: AppUser(
+        id: 4,
+        email: 'cuidador@uleammed.test',
+        fullName: 'Carla Cuidadora',
+        isActive: true,
+        role: AppRole.caregiver,
+      ),
+    );
+    final api = _FakeApi(restoredSession: caregiverSession);
+
+    await tester.pumpWidget(
+      UleamMedApp(api: api, settingsController: _testSettings()),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Panel Cuidador'), findsOneWidget);
+    await tester.tap(find.text('Personas'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Vincular paciente'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Código de 8 caracteres'),
+      'ABCD2345',
+    );
+    await tester.tap(find.text('Enviar solicitud'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Esperando aprobación'), findsOneWidget);
+    expect(find.text('Roberto Andrade'), findsOneWidget);
   });
 
   testWidgets('logout returns to login screen', (WidgetTester tester) async {

@@ -12,11 +12,16 @@ Ya esta integrado en `main`:
 - Pantalla inicial Flutter para iniciar sesion, crear cuenta o recuperar contrasena de forma preparada.
 - Sesion movil persistida con almacenamiento seguro, restauracion automatica, refresh token y logout.
 - Rol funcional persistido en PostgreSQL:
-  - Todas las cuentas publicas se registran como `patient`.
+  - El registro permite cuentas `patient` o `caregiver`.
   - Flutter obtiene el rol desde `/api/v1/users/me`.
-  - El usuario no puede elegir ni cambiar su rol desde la aplicacion.
-  - Los paneles de cuidador, medico y administrador permanecen ocultos hasta
-    que sus permisos se implementen en backend.
+  - El rol se elige solo al crear la cuenta y no puede cambiarse desde Ajustes.
+  - Los paneles de medico y administrador permanecen ocultos.
+- Vinculacion real paciente-cuidador:
+  - El paciente genera un codigo temporal de 8 caracteres y un solo uso.
+  - El cuidador usa el codigo para enviar una solicitud.
+  - El paciente debe aprobar antes de compartir medicamentos.
+  - El cuidador solo consulta; no puede editar ni confirmar tomas.
+  - El paciente puede revocar el acceso inmediatamente.
 - Perfil basico editable desde Flutter usando `/api/v1/users/me`.
 - Perfil medico local-first con enfermedades, alergias, indicaciones,
   contacto de emergencia y consentimiento para compartir con cuidadores.
@@ -100,6 +105,16 @@ El backend esta construido con FastAPI y expone:
 - `PATCH /api/v1/medications/{medication_id}`: actualizar medicamento del usuario autenticado.
 - `DELETE /api/v1/medications/{medication_id}`: eliminar logicamente medicamento del usuario autenticado.
 - `POST /api/v1/medications/{medication_id}/take`: marcar medicamento como tomado.
+- `POST /api/v1/caregiving/invitations`: generar codigo como paciente.
+- `DELETE /api/v1/caregiving/invitations/{invitation_id}`: cancelar codigo.
+- `POST /api/v1/caregiving/invitations/redeem`: usar codigo como cuidador.
+- `GET /api/v1/caregiving/links`: listar solicitudes y vinculos propios.
+- `POST /api/v1/caregiving/links/{link_id}/approve`: aprobar cuidador.
+- `POST /api/v1/caregiving/links/{link_id}/reject`: rechazar solicitud.
+- `DELETE /api/v1/caregiving/links/{link_id}`: revocar acceso.
+- `GET /api/v1/caregiving/patients`: listar pacientes aprobados.
+- `GET /api/v1/caregiving/patients/{patient_id}/medications`: consulta de
+  medicamentos en modo lectura.
 - `POST /api/v1/devices`: registrar token FCM del dispositivo.
 - `GET /api/v1/devices`: listar tokens FCM del usuario.
 - `DELETE /api/v1/devices/{token}`: eliminar token FCM.
@@ -125,6 +140,9 @@ Incluye, entre otras, estas tablas:
 - `users`: tabla oficial para auth y rol funcional del MVP.
 - `password_reset_tokens`: codigos temporales de recuperacion.
 - `medications`: medicamentos personales creados por cada usuario.
+- `caregiver_invitations`: codigos HMAC temporales; nunca guarda el codigo real.
+- `patient_caregiver_links`: solicitudes y vinculos directos entre cuentas.
+- `caregiver_join_attempts`: intentos usados para limitar ataques al codigo.
 - `guardians`, `caregivers`, `older_adults`, `caregiver_older_adults`.
 - `medical_profiles`, `medical_histories`, `medical_exams`, `exam_details`, `exam_parameters`.
 - `medication_catalog`, `treatments`, `treatment_medications`, `medication_adherence_records`.
@@ -152,7 +170,14 @@ Para demo local del prototipo movil se puede usar SQLite temporal y crear solo l
 rm -f /tmp/uleammed-demo.db
 DATABASE_URL='sqlite:////tmp/uleammed-demo.db' SECRET_KEY='demo-secret-key' .venv/bin/python - <<'PY'
 from backend.core.database import Base, engine
-from backend.models import medication, password_reset_token, user
+from backend.models import (
+    caregiver_invitation,
+    caregiver_join_attempt,
+    medication,
+    password_reset_token,
+    patient_caregiver_link,
+    user,
+)
 
 Base.metadata.create_all(bind=engine)
 print('demo database ready')
@@ -176,7 +201,7 @@ Frontend:
 
 ## Configuracion backend
 
-Copiar `.env.example` a `.env` si existe, o crear `.env` local.
+Crear un archivo `.env` local con las credenciales del entorno.
 
 Variables principales:
 
@@ -186,6 +211,9 @@ Variables principales:
 - `ACCESS_TOKEN_EXPIRE_MINUTES`: duracion del access token.
 - `REFRESH_TOKEN_EXPIRE_DAYS`: duracion del refresh token.
 - `PASSWORD_RESET_CODE_EXPIRE_MINUTES`: duracion del codigo de recuperacion.
+- `CAREGIVER_INVITATION_EXPIRE_HOURS`: vigencia del codigo de cuidador.
+- `CAREGIVER_JOIN_MAX_ATTEMPTS`: intentos fallidos antes del bloqueo temporal.
+- `CAREGIVER_JOIN_WINDOW_MINUTES`: ventana usada para limitar intentos.
 - `FIREBASE_CREDENTIALS`: ruta al JSON de Firebase Admin SDK.
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`: credenciales SMTP para correos reales.
 - `SMTP_FROM_EMAIL`, `SMTP_FROM_NAME`, `SMTP_USE_TLS`: remitente y seguridad SMTP.
@@ -360,7 +388,8 @@ Documentacion:
 
 ## Pendientes conocidos
 
-- Implementar vinculacion, permisos y alertas reales para cuidadores.
+- Implementar alertas y mensajes reales para cuidadores.
+- Agregar permisos por modulo cuando citas y perfil medico sean datos online.
 - Conectar historial, cumplimiento y notificaciones a las tablas reales del MER.
 - Reemplazar almacenamiento en memoria por persistencia real usando el MER.
 - Reemplazar datos semilla locales de citas, actividades y emergencias por

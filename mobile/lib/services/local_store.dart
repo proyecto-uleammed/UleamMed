@@ -33,7 +33,8 @@ class SecureJsonStore implements JsonStore {
 }
 
 class LocalStore {
-  LocalStore({JsonStore? jsonStore}) : _jsonStore = jsonStore ?? SecureJsonStore();
+  LocalStore({JsonStore? jsonStore})
+    : _jsonStore = jsonStore ?? SecureJsonStore();
 
   final JsonStore _jsonStore;
 
@@ -42,7 +43,8 @@ class LocalStore {
   static const _confirmationsKey = 'uleammed_dose_confirmations';
   static const _appointmentsKey = 'uleammed_appointments';
   static const _emergencyContactsKey = 'uleammed_emergency_contacts';
-  static const _caregiverPermissionsKey = 'uleammed_caregiver_permissions';
+  static const _legacyCaregiverPermissionsKey =
+      'uleammed_caregiver_permissions';
   static const _healthEntriesKey = 'uleammed_health_entries';
   static const _activeUserKey = 'uleammed_active_user';
 
@@ -54,7 +56,7 @@ class LocalStore {
       _jsonStore.delete(_confirmationsKey),
       _jsonStore.delete(_appointmentsKey),
       _jsonStore.delete(_emergencyContactsKey),
-      _jsonStore.delete(_caregiverPermissionsKey),
+      _jsonStore.delete(_legacyCaregiverPermissionsKey),
       _jsonStore.delete(_healthEntriesKey),
     ]);
   }
@@ -91,10 +93,7 @@ class LocalStore {
   }
 
   Future<List<MedicationItem>> readMedications() {
-    return _readList(
-      _medicationsKey,
-      (json) => MedicationItem.fromJson(json),
-    );
+    return _readList(_medicationsKey, (json) => MedicationItem.fromJson(json));
   }
 
   Future<void> saveMedications(List<MedicationItem> medications) {
@@ -216,42 +215,6 @@ class LocalStore {
     );
   }
 
-  Future<List<CaregiverPermission>> readCaregiverPermissions() {
-    return _readList(
-      _caregiverPermissionsKey,
-      (json) => CaregiverPermission.fromJson(json),
-    );
-  }
-
-  Future<void> saveCaregiverPermissions(List<CaregiverPermission> items) {
-    return _writeList(
-      _caregiverPermissionsKey,
-      items.map((item) => item.toJson()).toList(),
-    );
-  }
-
-  Future<CaregiverPermission> upsertCaregiverPermission(
-    CaregiverPermission permission,
-  ) async {
-    final normalized = permission.copyWith(syncStatus: SyncStatus.pending);
-    final items = await readCaregiverPermissions();
-    final index = items.indexWhere((item) => item.id == normalized.id);
-    if (index >= 0) {
-      items[index] = normalized;
-    } else {
-      items.add(normalized);
-    }
-    await saveCaregiverPermissions(items);
-    return normalized;
-  }
-
-  Future<void> deleteCaregiverPermission(String id) async {
-    final items = await readCaregiverPermissions();
-    await saveCaregiverPermissions(
-      items.where((item) => item.id != id).toList(),
-    );
-  }
-
   Future<List<HealthEntry>> readHealthEntries() {
     return _readList(_healthEntriesKey, (json) => HealthEntry.fromJson(json));
   }
@@ -297,9 +260,6 @@ class LocalStore {
         .where((item) => item.syncStatus == SyncStatus.pending)
         .length;
     total += (await readEmergencyContacts())
-        .where((item) => item.syncStatus == SyncStatus.pending)
-        .length;
-    total += (await readCaregiverPermissions())
         .where((item) => item.syncStatus == SyncStatus.pending)
         .length;
     total += (await readHealthEntries())

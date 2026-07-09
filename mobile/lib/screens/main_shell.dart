@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/app_role.dart';
 import '../services/api_service.dart';
 import '../services/app_settings.dart';
+import 'roles/caregiver_shell.dart';
 import 'roles/patient_shell.dart';
 
 /// Enruta usando exclusivamente el rol confirmado por el backend.
@@ -22,11 +23,13 @@ class MainShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (role != AppRole.patient) {
-      return _UnsupportedRoleScreen(role: role, onLogout: onLogout);
+    if (role == AppRole.patient) {
+      return PatientShell(api: api, onLogout: onLogout, settings: settings);
     }
-
-    return PatientShell(api: api, onLogout: onLogout, settings: settings);
+    if (role == AppRole.caregiver) {
+      return CaregiverShell(api: api, onLogout: onLogout, settings: settings);
+    }
+    return _UnsupportedRoleScreen(role: role, onLogout: onLogout);
   }
 }
 

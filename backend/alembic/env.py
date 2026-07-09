@@ -7,6 +7,8 @@ from alembic import context
 from backend.core.config import settings
 from backend.core.database import Base
 from backend.models import caregiver as caregiver_model
+from backend.models import caregiver_invitation as caregiver_invitation_model
+from backend.models import caregiver_join_attempt as caregiver_join_attempt_model
 from backend.models import caregiver_older_adult as caregiver_older_adult_model
 from backend.models import exam_detail as exam_detail_model
 from backend.models import exam_parameter as exam_parameter_model
@@ -22,12 +24,15 @@ from backend.models import notification as notification_model
 from backend.models import notification_recipient as notification_recipient_model
 from backend.models import older_adult as older_adult_model
 from backend.models import password_reset_token as password_reset_token_model
+from backend.models import patient_caregiver_link as patient_caregiver_link_model
 from backend.models import treatment as treatment_model
 from backend.models import treatment_medication as treatment_medication_model
 from backend.models import user as user_model
 
 _MODEL_MODULES = (
     caregiver_model,
+    caregiver_invitation_model,
+    caregiver_join_attempt_model,
     caregiver_older_adult_model,
     exam_detail_model,
     exam_parameter_model,
@@ -43,6 +48,7 @@ _MODEL_MODULES = (
     notification_recipient_model,
     older_adult_model,
     password_reset_token_model,
+    patient_caregiver_link_model,
     treatment_model,
     treatment_medication_model,
     user_model,
