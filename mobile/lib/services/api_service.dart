@@ -611,7 +611,8 @@ class ApiService implements UleamMedApi {
       Uri.parse('$_baseUrl/api/v1/caregiving/patients/$patientId/medications'),
       fallback: 'No se pudieron cargar los medicamentos',
     );
-    return _decodeList(data, MedicationItem.fromJson);
+    final items = _decodeList(data, MedicationItem.fromJson);
+    return _cacheCaregiverPatientMedicationPhotos(patientId, items);
   }
 
   @override
@@ -876,18 +877,61 @@ class ApiService implements UleamMedApi {
         final bytes = await _getAuthorizedBytes(
           Uri.parse('$_baseUrl/api/v1/medications/${medication.id}/photo'),
         );
-        final root = await getApplicationDocumentsDirectory();
-        final userId = await _localStore.readActiveUserId() ?? 'unknown';
-        final directory = Directory('${root.path}/medication_photos/$userId');
-        await directory.create(recursive: true);
-        final file = File('${directory.path}/${medication.id}.jpg');
-        await file.writeAsBytes(bytes, flush: true);
+        final file = await _writeMedicationPhotoFile(
+          scope: await _localStore.readActiveUserId() ?? 'unknown',
+          medicationId: medication.id,
+          bytes: bytes,
+        );
         result.add(medication.copyWith(photoPath: file.path));
       } catch (_) {
         result.add(medication);
       }
     }
     return result;
+  }
+
+  Future<List<MedicationItem>> _cacheCaregiverPatientMedicationPhotos(
+    int patientId,
+    List<MedicationItem> medications,
+  ) async {
+    final result = <MedicationItem>[];
+    for (final medication in medications) {
+      if (!medication.photoAvailable ||
+          (medication.photoPath.isNotEmpty &&
+              File(medication.photoPath).existsSync())) {
+        result.add(medication);
+        continue;
+      }
+      try {
+        final bytes = await _getAuthorizedBytes(
+          Uri.parse(
+            '$_baseUrl/api/v1/caregiving/patients/$patientId/medications/${medication.id}/photo',
+          ),
+        );
+        final file = await _writeMedicationPhotoFile(
+          scope: 'caregiver/$patientId',
+          medicationId: medication.id,
+          bytes: bytes,
+        );
+        result.add(medication.copyWith(photoPath: file.path));
+      } catch (_) {
+        result.add(medication);
+      }
+    }
+    return result;
+  }
+
+  Future<File> _writeMedicationPhotoFile({
+    required String scope,
+    required String medicationId,
+    required List<int> bytes,
+  }) async {
+    final root = await getApplicationDocumentsDirectory();
+    final directory = Directory('${root.path}/medication_photos/$scope');
+    await directory.create(recursive: true);
+    final file = File('${directory.path}/$medicationId.jpg');
+    await file.writeAsBytes(bytes, flush: true);
+    return file;
   }
 
   Future<String> _storePhotoCopy(String sourcePath, String medicationId) async {

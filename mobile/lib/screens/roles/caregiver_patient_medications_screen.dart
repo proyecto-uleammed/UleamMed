@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../../services/api_service.dart';
@@ -58,6 +60,39 @@ class _CaregiverPatientMedicationsScreenState
             ? 'Medicamento agregado para ${widget.patient.fullName}'
             : 'Medicamento actualizado',
       );
+    }
+  }
+
+  Future<void> _toggleTaken(MedicationItem medication) async {
+    if (_busyIds.contains(medication.id)) {
+      return;
+    }
+
+    setState(() => _busyIds.add(medication.id));
+
+    try {
+      await widget.api.saveCaregiverPatientMedication(
+        widget.patient.id,
+        medication.copyWith(taken: !medication.taken),
+      );
+      if (!mounted) {
+        return;
+      }
+      _reload();
+      showAppSnackBar(
+        context,
+        medication.taken
+            ? '${medication.name} marcado como pendiente'
+            : '${medication.name} marcado como tomado',
+      );
+    } on ApiException catch (error) {
+      if (mounted) {
+        showAppSnackBar(context, error.message);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _busyIds.remove(medication.id));
+      }
     }
   }
 
@@ -163,6 +198,7 @@ class _CaregiverPatientMedicationsScreenState
                   medication: medication,
                   busy: _busyIds.contains(medication.id),
                   onEdit: () => _openMedicationForm(medication),
+                  onToggleTaken: () => _toggleTaken(medication),
                   onDelete: () => _deleteMedication(medication),
                 );
               },
@@ -179,12 +215,14 @@ class _CaregiverMedicationCard extends StatelessWidget {
     required this.medication,
     required this.busy,
     required this.onEdit,
+    required this.onToggleTaken,
     required this.onDelete,
   });
 
   final MedicationItem medication;
   final bool busy;
   final VoidCallback onEdit;
+  final VoidCallback onToggleTaken;
   final VoidCallback onDelete;
 
   @override
@@ -198,13 +236,7 @@ class _CaregiverMedicationCard extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                CircleAvatar(
-                  backgroundColor: AppColors.accent.withValues(alpha: 0.35),
-                  child: Icon(
-                    medication.taken ? Icons.check : Icons.medication,
-                    color: AppColors.primaryDark,
-                  ),
-                ),
+                _CaregiverMedicationAvatar(medication: medication),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -240,6 +272,17 @@ class _CaregiverMedicationCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 TextButton.icon(
+                  onPressed: busy ? null : onToggleTaken,
+                  icon: Icon(
+                    medication.taken
+                        ? Icons.radio_button_unchecked
+                        : Icons.check_circle_outline,
+                  ),
+                  label: Text(
+                    medication.taken ? 'Marcar pendiente' : 'Marcar tomado',
+                  ),
+                ),
+                TextButton.icon(
                   onPressed: busy ? null : onEdit,
                   icon: const Icon(Icons.edit_outlined),
                   label: const Text('Editar'),
@@ -253,6 +296,50 @@ class _CaregiverMedicationCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _CaregiverMedicationAvatar extends StatelessWidget {
+  const _CaregiverMedicationAvatar({required this.medication});
+
+  final MedicationItem medication;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasPhoto =
+        medication.photoPath.isNotEmpty &&
+        File(medication.photoPath).existsSync();
+    if (hasPhoto) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: Image.file(
+          File(medication.photoPath),
+          width: 48,
+          height: 48,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) =>
+              _CaregiverMedicationAvatarFallback(taken: medication.taken),
+        ),
+      );
+    }
+    return _CaregiverMedicationAvatarFallback(taken: medication.taken);
+  }
+}
+
+class _CaregiverMedicationAvatarFallback extends StatelessWidget {
+  const _CaregiverMedicationAvatarFallback({required this.taken});
+
+  final bool taken;
+
+  @override
+  Widget build(BuildContext context) {
+    return CircleAvatar(
+      backgroundColor: AppColors.accent.withValues(alpha: 0.35),
+      child: Icon(
+        taken ? Icons.check : Icons.medication,
+        color: AppColors.primaryDark,
       ),
     );
   }
