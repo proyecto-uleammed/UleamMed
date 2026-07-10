@@ -351,6 +351,27 @@ class DoseConfirmation {
     );
   }
 
+  factory DoseConfirmation.fromBackendEvent(Map<String, dynamic> json) {
+    return DoseConfirmation(
+      id: json['id'].toString(),
+      medicationId: (json['medication_id'] ?? json['medicationId']).toString(),
+      medicationName: (json['medication_name'] ?? json['medicationName'])
+          .toString(),
+      status: DoseStatus.fromJson(json['status']),
+      recordedAt:
+          _parseDate(json['acted_at'] ?? json['actedAt']) ??
+          _parseDate(json['scheduled_at'] ?? json['scheduledAt']) ??
+          DateTime.now(),
+      syncStatus: SyncStatus.synced,
+      scheduledAt: _parseDate(json['scheduled_at'] ?? json['scheduledAt']),
+      sequenceNumber:
+          ((json['sequence_number'] ?? json['sequenceNumber']) as num?)
+              ?.toInt() ??
+          1,
+      snoozedUntil: _parseDate(json['snoozed_until'] ?? json['snoozedUntil']),
+    );
+  }
+
   final String id;
   final String medicationId;
   final String medicationName;

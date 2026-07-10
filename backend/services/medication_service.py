@@ -81,9 +81,8 @@ def update_user_medication(
         medication.taken = payload.taken
 
     if payload.schedule is not None:
-        if medication.schedule is not None:
-            db.delete(medication.schedule)
-            db.flush()
+        medication.schedule = None
+        db.flush()
         medication.schedule = _build_schedule(payload.schedule)
         medication.schedule_time = _parse_time(payload.schedule.times[0])
         medication.frequency = _frequency_label(payload.schedule)

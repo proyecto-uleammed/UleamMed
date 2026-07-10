@@ -523,6 +523,39 @@ class _FakeApi implements UleamMedApi {
   }
 
   @override
+  Future<MedicationItem> saveCaregiverPatientMedication(
+    int patientId,
+    MedicationItem medication,
+  ) async {
+    final saved = medication.copyWith(
+      id: medication.id == 'new-med' ? 'caregiver-med-1' : medication.id,
+      syncStatus: SyncStatus.synced,
+    );
+    final index = medications.indexWhere((item) => item.id == saved.id);
+    if (index >= 0) {
+      medications[index] = saved;
+    } else {
+      medications.add(saved);
+    }
+    return saved;
+  }
+
+  @override
+  Future<void> deleteCaregiverPatientMedication(
+    int patientId,
+    String medicationId,
+  ) async {
+    medications.removeWhere((item) => item.id == medicationId);
+  }
+
+  @override
+  Future<List<DoseConfirmation>> listCaregiverPatientDoseEvents(
+    int patientId,
+  ) async {
+    return confirmations;
+  }
+
+  @override
   Future<int> pendingSyncCount() async {
     return medicalProfile.syncStatus == SyncStatus.pending ? 1 : 0;
   }
@@ -682,10 +715,10 @@ void main() {
     expect(find.text('Cuidador'), findsNothing);
   });
 
-  testWidgets('unsupported backend role does not open patient panel', (
+  testWidgets('admin role opens admin panel and navigates sections', (
     WidgetTester tester,
   ) async {
-    const unsupportedSession = AppSession(
+    const adminSession = AppSession(
       apiUrl: 'http://localhost:8000',
       environment: 'test',
       user: AppUser(
@@ -694,6 +727,43 @@ void main() {
         fullName: 'Admin Demo',
         isActive: true,
         role: AppRole.admin,
+      ),
+    );
+
+    await tester.pumpWidget(
+      _testApp(api: _FakeApi(restoredSession: adminSession)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Panel Administrador'), findsOneWidget);
+    expect(find.text('Supervisa usuarios, reportes y configuracion.'), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.manage_accounts_outlined));
+    await tester.pumpAndSettle();
+    expect(find.text('Gestion de usuarios'), findsOneWidget);
+    expect(find.text('Vista previa · 5 usuario(s)'), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.bar_chart_outlined));
+    await tester.pumpAndSettle();
+    expect(find.text('Indicadores clave'), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.settings_outlined));
+    await tester.pumpAndSettle();
+    expect(find.text('Modulos de la plataforma'), findsOneWidget);
+  });
+
+  testWidgets('unsupported professional role does not open patient panel', (
+    WidgetTester tester,
+  ) async {
+    const unsupportedSession = AppSession(
+      apiUrl: 'http://localhost:8000',
+      environment: 'test',
+      user: AppUser(
+        id: 5,
+        email: 'medico@uleammed.test',
+        fullName: 'Medico Demo',
+        isActive: true,
+        role: AppRole.professional,
       ),
     );
 

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/app_role.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/form_inputs.dart';
 import 'legal_screen.dart';
 import 'password_recovery_screen.dart';
 
@@ -151,6 +152,7 @@ class _AuthScreenState extends State<AuthScreen> {
                     TextFormField(
                       controller: _nameController,
                       textInputAction: TextInputAction.next,
+                      inputFormatters: FormInputs.personName,
                       decoration: const InputDecoration(
                         labelText: 'Nombre completo',
                         prefixIcon: Icon(Icons.person),
@@ -160,10 +162,7 @@ class _AuthScreenState extends State<AuthScreen> {
                         if (!_isRegisterMode) {
                           return null;
                         }
-                        if ((value ?? '').trim().length < 3) {
-                          return 'Ingresa tu nombre';
-                        }
-                        return null;
+                        return FormInputs.personNameValidator(value);
                       },
                     ),
                     const SizedBox(height: 14),
@@ -205,18 +204,13 @@ class _AuthScreenState extends State<AuthScreen> {
                     controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
                     textInputAction: TextInputAction.next,
+                    inputFormatters: FormInputs.email,
                     decoration: const InputDecoration(
                       labelText: 'Correo electrónico',
                       prefixIcon: Icon(Icons.email),
                       border: OutlineInputBorder(),
                     ),
-                    validator: (value) {
-                      final email = (value ?? '').trim();
-                      if (!email.contains('@') || !email.contains('.')) {
-                        return 'Ingresa un correo válido';
-                      }
-                      return null;
-                    },
+                    validator: FormInputs.emailValidator,
                   ),
                   const SizedBox(height: 14),
                   TextFormField(
@@ -243,12 +237,7 @@ class _AuthScreenState extends State<AuthScreen> {
                       ),
                       border: const OutlineInputBorder(),
                     ),
-                    validator: (value) {
-                      if ((value ?? '').length < 8) {
-                        return 'Mínimo 8 caracteres';
-                      }
-                      return null;
-                    },
+                    validator: FormInputs.passwordValidator,
                     onChanged: (_) {
                       if (_isRegisterMode) {
                         setState(() {});

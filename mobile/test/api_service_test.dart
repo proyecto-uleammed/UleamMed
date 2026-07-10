@@ -278,6 +278,116 @@ void main() {
         expect(medications.single.name, 'Losartan');
       },
     );
+
+    test('creates caregiver patient medication with POST', () async {
+      final api = ApiService(
+        baseUrl: 'http://localhost:8000',
+        tokenStore: _MemoryTokenStore(
+          const AuthTokens(
+            accessToken: 'access-ok',
+            refreshToken: 'refresh-ok',
+          ),
+        ),
+        localStore: LocalStore(jsonStore: _MemoryJsonStore()),
+        client: MockClient((request) async {
+          expect(request.headers['authorization'], 'Bearer access-ok');
+          if (request.url.path == '/api/v1/caregiving/patients/3/medications' &&
+              request.method == 'POST') {
+            final body = jsonDecode(request.body) as Map<String, dynamic>;
+            expect(body['name'], 'Aspirina');
+            return _jsonResponse({
+              'id': '42',
+              'name': 'Aspirina',
+              'dose': '100 mg',
+              'time': '20:00',
+              'taken': false,
+              'frequency': 'Diario',
+              'duration': '',
+              'instructions': '',
+              'isImportant': true,
+              'schedule': body['schedule'],
+            }, statusCode: 201);
+          }
+          return _jsonResponse({'detail': 'No permitido'}, statusCode: 405);
+        }),
+      );
+
+      final saved = await api.saveCaregiverPatientMedication(
+        3,
+        MedicationItem(
+          id: 'aspirina-1739123456789',
+          name: 'Aspirina',
+          dose: '100 mg',
+          doseAmount: 100,
+          doseUnit: 'mg',
+          time: '20:00',
+          taken: false,
+        ),
+      );
+
+      expect(saved.id, '42');
+      expect(saved.name, 'Aspirina');
+    });
+
+    test('prefers backend medication updates from caregiver over stale cache', () async {
+      final localStore = LocalStore(jsonStore: _MemoryJsonStore());
+      await localStore.saveActiveUserId('1');
+      await localStore.upsertMedication(
+        const MedicationItem(
+          id: '7',
+          name: 'verdesol',
+          dose: '1500 mg',
+          time: '08:00',
+          taken: false,
+          instructions: 'tomar con agua',
+          syncStatus: SyncStatus.synced,
+        ),
+      );
+      final api = ApiService(
+        baseUrl: 'http://localhost:8000',
+        tokenStore: _MemoryTokenStore(
+          const AuthTokens(
+            accessToken: 'access-ok',
+            refreshToken: 'refresh-ok',
+          ),
+        ),
+        localStore: localStore,
+        client: MockClient((request) async {
+          expect(request.headers['authorization'], 'Bearer access-ok');
+          if (request.url.path == '/api/v1/medications') {
+            return _jsonResponse({
+              'items': [
+                {
+                  'id': '7',
+                  'name': 'verdesol',
+                  'dose': '1500 mg',
+                  'time': '08:00',
+                  'taken': true,
+                  'frequency': 'Diario',
+                  'duration': 'Permanente',
+                  'instructions': 'tomar con mucha agua',
+                  'isImportant': true,
+                  'photoAvailable': false,
+                  'schedule': {
+                    'mode': 'fixed_times',
+                    'times': ['08:00'],
+                    'weekdays': [1, 2, 3, 4, 5, 6, 7],
+                    'start_date': '2026-07-09',
+                  },
+                },
+              ],
+            });
+          }
+          return _jsonResponse({'detail': 'No permitido'}, statusCode: 405);
+        }),
+      );
+
+      final medications = await api.listMedications();
+
+      expect(medications, hasLength(1));
+      expect(medications.first.instructions, 'tomar con mucha agua');
+      expect(medications.first.taken, isTrue);
+    });
   });
 
   group('ApiService offline data', () {

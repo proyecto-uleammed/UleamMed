@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     SUPABASE_URL: str | None = None
     SUPABASE_SERVICE_ROLE_KEY: str | None = None
     SUPABASE_MEDICATION_BUCKET: str = "medication-photos"
+    MEDICATION_PHOTOS_LOCAL_DIR: str = "storage/medication_photos"
     CORS_ORIGINS: str = "*"
     ENVIRONMENT: str = "development"
 

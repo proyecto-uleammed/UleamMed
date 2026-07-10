@@ -3,6 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/form_inputs.dart';
 import '../widgets/app_states.dart';
 
 /// Pantalla de emergencia con datos clave, contactos y llamada rapida.
@@ -594,40 +595,38 @@ class _ContactFormState extends State<_ContactForm> {
             const SizedBox(height: 16),
             TextFormField(
               controller: _nameController,
+              inputFormatters: FormInputs.personName,
               decoration: const InputDecoration(
                 labelText: 'Nombre',
                 prefixIcon: Icon(Icons.person),
                 border: OutlineInputBorder(),
               ),
-              validator: (value) =>
-                  (value ?? '').trim().isEmpty ? 'Ingresa el nombre' : null,
+              validator: (value) => FormInputs.personNameValidator(value),
             ),
             const SizedBox(height: 12),
             TextFormField(
               controller: _relationshipController,
+              inputFormatters: FormInputs.personName,
               decoration: const InputDecoration(
                 labelText: 'Relacion',
                 hintText: 'Hija, medico, vecino...',
                 prefixIcon: Icon(Icons.group),
                 border: OutlineInputBorder(),
               ),
+              validator: (value) =>
+                  FormInputs.personNameValidator(value, required: false),
             ),
             const SizedBox(height: 12),
             TextFormField(
               controller: _phoneController,
               keyboardType: TextInputType.phone,
+              inputFormatters: FormInputs.phone,
               decoration: const InputDecoration(
                 labelText: 'Telefono',
                 prefixIcon: Icon(Icons.phone),
                 border: OutlineInputBorder(),
               ),
-              validator: (value) {
-                final phone = (value ?? '').trim();
-                if (phone.length < 3) {
-                  return 'Ingresa un telefono valido';
-                }
-                return null;
-              },
+              validator: FormInputs.phoneValidator,
             ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,

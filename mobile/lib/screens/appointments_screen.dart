@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/form_inputs.dart';
 import '../widgets/app_states.dart';
 
 const _months = [
@@ -552,13 +553,13 @@ class _AppointmentFormState extends State<_AppointmentForm> {
             const SizedBox(height: 16),
             TextFormField(
               controller: _doctorController,
+              inputFormatters: FormInputs.personName,
               decoration: const InputDecoration(
                 labelText: 'Medico',
                 prefixIcon: Icon(Icons.person),
                 border: OutlineInputBorder(),
               ),
-              validator: (value) =>
-                  (value ?? '').trim().isEmpty ? 'Ingresa el medico' : null,
+              validator: (value) => FormInputs.personNameValidator(value),
             ),
             const SizedBox(height: 12),
             TextFormField(
@@ -568,9 +569,10 @@ class _AppointmentFormState extends State<_AppointmentForm> {
                 prefixIcon: Icon(Icons.medical_services),
                 border: OutlineInputBorder(),
               ),
-              validator: (value) => (value ?? '').trim().isEmpty
-                  ? 'Ingresa la especialidad'
-                  : null,
+              validator: (value) => FormInputs.requiredText(
+                value,
+                message: 'Ingresa la especialidad',
+              ),
             ),
             const SizedBox(height: 12),
             Row(

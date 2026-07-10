@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../services/api_service.dart';
+import '../../utils/form_inputs.dart';
 import '../../widgets/app_states.dart';
 import 'caregiver_patient_medications_screen.dart';
 
@@ -125,7 +126,7 @@ class _CaregiverPatientsScreenState extends State<CaregiverPatientsScreen> {
                         ),
                         leading: const CircleAvatar(child: Icon(Icons.person)),
                         title: Text(patient.fullName),
-                        subtitle: const Text('Consultar medicamentos'),
+                        subtitle: const Text('Gestionar medicamentos'),
                         trailing: const Icon(Icons.chevron_right),
                         onTap: () => Navigator.push(
                           context,
@@ -214,20 +215,13 @@ class _RedeemCodeDialogState extends State<_RedeemCodeDialog> {
               controller: _controller,
               autofocus: true,
               textCapitalization: TextCapitalization.characters,
+              inputFormatters: FormInputs.caregiverCode,
               decoration: const InputDecoration(
                 labelText: 'Código de 8 caracteres',
                 prefixIcon: Icon(Icons.key),
                 border: OutlineInputBorder(),
               ),
-              validator: (value) {
-                final normalized = (value ?? '')
-                    .replaceAll('-', '')
-                    .replaceAll(' ', '');
-                if (normalized.length != 8) {
-                  return 'Ingresa el código completo';
-                }
-                return null;
-              },
+              validator: FormInputs.caregiverCodeValidator,
               onFieldSubmitted: (_) => _loading ? null : _submit(),
             ),
             if (_error != null) ...[

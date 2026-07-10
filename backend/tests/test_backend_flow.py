@@ -378,6 +378,31 @@ class BackendIntegratedFlowTest(unittest.TestCase):
         self.assertEqual(downloaded.status_code, 200)
         self.assertEqual(downloaded.content, b"imagen")
 
+    def test_foto_de_medicamento_usa_almacenamiento_local_sin_supabase(self) -> None:
+        """Permite subir y descargar fotos cuando Supabase no esta configurado."""
+        from backend.core.config import settings
+        from backend.services import medication_photo_service as photo_service
+
+        original_url = settings.SUPABASE_URL
+        original_key = settings.SUPABASE_SERVICE_ROLE_KEY
+        settings.SUPABASE_URL = None
+        settings.SUPABASE_SERVICE_ROLE_KEY = None
+        try:
+            object_path = photo_service.upload_medication_photo(
+                user_id=7,
+                medication_id=11,
+                content=b"imagen-local",
+                content_type="image/jpeg",
+            )
+            content = photo_service.download_medication_photo(object_path)
+            self.assertEqual(content, b"imagen-local")
+            photo_service.delete_medication_photo(object_path)
+            with self.assertRaises(photo_service.MedicationPhotoNotFoundError):
+                photo_service.download_medication_photo(object_path)
+        finally:
+            settings.SUPABASE_URL = original_url
+            settings.SUPABASE_SERVICE_ROLE_KEY = original_key
+
     def test_modulo_medicamentos_rechaza_roles_no_pacientes(self) -> None:
         """Los paneles futuros no obtienen permisos de paciente por autenticarse."""
         with self.SessionLocal() as db:
@@ -500,6 +525,157 @@ class BackendIntegratedFlowTest(unittest.TestCase):
         )
         self.assertEqual(shared_medications.status_code, 200)
         self.assertEqual(shared_medications.json()["items"][0]["name"], "Losartan")
+        patient_medication_id = shared_medications.json()["items"][0]["id"]
+
+        caregiver_schedule_update = self.client.patch(
+            f"/api/v1/caregiving/patients/{patient_id}/medications/{patient_medication_id}",
+            headers=caregiver_headers,
+            json={
+                "name": "Losartan",
+                "dose": "50 mg",
+                "schedule": {
+                    "mode": "fixed_times",
+                    "times": ["09:00", "21:00"],
+                    "weekdays": [1, 2, 3, 4, 5, 6, 7],
+                    "start_date": "2026-07-09",
+                },
+            },
+        )
+        self.assertEqual(caregiver_schedule_update.status_code, 200)
+        self.assertEqual(caregiver_schedule_update.json()["time"], "09:00")
+        self.assertEqual(len(caregiver_schedule_update.json()["schedule"]["times"]), 2)
+
+        with (
+            patch(
+                "backend.api.v1.endpoints.medications.upload_medication_photo",
+                return_value=f"users/{patient_id}/medications/{patient_medication_id}/foto.jpg",
+            ),
+            patch(
+                "backend.api.v1.endpoints.medications.delete_medication_photo",
+            ),
+            patch(
+                "backend.api.v1.endpoints.caregiving.download_medication_photo",
+                return_value=b"imagen-compartida",
+            ),
+        ):
+            patient_photo = self.client.post(
+                f"/api/v1/medications/{patient_medication_id}/photo",
+                headers=patient_headers,
+                files={"photo": ("foto.jpg", b"imagen-compartida", "image/jpeg")},
+            )
+            self.assertEqual(patient_photo.status_code, 200)
+            self.assertTrue(patient_photo.json()["photoAvailable"])
+
+            caregiver_photo = self.client.get(
+                f"/api/v1/caregiving/patients/{patient_id}/medications/{patient_medication_id}/photo",
+                headers=caregiver_headers,
+            )
+        self.assertEqual(caregiver_photo.status_code, 200)
+        self.assertEqual(caregiver_photo.content, b"imagen-compartida")
+
+        dose_event = {
+            "client_event_id": "evento-cuidador-0001",
+            "scheduled_at": "2026-07-09T08:00:00Z",
+            "sequence_number": 1,
+            "status": "taken",
+            "acted_at": "2026-07-09T08:05:00Z",
+        }
+        patient_event = self.client.post(
+            f"/api/v1/medications/{patient_medication_id}/dose-events",
+            headers=patient_headers,
+            json=dose_event,
+        )
+        self.assertEqual(patient_event.status_code, 200)
+
+        caregiver_events = self.client.get(
+            f"/api/v1/caregiving/patients/{patient_id}/medications/dose-events",
+            headers=caregiver_headers,
+        )
+        self.assertEqual(caregiver_events.status_code, 200)
+        self.assertEqual(len(caregiver_events.json()), 1)
+        self.assertEqual(
+            caregiver_events.json()[0]["medication_name"],
+            "Losartan",
+        )
+
+        with (
+            patch(
+                "backend.api.v1.endpoints.caregiving.upload_medication_photo",
+                return_value=f"users/{patient_id}/medications/{patient_medication_id}/cuidador.jpg",
+            ),
+            patch(
+                "backend.api.v1.endpoints.caregiving.delete_medication_photo",
+            ),
+            patch(
+                "backend.api.v1.endpoints.medications.download_medication_photo",
+                return_value=b"foto-cuidador",
+            ),
+        ):
+            caregiver_upload = self.client.post(
+                f"/api/v1/caregiving/patients/{patient_id}/medications/{patient_medication_id}/photo",
+                headers=caregiver_headers,
+                files={"photo": ("foto.jpg", b"foto-cuidador", "image/jpeg")},
+            )
+            self.assertEqual(caregiver_upload.status_code, 200)
+            self.assertTrue(caregiver_upload.json()["photoAvailable"])
+
+            patient_photo = self.client.get(
+                f"/api/v1/medications/{patient_medication_id}/photo",
+                headers=patient_headers,
+            )
+        self.assertEqual(patient_photo.status_code, 200)
+        self.assertEqual(patient_photo.content, b"foto-cuidador")
+
+        with patch(
+            "backend.api.v1.endpoints.caregiving.delete_medication_photo",
+        ):
+            deleted_by_caregiver = self.client.delete(
+                f"/api/v1/caregiving/patients/{patient_id}/medications/{patient_medication_id}/photo",
+                headers=caregiver_headers,
+            )
+        self.assertEqual(deleted_by_caregiver.status_code, 204)
+
+        patient_meds_after_delete = self.client.get(
+            "/api/v1/medications",
+            headers=patient_headers,
+        )
+        losartan = next(
+            item
+            for item in patient_meds_after_delete.json()["items"]
+            if item["id"] == patient_medication_id
+        )
+        self.assertFalse(losartan["photoAvailable"])
+
+        caregiver_created = self.client.post(
+            f"/api/v1/caregiving/patients/{patient_id}/medications",
+            headers=caregiver_headers,
+            json={
+                "name": "Aspirina",
+                "dose": "100 mg",
+                "time": "20:00",
+            },
+        )
+        self.assertEqual(caregiver_created.status_code, 201)
+        created_id = caregiver_created.json()["id"]
+
+        patient_medications = self.client.get(
+            "/api/v1/medications",
+            headers=patient_headers,
+        )
+        self.assertEqual(patient_medications.status_code, 200)
+        patient_names = {item["name"] for item in patient_medications.json()["items"]}
+        self.assertIn("Aspirina", patient_names)
+
+        caregiver_updated = self.client.patch(
+            f"/api/v1/caregiving/patients/{patient_id}/medications/{created_id}",
+            headers=caregiver_headers,
+            json={"instructions": "Tomar con alimentos"},
+        )
+        self.assertEqual(caregiver_updated.status_code, 200)
+        self.assertEqual(
+            caregiver_updated.json()["instructions"],
+            "Tomar con alimentos",
+        )
 
         unrelated_access = self.client.get(
             f"/api/v1/caregiving/patients/{patient_id}/medications",

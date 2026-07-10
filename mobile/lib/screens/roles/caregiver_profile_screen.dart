@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/api_service.dart';
 import '../../services/app_settings.dart';
+import '../../utils/form_inputs.dart';
 import '../../widgets/app_states.dart';
 import '../settings_screen.dart';
 
@@ -22,6 +23,7 @@ class CaregiverProfileScreen extends StatefulWidget {
 }
 
 class _CaregiverProfileScreenState extends State<CaregiverProfileScreen> {
+  final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   late Future<AppSession> _session = _load();
   bool _saving = false;
@@ -39,11 +41,10 @@ class _CaregiverProfileScreenState extends State<CaregiverProfileScreen> {
   }
 
   Future<void> _save() async {
-    final name = _nameController.text.trim();
-    if (name.length < 3) {
-      showAppSnackBar(context, 'Ingresa tu nombre completo', isError: true);
+    if (!_formKey.currentState!.validate()) {
       return;
     }
+    final name = _nameController.text.trim();
     setState(() => _saving = true);
     try {
       final updated = await widget.api.updateProfile(fullName: name);
@@ -100,22 +101,26 @@ class _CaregiverProfileScreenState extends State<CaregiverProfileScreen> {
             );
           }
           final user = snapshot.data!.user;
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              const CircleAvatar(
-                radius: 38,
-                child: Icon(Icons.family_restroom, size: 38),
-              ),
-              const SizedBox(height: 20),
-              TextField(
-                controller: _nameController,
-                decoration: const InputDecoration(
-                  labelText: 'Nombre completo',
-                  prefixIcon: Icon(Icons.person),
-                  border: OutlineInputBorder(),
+          return Form(
+            key: _formKey,
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                const CircleAvatar(
+                  radius: 38,
+                  child: Icon(Icons.family_restroom, size: 38),
                 ),
-              ),
+                const SizedBox(height: 20),
+                TextFormField(
+                  controller: _nameController,
+                  inputFormatters: FormInputs.personName,
+                  decoration: const InputDecoration(
+                    labelText: 'Nombre completo',
+                    prefixIcon: Icon(Icons.person),
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (value) => FormInputs.personNameValidator(value),
+                ),
               const SizedBox(height: 14),
               ListTile(
                 contentPadding: EdgeInsets.zero,
@@ -142,6 +147,7 @@ class _CaregiverProfileScreenState extends State<CaregiverProfileScreen> {
                 label: const Text('Guardar'),
               ),
             ],
+            ),
           );
         },
       ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/form_inputs.dart';
 import '../widgets/app_states.dart';
 
 /// Enfermedades, condiciones y alergias con nivel de severidad
@@ -398,9 +399,10 @@ class _HealthEntryFormState extends State<_HealthEntryForm> {
                 ),
                 border: const OutlineInputBorder(),
               ),
-              validator: (value) => (value ?? '').trim().isEmpty
-                  ? 'Este campo es obligatorio'
-                  : null,
+              validator: (value) => FormInputs.requiredText(
+                value,
+                message: 'Este campo es obligatorio',
+              ),
             ),
             const SizedBox(height: 12),
             Text(

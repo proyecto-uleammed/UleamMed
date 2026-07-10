@@ -98,6 +98,7 @@ Requieren internet o endpoints futuros:
 Por defecto:
 
 - Produccion: `https://d18ajxqltdcc9k.cloudfront.net`
+- Modo debug sin `ULEAMMED_API_URL`: backend local (`127.0.0.1:8000` o `10.0.2.2:8000`)
 
 Tambien se puede configurar manualmente:
 

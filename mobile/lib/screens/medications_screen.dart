@@ -2,18 +2,27 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../services/api_service.dart';
 import '../services/notification_scheduler.dart';
 import '../theme/app_theme.dart';
+import '../utils/form_inputs.dart';
+import '../widgets/role_shell_scaffold.dart';
 
 class MedicationsScreen extends StatefulWidget {
-  const MedicationsScreen({super.key, this.api, this.notificationScheduler});
+  const MedicationsScreen({
+    super.key,
+    this.api,
+    this.notificationScheduler,
+    this.shellTabIndex,
+  });
 
   final UleamMedApi? api;
   final NotificationScheduler? notificationScheduler;
+  final int? shellTabIndex;
 
   @override
   State<MedicationsScreen> createState() => _MedicationsScreenState();
@@ -23,6 +32,7 @@ class _MedicationsScreenState extends State<MedicationsScreen> {
   late final UleamMedApi _api = widget.api ?? ApiService();
   late Future<_MedicationData> _data = _loadData();
   final Set<String> _savingIds = {};
+  int? _lastShellTabIndex;
 
   Future<_MedicationData> _loadData() async {
     final medications = await _api.listMedications();
@@ -56,6 +66,22 @@ class _MedicationsScreenState extends State<MedicationsScreen> {
     setState(() {
       _data = _loadData();
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final shellTabIndex = widget.shellTabIndex;
+    if (shellTabIndex == null) {
+      return;
+    }
+    final activeIndex = roleShellActiveTabIndex(context);
+    if (activeIndex == shellTabIndex &&
+        _lastShellTabIndex != null &&
+        _lastShellTabIndex != activeIndex) {
+      _reload();
+    }
+    _lastShellTabIndex = activeIndex;
   }
 
   Future<void> _recordStatus(
@@ -102,24 +128,16 @@ class _MedicationsScreenState extends State<MedicationsScreen> {
   }
 
   Future<void> _openMedicationForm([MedicationItem? medication]) async {
-    final saved = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (context) {
-        return _MedicationForm(
-          medication: medication,
-          onSave: (item) async {
-            await _api.saveMedication(item);
-          },
-          onDelete: medication == null
-              ? null
-              : () async {
-                  await widget.notificationScheduler?.cancel(medication.id);
-                  await _api.deleteMedication(medication.id);
-                },
-        );
-      },
+    final saved = await showMedicationEditorSheet(
+      context,
+      medication: medication,
+      onSave: (item) => _api.saveMedication(item),
+      onDelete: medication == null
+          ? null
+          : () async {
+              await widget.notificationScheduler?.cancel(medication.id);
+              await _api.deleteMedication(medication.id);
+            },
     );
 
     if (saved == true && mounted) {
@@ -218,7 +236,16 @@ class _MedicationsScreenState extends State<MedicationsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Medicamentos')),
+      appBar: AppBar(
+        title: const Text('Medicamentos'),
+        actions: [
+          IconButton(
+            tooltip: 'Actualizar',
+            onPressed: _reload,
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'fab-medications',
         onPressed: () => _openMedicationForm(),
@@ -501,6 +528,7 @@ class _MedicationAvatar extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         child: Image.file(
           File(medication.photoPath),
+          key: ValueKey(medication.photoPath),
           width: 52,
           height: 52,
           fit: BoxFit.cover,
@@ -609,6 +637,26 @@ class _ConfirmationHistory extends StatelessWidget {
     final minute = date.minute.toString().padLeft(2, '0');
     return '${date.day}/${date.month}/${date.year} $hour:$minute';
   }
+}
+
+Future<bool?> showMedicationEditorSheet(
+  BuildContext context, {
+  MedicationItem? medication,
+  required Future<void> Function(MedicationItem medication) onSave,
+  Future<void> Function()? onDelete,
+}) {
+  return showModalBottomSheet<bool>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    builder: (context) {
+      return _MedicationForm(
+        medication: medication,
+        onSave: onSave,
+        onDelete: onDelete,
+      );
+    },
+  );
 }
 
 class _MedicationForm extends StatefulWidget {
@@ -815,15 +863,15 @@ class _MedicationFormState extends State<_MedicationForm> {
       if (mounted) {
         Navigator.pop(context, true);
       }
-    } catch (_) {
+    } catch (error) {
       if (!mounted) {
         return;
       }
+      final message = error is ApiException
+          ? error.message
+          : 'No se pudo guardar el medicamento';
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No se pudo guardar el medicamento'),
-          behavior: SnackBarBehavior.floating,
-        ),
+        SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
       );
     } finally {
       if (mounted && !saved) {
@@ -997,7 +1045,7 @@ class _MedicationFormState extends State<_MedicationForm> {
               controller: _nameController,
               label: 'Nombre',
               icon: Icons.medication,
-              validator: _required,
+              validator: (value) => FormInputs.requiredText(value),
             ),
             _FormField(
               controller: _doseController,
@@ -1007,14 +1055,8 @@ class _MedicationFormState extends State<_MedicationForm> {
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
-              validator: (value) {
-                final amount = double.tryParse(
-                  (value ?? '').trim().replaceAll(',', '.'),
-                );
-                return amount == null || amount <= 0
-                    ? 'Ingresa una cantidad válida'
-                    : null;
-              },
+              inputFormatters: FormInputs.decimalQuantity,
+              validator: FormInputs.positiveDecimal,
             ),
             DropdownButtonFormField<String>(
               initialValue: _doseUnit,
@@ -1247,13 +1289,6 @@ class _MedicationFormState extends State<_MedicationForm> {
       ),
     );
   }
-
-  String? _required(String? value) {
-    if ((value ?? '').trim().isEmpty) {
-      return 'Campo requerido';
-    }
-    return null;
-  }
 }
 
 class _FormField extends StatelessWidget {
@@ -1265,6 +1300,7 @@ class _FormField extends StatelessWidget {
     this.maxLines = 1,
     this.validator,
     this.keyboardType,
+    this.inputFormatters,
   });
 
   final TextEditingController controller;
@@ -1274,6 +1310,7 @@ class _FormField extends StatelessWidget {
   final int maxLines;
   final FormFieldValidator<String>? validator;
   final TextInputType? keyboardType;
+  final List<TextInputFormatter>? inputFormatters;
 
   @override
   Widget build(BuildContext context) {
@@ -1283,6 +1320,7 @@ class _FormField extends StatelessWidget {
         controller: controller,
         maxLines: maxLines,
         keyboardType: keyboardType,
+        inputFormatters: inputFormatters,
         decoration: InputDecoration(
           labelText: label,
           hintText: hint,
