@@ -19,12 +19,23 @@ from backend.schemas.caregiving import (
     CaregiverLinkRead,
     CaregiverPatientRead,
 )
+from backend.schemas.appointment import (
+    AppointmentCreate,
+    AppointmentRead,
+    AppointmentUpdate,
+)
 from backend.schemas.medication import (
     MedicationCreate,
     MedicationDoseEventCreate,
     MedicationDoseEventRead,
     MedicationRead,
     MedicationUpdate,
+)
+from backend.services.appointment_service import (
+    create_user_appointment,
+    delete_user_appointment,
+    list_user_appointments,
+    update_user_appointment,
 )
 from backend.services.medication_service import (
     create_user_medication,
@@ -537,6 +548,50 @@ def _link_to_read(
 
 def _display_name(user: User) -> str:
     return (user.full_name or "").strip() or "Usuario UleamMed"
+
+
+def list_linked_patient_appointments(
+    db: Session,
+    caregiver_id: int,
+    patient_id: int,
+) -> list[AppointmentRead] | None:
+    if not _active_link_exists(db, caregiver_id, patient_id):
+        return None
+    return list_user_appointments(db, patient_id)
+
+
+def create_linked_patient_appointment(
+    db: Session,
+    caregiver_id: int,
+    patient_id: int,
+    payload: AppointmentCreate,
+) -> AppointmentRead | None:
+    if not _active_link_exists(db, caregiver_id, patient_id):
+        return None
+    return create_user_appointment(db, patient_id, payload)
+
+
+def update_linked_patient_appointment(
+    db: Session,
+    caregiver_id: int,
+    patient_id: int,
+    appointment_id: int,
+    payload: AppointmentUpdate,
+) -> AppointmentRead | None:
+    if not _active_link_exists(db, caregiver_id, patient_id):
+        return None
+    return update_user_appointment(db, patient_id, appointment_id, payload)
+
+
+def delete_linked_patient_appointment(
+    db: Session,
+    caregiver_id: int,
+    patient_id: int,
+    appointment_id: int,
+) -> bool | None:
+    if not _active_link_exists(db, caregiver_id, patient_id):
+        return None
+    return delete_user_appointment(db, patient_id, appointment_id)
 
 
 def _mask_email(email: str) -> str:

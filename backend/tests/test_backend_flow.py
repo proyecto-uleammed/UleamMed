@@ -11,6 +11,7 @@ from backend.app.main import app
 from backend.core.database import Base, get_db
 from backend.core.roles import UserRole
 from backend.core.security import create_access_token, generate_password_hash
+from backend.models.appointment import Appointment  # noqa: F401
 from backend.models.caregiver_invitation import CaregiverInvitation
 from backend.models.user import User
 
@@ -526,6 +527,57 @@ class BackendIntegratedFlowTest(unittest.TestCase):
         self.assertEqual(shared_medications.status_code, 200)
         self.assertEqual(shared_medications.json()["items"][0]["name"], "Losartan")
         patient_medication_id = shared_medications.json()["items"][0]["id"]
+
+        appointment_payload = {
+            "doctor": "Dr. Perez",
+            "specialty": "Cardiologia",
+            "location": "Hospital Central",
+            "notes": "Control anual",
+            "reminder": "oneDayBefore",
+            "scheduledAt": "2026-12-15T15:00:00+00:00",
+        }
+        patient_creates_appointment = self.client.post(
+            "/api/v1/appointments",
+            headers=patient_headers,
+            json=appointment_payload,
+        )
+        self.assertEqual(patient_creates_appointment.status_code, 201)
+        self.assertEqual(patient_creates_appointment.json()["doctor"], "Dr. Perez")
+
+        caregiver_appointments = self.client.get(
+            f"/api/v1/caregiving/patients/{patient_id}/appointments",
+            headers=caregiver_headers,
+        )
+        self.assertEqual(caregiver_appointments.status_code, 200)
+        self.assertEqual(len(caregiver_appointments.json()["items"]), 1)
+
+        caregiver_creates_appointment = self.client.post(
+            f"/api/v1/caregiving/patients/{patient_id}/appointments",
+            headers=caregiver_headers,
+            json={
+                **appointment_payload,
+                "doctor": "Dra. Lopez",
+                "scheduledAt": "2026-12-20T15:00:00+00:00",
+            },
+        )
+        self.assertEqual(caregiver_creates_appointment.status_code, 201)
+
+        patient_appointments = self.client.get(
+            "/api/v1/appointments",
+            headers=patient_headers,
+        )
+        self.assertEqual(patient_appointments.status_code, 200)
+        self.assertEqual(len(patient_appointments.json()["items"]), 2)
+
+        past_appointment_rejected = self.client.post(
+            "/api/v1/appointments",
+            headers=patient_headers,
+            json={
+                **appointment_payload,
+                "scheduledAt": "2020-01-01T10:00:00+00:00",
+            },
+        )
+        self.assertEqual(past_appointment_rejected.status_code, 422)
 
         caregiver_schedule_update = self.client.patch(
             f"/api/v1/caregiving/patients/{patient_id}/medications/{patient_medication_id}",

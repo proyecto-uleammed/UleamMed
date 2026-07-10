@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from backend.api.v1.endpoints import (
+    appointments,
     auth,
     caregiving,
     devices,
@@ -15,6 +16,7 @@ api_router = APIRouter()
 
 # Cada modulo de endpoints se conecta aqui para mantener main.py simple.
 api_router.include_router(auth.router)
+api_router.include_router(appointments.router)
 api_router.include_router(caregiving.router)
 api_router.include_router(devices.router)
 api_router.include_router(medications.router)
