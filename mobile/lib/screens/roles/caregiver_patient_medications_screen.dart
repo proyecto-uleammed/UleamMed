@@ -242,12 +242,24 @@ class _CaregiverMedicationCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        medication.name,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 16,
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              medication.name,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ),
+                          Chip(
+                            label: Text(
+                              medication.taken ? 'Tomado' : 'Pendiente',
+                            ),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 4),
                       Text('${medication.dose} · ${medication.time}'),
@@ -262,14 +274,13 @@ class _CaregiverMedicationCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                Chip(
-                  label: Text(medication.taken ? 'Tomado' : 'Pendiente'),
-                ),
               ],
             ),
             const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+            Wrap(
+              alignment: WrapAlignment.end,
+              spacing: 4,
+              runSpacing: 4,
               children: [
                 TextButton.icon(
                   onPressed: busy ? null : onToggleTaken,
