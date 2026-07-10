@@ -945,7 +945,13 @@ void main() {
 
     expect(find.text('Omeprazol'), findsOneWidget);
 
-    final deleteButton = find.byIcon(Icons.delete_outline).last;
+    final medicationCard = find
+        .ancestor(of: find.text('Omeprazol'), matching: find.byType(Card))
+        .first;
+    final deleteButton = find.descendant(
+      of: medicationCard,
+      matching: find.byTooltip('Eliminar'),
+    );
     await tester.ensureVisible(deleteButton);
     await tester.pumpAndSettle();
     await tester.tap(deleteButton);
