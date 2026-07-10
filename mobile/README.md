@@ -97,13 +97,22 @@ Requieren internet o endpoints futuros:
 
 Por defecto:
 
-- Android Emulator: `http://10.0.2.2:8000`
-- Web/Desktop: `http://127.0.0.1:8000`
+- Produccion: `https://d18ajxqltdcc9k.cloudfront.net`
 
 Tambien se puede configurar manualmente:
 
 ```bash
+flutter run --dart-define=ULEAMMED_API_URL=https://d18ajxqltdcc9k.cloudfront.net
+```
+
+Para desarrollo local (ejemplos):
+
+```bash
+# Android Emulator
 flutter run --dart-define=ULEAMMED_API_URL=http://10.0.2.2:8000
+
+# Web/Desktop
+flutter run --dart-define=ULEAMMED_API_URL=http://127.0.0.1:8000
 ```
 
 ## Ejecutar
@@ -124,7 +133,7 @@ flutter build apk --debug
 
 ## Notas para no romper el prototipo
 
-- No cambiar `10.0.2.2` por `127.0.0.1` para Android Emulator.
+- Si se trabaja contra backend local en Android Emulator, usar `10.0.2.2`.
 - No eliminar la inyeccion de `UleamMedApi`; se usa para pruebas.
 - No conectar botones a datos falsos si ya existe endpoint en backend.
 - Medicamentos conserva los endpoints demo existentes y agrega cache local.
