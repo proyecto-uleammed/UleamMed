@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
@@ -102,23 +101,14 @@ class ApiService implements UleamMedApi {
   final LocalStore _localStore;
   String? _accessToken;
   String? _refreshToken;
+  static const _productionBaseUrl = 'https://d18ajxqltdcc9k.cloudfront.net';
 
   static String get _defaultBaseUrl {
     const configuredUrl = String.fromEnvironment('ULEAMMED_API_URL');
     if (configuredUrl.isNotEmpty) {
       return configuredUrl;
     }
-
-    if (kIsWeb) {
-      return 'http://127.0.0.1:8000';
-    }
-
-    switch (defaultTargetPlatform) {
-      case TargetPlatform.android:
-        return 'http://10.0.2.2:8000';
-      default:
-        return 'http://127.0.0.1:8000';
-    }
+    return _productionBaseUrl;
   }
 
   @override
