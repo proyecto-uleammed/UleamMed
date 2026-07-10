@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:alarm/alarm.dart';
 import 'models/app_role.dart';
 import 'screens/auth_screen.dart';
@@ -276,6 +277,16 @@ class _UleamMedAppState extends State<UleamMedApp> with WidgetsBindingObserver {
           navigatorKey: _navigatorKey,
           title: 'UleamMed',
           debugShowCheckedModeBanner: false,
+          locale: const Locale('es', 'ES'),
+          supportedLocales: const [
+            Locale('es', 'ES'),
+            Locale('en', 'US'),
+          ],
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           theme: buildAppTheme(),
           builder: (context, child) {
             final mediaQuery = MediaQuery.of(context);
