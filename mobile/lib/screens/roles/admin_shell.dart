@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import '../../services/api_service.dart';
 import '../../services/app_settings.dart';
 import '../../widgets/role_shell_scaffold.dart';
-import '../profile_screen.dart';
 import 'admin_home_screen.dart';
-import 'role_section_placeholder.dart';
+import 'admin_profile_screen.dart';
+import 'admin_reports_screen.dart';
+import 'admin_system_screen.dart';
+import 'admin_users_screen.dart';
 
 /// Panel del administrador: usuarios, reportes y sistema.
 class AdminShell extends StatelessWidget {
@@ -54,28 +56,14 @@ class AdminShell extends StatelessWidget {
       ],
       tabs: [
         AdminHomeScreen(api: api, onLogout: onLogout, settings: settings),
-        const RoleSectionPlaceholder(
-          title: 'Gestion de usuarios',
-          description:
-              'Administra cuentas, roles, permisos e invitaciones de '
-              'cuidadores.',
-          icon: Icons.manage_accounts,
+        const AdminUsersScreen(),
+        const AdminReportsScreen(),
+        AdminSystemScreen(api: api),
+        AdminProfileScreen(
+          api: api,
+          settings: settings,
+          onLogout: onLogout,
         ),
-        const RoleSectionPlaceholder(
-          title: 'Reportes',
-          description:
-              'Estadisticas de uso, cumplimiento de medicamentos e '
-              'incidencias del sistema.',
-          icon: Icons.assessment,
-        ),
-        const RoleSectionPlaceholder(
-          title: 'Configuracion del sistema',
-          description:
-              'Parametros generales, respaldos y mantenimiento de la '
-              'plataforma.',
-          icon: Icons.settings_applications,
-        ),
-        ProfileScreen(api: api, settings: settings),
       ],
     );
   }

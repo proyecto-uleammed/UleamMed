@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../models/admin_panel_data.dart';
 import '../../models/app_role.dart';
 import '../../services/api_service.dart';
 import '../../services/app_settings.dart';
@@ -28,6 +29,13 @@ class AdminHomeScreen extends StatefulWidget {
 
 class _AdminHomeScreenState extends State<AdminHomeScreen> {
   late final Future<AppSession> _session = widget.api.loadAppSession();
+  late AdminDashboardStats _stats = AdminPanelData.dashboardStats();
+
+  void _reloadStats() {
+    setState(() {
+      _stats = AdminPanelData.dashboardStats();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,6 +46,11 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
             expandedHeight: 200,
             pinned: true,
             actions: [
+              IconButton(
+                tooltip: 'Actualizar',
+                onPressed: _reloadStats,
+                icon: const Icon(Icons.refresh),
+              ),
               IconButton(
                 tooltip: 'Ajustes',
                 onPressed: () => Navigator.push(
@@ -108,19 +121,19 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Row(
+                  Row(
                     children: [
                       RoleSummaryCard(
                         icon: Icons.person_outline,
                         label: 'Usuarios',
-                        value: '0',
+                        value: '${_stats.totalUsers}',
                       ),
-                      SizedBox(width: 12),
+                      const SizedBox(width: 12),
                       RoleSummaryCard(
                         icon: Icons.assessment_outlined,
-                        label: 'Reportes',
-                        value: '0',
-                        color: Color(0xFF546E7A),
+                        label: 'Cumplimiento',
+                        value: '${_stats.compliancePercent}%',
+                        color: const Color(0xFF546E7A),
                       ),
                     ],
                   ),
