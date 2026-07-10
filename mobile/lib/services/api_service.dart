@@ -297,7 +297,7 @@ class ApiService implements UleamMedApi {
     final localPending = await _localStore.upsertMedication(
       medication.copyWith(syncStatus: SyncStatus.pending),
     );
-    final isBackendId = int.tryParse(medication.id) != null;
+    final isBackendId = _isPersistedBackendId(medication.id);
     final uri = isBackendId
         ? Uri.parse('$_baseUrl/api/v1/medications/${medication.id}')
         : Uri.parse('$_baseUrl/api/v1/medications');
@@ -389,7 +389,7 @@ class ApiService implements UleamMedApi {
   Future<void> deleteMedication(String medicationId) async {
     await _localStore.deleteMedication(medicationId);
     await _localStore.deleteDoseConfirmationsForMedication(medicationId);
-    final isBackendId = int.tryParse(medicationId) != null;
+    final isBackendId = _isPersistedBackendId(medicationId);
     if (!isBackendId) {
       return;
     }
@@ -447,7 +447,7 @@ class ApiService implements UleamMedApi {
     await _localStore.upsertDoseConfirmation(confirmation);
 
     final localResult = await _medicationResultFor(updated.id);
-    if (int.tryParse(medicationId) == null) {
+    if (!_isPersistedBackendId(medicationId)) {
       return localResult;
     }
 
@@ -613,7 +613,7 @@ class ApiService implements UleamMedApi {
     int patientId,
     MedicationItem medication,
   ) async {
-    final isBackendId = int.tryParse(medication.id) != null;
+    final isBackendId = _isPersistedBackendId(medication.id);
     final uri = isBackendId
         ? Uri.parse(
             '$_baseUrl/api/v1/caregiving/patients/$patientId/medications/${medication.id}',
@@ -634,38 +634,49 @@ class ApiService implements UleamMedApi {
       'schedule': medication.effectiveSchedule.toJson(),
       if (isBackendId) 'taken': medication.taken,
     };
-    final data = isBackendId
-        ? await _patchAuthorizedJson(
-            uri,
-            body: body,
-            fallback: 'No se pudo actualizar el medicamento',
-          )
-        : await _postAuthorizedJson(
-            uri,
-            body: body,
-            fallback: 'No se pudo crear el medicamento',
+    try {
+      final data = isBackendId
+          ? await _patchAuthorizedJson(
+              uri,
+              body: body,
+              fallback: 'No se pudo actualizar el medicamento',
+            )
+          : await _postAuthorizedJson(
+              uri,
+              body: body,
+              fallback: 'No se pudo crear el medicamento',
+            );
+      var saved = MedicationItem.fromJson(
+        data,
+      ).copyWith(syncStatus: SyncStatus.synced, photoPath: medication.photoPath);
+      if (medication.photoPath.isNotEmpty &&
+          File(medication.photoPath).existsSync()) {
+        try {
+          final photoData = await _uploadCaregiverPatientMedicationPhoto(
+            patientId,
+            saved.id,
+            medication.photoPath,
           );
-    var saved = MedicationItem.fromJson(
-      data,
-    ).copyWith(syncStatus: SyncStatus.synced, photoPath: medication.photoPath);
-    if (medication.photoPath.isNotEmpty &&
-        File(medication.photoPath).existsSync()) {
-      try {
-        final photoData = await _uploadCaregiverPatientMedicationPhoto(
-          patientId,
-          saved.id,
-          medication.photoPath,
-        );
-        saved = MedicationItem.fromJson(photoData).copyWith(
-          syncStatus: SyncStatus.synced,
-          photoPath: medication.photoPath,
-          photoAvailable: true,
-        );
-      } catch (_) {
-        // El medicamento se guardo; la foto puede reintentarse luego.
+          saved = MedicationItem.fromJson(photoData).copyWith(
+            syncStatus: SyncStatus.synced,
+            photoPath: medication.photoPath,
+            photoAvailable: true,
+          );
+        } catch (_) {
+          // El medicamento se guardo; la foto puede reintentarse luego.
+        }
       }
+      return saved;
+    } on ApiException catch (error) {
+      if (error.statusCode == 405) {
+        throw ApiException(
+          'El backend no acepta crear medicamentos del paciente. '
+          'Reinicia el servidor con la rama Frontend-backend actualizada.',
+          error.statusCode,
+        );
+      }
+      rethrow;
     }
-    return saved;
   }
 
   @override
@@ -673,7 +684,7 @@ class ApiService implements UleamMedApi {
     int patientId,
     String medicationId,
   ) async {
-    if (int.tryParse(medicationId) == null) {
+    if (!_isPersistedBackendId(medicationId)) {
       return;
     }
     await _deleteAuthorized(
@@ -1317,6 +1328,11 @@ class AppUser {
   final String fullName;
   final bool isActive;
   final AppRole role;
+}
+
+bool _isPersistedBackendId(String id) {
+  final parsed = int.tryParse(id);
+  return parsed != null && parsed > 0 && id == parsed.toString();
 }
 
 class ApiException implements Exception {

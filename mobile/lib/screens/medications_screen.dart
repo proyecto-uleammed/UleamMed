@@ -827,15 +827,15 @@ class _MedicationFormState extends State<_MedicationForm> {
       if (mounted) {
         Navigator.pop(context, true);
       }
-    } catch (_) {
+    } catch (error) {
       if (!mounted) {
         return;
       }
+      final message = error is ApiException
+          ? error.message
+          : 'No se pudo guardar el medicamento';
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No se pudo guardar el medicamento'),
-          behavior: SnackBarBehavior.floating,
-        ),
+        SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
       );
     } finally {
       if (mounted && !saved) {

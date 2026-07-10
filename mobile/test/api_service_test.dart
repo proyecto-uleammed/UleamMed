@@ -278,6 +278,56 @@ void main() {
         expect(medications.single.name, 'Losartan');
       },
     );
+
+    test('creates caregiver patient medication with POST', () async {
+      final api = ApiService(
+        baseUrl: 'http://localhost:8000',
+        tokenStore: _MemoryTokenStore(
+          const AuthTokens(
+            accessToken: 'access-ok',
+            refreshToken: 'refresh-ok',
+          ),
+        ),
+        localStore: LocalStore(jsonStore: _MemoryJsonStore()),
+        client: MockClient((request) async {
+          expect(request.headers['authorization'], 'Bearer access-ok');
+          if (request.url.path == '/api/v1/caregiving/patients/3/medications' &&
+              request.method == 'POST') {
+            final body = jsonDecode(request.body) as Map<String, dynamic>;
+            expect(body['name'], 'Aspirina');
+            return _jsonResponse({
+              'id': '42',
+              'name': 'Aspirina',
+              'dose': '100 mg',
+              'time': '20:00',
+              'taken': false,
+              'frequency': 'Diario',
+              'duration': '',
+              'instructions': '',
+              'isImportant': true,
+              'schedule': body['schedule'],
+            }, statusCode: 201);
+          }
+          return _jsonResponse({'detail': 'No permitido'}, statusCode: 405);
+        }),
+      );
+
+      final saved = await api.saveCaregiverPatientMedication(
+        3,
+        MedicationItem(
+          id: 'aspirina-1739123456789',
+          name: 'Aspirina',
+          dose: '100 mg',
+          doseAmount: 100,
+          doseUnit: 'mg',
+          time: '20:00',
+          taken: false,
+        ),
+      );
+
+      expect(saved.id, '42');
+      expect(saved.name, 'Aspirina');
+    });
   });
 
   group('ApiService offline data', () {
