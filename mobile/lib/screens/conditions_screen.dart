@@ -249,11 +249,15 @@ class _SharedProfileSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final items = <String>[
+      if (profile.birthDate.isNotEmpty)
+        'Fecha de nacimiento: ${profile.birthDate}',
       if (profile.bloodType.isNotEmpty) 'Tipo de sangre: ${profile.bloodType}',
       if (profile.conditions.isNotEmpty) 'Condiciones: ${profile.conditions}',
       if (profile.allergies.isNotEmpty) 'Alergias: ${profile.allergies}',
       if (profile.importantNotes.isNotEmpty)
         'Notas: ${profile.importantNotes}',
+      if (profile.emergencyContactName.isNotEmpty)
+        'Contacto: ${profile.emergencyContactName} (${profile.emergencyContactPhone})',
     ];
     if (items.isEmpty) {
       return const SizedBox.shrink();

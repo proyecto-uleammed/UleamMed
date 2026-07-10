@@ -139,6 +139,14 @@ abstract final class FormInputs {
     if (month < 1 || month > 12 || day < 1 || day > 31 || year < 1900) {
       return 'Fecha inválida';
     }
+    final parsed = DateTime(year, month, day);
+    if (parsed.year != year || parsed.month != month || parsed.day != day) {
+      return 'Fecha inválida';
+    }
+    final today = DateTime.now();
+    if (parsed.isAfter(DateTime(today.year, today.month, today.day))) {
+      return 'La fecha no puede ser futura';
+    }
     return null;
   }
 

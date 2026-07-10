@@ -56,11 +56,70 @@ class _HistoryScreenState extends State<HistoryScreen> {
     });
   }
 
+  Future<void> _clearOldHistory() async {
+    final patientId = widget.patientId;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Limpiar historial antiguo'),
+        content: const Text(
+          'Se eliminaran los registros de tomas con mas de 90 dias. '
+          'Esta accion no se puede deshacer.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Limpiar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    final before = DateTime.now().subtract(const Duration(days: 90));
+    try {
+      final deleted = patientId == null
+          ? await _api.clearDoseHistory(before: before)
+          : await _api.clearCaregiverPatientDoseHistory(
+              patientId,
+              before: before,
+            );
+      if (!mounted) {
+        return;
+      }
+      showAppSnackBar(context, 'Se eliminaron $deleted registros');
+      _reload();
+    } on ApiException catch (error) {
+      if (!mounted) {
+        return;
+      }
+      showAppSnackBar(context, error.message);
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      showAppSnackBar(context, 'No se pudo limpiar el historial');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.title ?? 'Historial'),
+        actions: [
+          IconButton(
+            tooltip: 'Limpiar historial antiguo',
+            onPressed: _clearOldHistory,
+            icon: const Icon(Icons.cleaning_services),
+          ),
+        ],
       ),
       body: FutureBuilder<List<DoseConfirmation>>(
         future: _confirmations,

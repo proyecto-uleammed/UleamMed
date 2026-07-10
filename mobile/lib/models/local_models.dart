@@ -723,6 +723,17 @@ class EmergencyContact {
     );
   }
 
+  factory EmergencyContact.fromBackendJson(Map<String, dynamic> json) {
+    return EmergencyContact(
+      id: json['id'].toString(),
+      name: json['name'].toString(),
+      phone: json['phone'].toString(),
+      relationship: json['relationship']?.toString() ?? '',
+      isPrimary: json['isPrimary'] == true,
+      syncStatus: SyncStatus.synced,
+    );
+  }
+
   final String id;
   final String name;
   final String phone;

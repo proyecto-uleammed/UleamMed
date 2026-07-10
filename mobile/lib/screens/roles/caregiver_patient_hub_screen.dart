@@ -4,6 +4,7 @@ import '../../services/api_service.dart';
 import '../../theme/app_theme.dart';
 import '../appointments_screen.dart';
 import '../conditions_screen.dart';
+import 'caregiver_patient_contacts_screen.dart';
 import 'caregiver_patient_medications_screen.dart';
 
 class CaregiverPatientHubScreen extends StatelessWidget {
@@ -80,6 +81,25 @@ class CaregiverPatientHubScreen extends StatelessWidget {
                     api: api,
                     caregiverPatientId: patient.id,
                     title: 'Salud de ${patient.fullName}',
+                  ),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 12),
+          _PatientModuleCard(
+            icon: Icons.contact_phone,
+            title: 'Contactos de emergencia',
+            subtitle: 'Ver contactos compartidos del paciente',
+            color: const Color(0xFF00897B),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (context) => CaregiverPatientContactsScreen(
+                    api: api,
+                    patientId: patient.id,
+                    patientName: patient.fullName,
                   ),
                 ),
               );

@@ -126,7 +126,9 @@ class _CaregiverPatientsScreenState extends State<CaregiverPatientsScreen> {
                         ),
                         leading: const CircleAvatar(child: Icon(Icons.person)),
                         title: Text(patient.fullName),
-                        subtitle: const Text('Medicamentos y consultas'),
+                        subtitle: const Text(
+                          'Medicamentos, consultas, salud y contactos',
+                        ),
                         trailing: const Icon(Icons.chevron_right),
                         onTap: () => Navigator.push(
                           context,
