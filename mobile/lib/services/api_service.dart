@@ -1037,20 +1037,24 @@ class ApiService implements UleamMedApi {
     String scope,
     String medicationId,
   ) async {
-    final root = await getApplicationDocumentsDirectory();
-    final directory = Directory('${root.path}/medication_photos/$scope');
-    if (!await directory.exists()) {
-      return;
-    }
-    for (final entity in directory.listSync()) {
-      if (entity is! File) {
-        continue;
+    try {
+      final root = await getApplicationDocumentsDirectory();
+      final directory = Directory('${root.path}/medication_photos/$scope');
+      if (!await directory.exists()) {
+        return;
       }
-      final name = entity.uri.pathSegments.last;
-      if (name.startsWith('$medicationId-') ||
-          name.startsWith('$medicationId.')) {
-        await entity.delete();
+      for (final entity in directory.listSync()) {
+        if (entity is! File) {
+          continue;
+        }
+        final name = entity.uri.pathSegments.last;
+        if (name.startsWith('$medicationId-') ||
+            name.startsWith('$medicationId.')) {
+          await entity.delete();
+        }
       }
+    } catch (_) {
+      // En tests unitarios o sin acceso al filesystem, omitir la purga local.
     }
   }
 
