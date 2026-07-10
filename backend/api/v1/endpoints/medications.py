@@ -30,6 +30,7 @@ from backend.services.medication_service import (
 from backend.services.medication_photo_service import (
     MAX_PHOTO_BYTES,
     MedicationPhotoConfigurationError,
+    MedicationPhotoNotFoundError,
     delete_medication_photo,
     download_medication_photo,
     upload_medication_photo,
@@ -153,6 +154,8 @@ def download_my_medication_photo(
         content = download_medication_photo(medication.photo_path)
     except MedicationPhotoConfigurationError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except MedicationPhotoNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     path = medication.photo_path.lower()
     media_type = "image/png" if path.endswith(".png") else "image/webp" if path.endswith(".webp") else "image/jpeg"
     return Response(content=content, media_type=media_type)

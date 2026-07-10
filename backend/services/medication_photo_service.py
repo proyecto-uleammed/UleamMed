@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from uuid import uuid4
 
 from supabase import Client, create_client
@@ -21,9 +21,29 @@ class MedicationPhotoConfigurationError(RuntimeError):
     pass
 
 
+class MedicationPhotoNotFoundError(FileNotFoundError):
+    pass
+
+
+def _supabase_configured() -> bool:
+    return bool(settings.SUPABASE_URL and settings.SUPABASE_SERVICE_ROLE_KEY)
+
+
+def _local_storage_root() -> Path:
+    configured = settings.MEDICATION_PHOTOS_LOCAL_DIR.strip()
+    root = Path(configured) if configured else Path("storage/medication_photos")
+    if not root.is_absolute():
+        root = Path(__file__).resolve().parents[2] / root
+    return root
+
+
+def _local_object_path(object_path: str) -> Path:
+    return _local_storage_root() / PurePosixPath(object_path)
+
+
 @lru_cache
 def _storage_client() -> Client:
-    if not settings.SUPABASE_URL or not settings.SUPABASE_SERVICE_ROLE_KEY:
+    if not _supabase_configured():
         raise MedicationPhotoConfigurationError(
             "Supabase Storage no esta configurado en el backend"
         )
@@ -50,23 +70,43 @@ def upload_medication_photo(
         / str(medication_id)
         / f"{uuid4().hex}{extension}"
     ).as_posix()
-    _storage_client().storage.from_(settings.SUPABASE_MEDICATION_BUCKET).upload(
-        path=object_path,
-        file=content,
-        file_options={"content-type": content_type, "upsert": "false"},
-    )
+
+    if _supabase_configured():
+        _storage_client().storage.from_(settings.SUPABASE_MEDICATION_BUCKET).upload(
+            path=object_path,
+            file=content,
+            file_options={"content-type": content_type, "upsert": "false"},
+        )
+        return object_path
+
+    destination = _local_object_path(object_path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_bytes(content)
     return object_path
 
 
 def download_medication_photo(object_path: str) -> bytes:
-    return _storage_client().storage.from_(
-        settings.SUPABASE_MEDICATION_BUCKET
-    ).download(object_path)
+    if _supabase_configured():
+        return _storage_client().storage.from_(
+            settings.SUPABASE_MEDICATION_BUCKET
+        ).download(object_path)
+
+    local_path = _local_object_path(object_path)
+    if not local_path.is_file():
+        raise MedicationPhotoNotFoundError("Foto no encontrada")
+    return local_path.read_bytes()
 
 
 def delete_medication_photo(object_path: str | None) -> None:
     if not object_path:
         return
-    _storage_client().storage.from_(settings.SUPABASE_MEDICATION_BUCKET).remove(
-        [object_path]
-    )
+
+    if _supabase_configured():
+        _storage_client().storage.from_(settings.SUPABASE_MEDICATION_BUCKET).remove(
+            [object_path]
+        )
+        return
+
+    local_path = _local_object_path(object_path)
+    if local_path.is_file():
+        local_path.unlink()

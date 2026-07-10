@@ -43,7 +43,9 @@ from backend.services.caregiving_service import (
 from backend.services.medication_photo_service import (
     MAX_PHOTO_BYTES,
     MedicationPhotoConfigurationError,
+    MedicationPhotoNotFoundError,
     delete_medication_photo,
+    download_medication_photo,
     upload_medication_photo,
 )
 from backend.services.medication_service import medication_to_read
@@ -350,3 +352,36 @@ def upload_patient_medication_photo(
     except Exception:
         pass
     return medication_to_read(db, patient_id, medication.id)
+
+
+@router.get("/patients/{patient_id}/medications/{medication_id}/photo")
+def download_patient_medication_photo(
+    patient_id: int,
+    medication_id: int,
+    caregiver: User = Depends(get_current_caregiver),
+    db: Session = Depends(get_db),
+) -> Response:
+    """Descarga la foto de un medicamento del paciente vinculado activo."""
+    medication = get_linked_patient_medication(
+        db,
+        caregiver.id,
+        patient_id,
+        medication_id,
+    )
+    if medication is None or not medication.photo_path:
+        raise HTTPException(status_code=404, detail="Foto no encontrada")
+    try:
+        content = download_medication_photo(medication.photo_path)
+    except MedicationPhotoConfigurationError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except MedicationPhotoNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    path = medication.photo_path.lower()
+    media_type = (
+        "image/png"
+        if path.endswith(".png")
+        else "image/webp"
+        if path.endswith(".webp")
+        else "image/jpeg"
+    )
+    return Response(content=content, media_type=media_type)

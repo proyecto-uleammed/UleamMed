@@ -378,6 +378,31 @@ class BackendIntegratedFlowTest(unittest.TestCase):
         self.assertEqual(downloaded.status_code, 200)
         self.assertEqual(downloaded.content, b"imagen")
 
+    def test_foto_de_medicamento_usa_almacenamiento_local_sin_supabase(self) -> None:
+        """Permite subir y descargar fotos cuando Supabase no esta configurado."""
+        from backend.core.config import settings
+        from backend.services import medication_photo_service as photo_service
+
+        original_url = settings.SUPABASE_URL
+        original_key = settings.SUPABASE_SERVICE_ROLE_KEY
+        settings.SUPABASE_URL = None
+        settings.SUPABASE_SERVICE_ROLE_KEY = None
+        try:
+            object_path = photo_service.upload_medication_photo(
+                user_id=7,
+                medication_id=11,
+                content=b"imagen-local",
+                content_type="image/jpeg",
+            )
+            content = photo_service.download_medication_photo(object_path)
+            self.assertEqual(content, b"imagen-local")
+            photo_service.delete_medication_photo(object_path)
+            with self.assertRaises(photo_service.MedicationPhotoNotFoundError):
+                photo_service.download_medication_photo(object_path)
+        finally:
+            settings.SUPABASE_URL = original_url
+            settings.SUPABASE_SERVICE_ROLE_KEY = original_key
+
     def test_modulo_medicamentos_rechaza_roles_no_pacientes(self) -> None:
         """Los paneles futuros no obtienen permisos de paciente por autenticarse."""
         with self.SessionLocal() as db:
@@ -519,6 +544,34 @@ class BackendIntegratedFlowTest(unittest.TestCase):
         self.assertEqual(caregiver_schedule_update.status_code, 200)
         self.assertEqual(caregiver_schedule_update.json()["time"], "09:00")
         self.assertEqual(len(caregiver_schedule_update.json()["schedule"]["times"]), 2)
+
+        with (
+            patch(
+                "backend.api.v1.endpoints.medications.upload_medication_photo",
+                return_value=f"users/{patient_id}/medications/{patient_medication_id}/foto.jpg",
+            ),
+            patch(
+                "backend.api.v1.endpoints.medications.delete_medication_photo",
+            ),
+            patch(
+                "backend.api.v1.endpoints.caregiving.download_medication_photo",
+                return_value=b"imagen-compartida",
+            ),
+        ):
+            patient_photo = self.client.post(
+                f"/api/v1/medications/{patient_medication_id}/photo",
+                headers=patient_headers,
+                files={"photo": ("foto.jpg", b"imagen-compartida", "image/jpeg")},
+            )
+            self.assertEqual(patient_photo.status_code, 200)
+            self.assertTrue(patient_photo.json()["photoAvailable"])
+
+            caregiver_photo = self.client.get(
+                f"/api/v1/caregiving/patients/{patient_id}/medications/{patient_medication_id}/photo",
+                headers=caregiver_headers,
+            )
+        self.assertEqual(caregiver_photo.status_code, 200)
+        self.assertEqual(caregiver_photo.content, b"imagen-compartida")
 
         caregiver_created = self.client.post(
             f"/api/v1/caregiving/patients/{patient_id}/medications",
