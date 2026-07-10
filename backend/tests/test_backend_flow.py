@@ -500,6 +500,25 @@ class BackendIntegratedFlowTest(unittest.TestCase):
         )
         self.assertEqual(shared_medications.status_code, 200)
         self.assertEqual(shared_medications.json()["items"][0]["name"], "Losartan")
+        patient_medication_id = shared_medications.json()["items"][0]["id"]
+
+        caregiver_schedule_update = self.client.patch(
+            f"/api/v1/caregiving/patients/{patient_id}/medications/{patient_medication_id}",
+            headers=caregiver_headers,
+            json={
+                "name": "Losartan",
+                "dose": "50 mg",
+                "schedule": {
+                    "mode": "fixed_times",
+                    "times": ["09:00", "21:00"],
+                    "weekdays": [1, 2, 3, 4, 5, 6, 7],
+                    "start_date": "2026-07-09",
+                },
+            },
+        )
+        self.assertEqual(caregiver_schedule_update.status_code, 200)
+        self.assertEqual(caregiver_schedule_update.json()["time"], "09:00")
+        self.assertEqual(len(caregiver_schedule_update.json()["schedule"]["times"]), 2)
 
         caregiver_created = self.client.post(
             f"/api/v1/caregiving/patients/{patient_id}/medications",
