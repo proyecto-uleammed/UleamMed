@@ -70,7 +70,13 @@ class _RoleShellScaffoldState extends State<RoleShellScaffold> {
   @override
   Widget build(BuildContext context) {
     final tabs = widget.tabs
-        .map((tab) => _RoleTabHost(onOpenTab: _goTo, child: tab))
+        .map(
+          (tab) => _RoleTabHost(
+            onOpenTab: _goTo,
+            activeIndex: _index,
+            child: tab,
+          ),
+        )
         .toList();
 
     return Scaffold(
@@ -86,9 +92,14 @@ class _RoleShellScaffoldState extends State<RoleShellScaffold> {
 
 /// Propaga [onOpenTab] a pantallas que lo necesiten dentro del shell.
 class _RoleTabHost extends InheritedWidget {
-  const _RoleTabHost({required this.onOpenTab, required super.child});
+  const _RoleTabHost({
+    required this.onOpenTab,
+    required this.activeIndex,
+    required super.child,
+  });
 
   final ValueChanged<int> onOpenTab;
+  final int activeIndex;
 
   static ValueChanged<int>? of(BuildContext context) {
     return context
@@ -96,13 +107,25 @@ class _RoleTabHost extends InheritedWidget {
         ?.onOpenTab;
   }
 
+  static int? activeIndexOf(BuildContext context) {
+    return context
+        .dependOnInheritedWidgetOfExactType<_RoleTabHost>()
+        ?.activeIndex;
+  }
+
   @override
   bool updateShouldNotify(_RoleTabHost oldWidget) {
-    return onOpenTab != oldWidget.onOpenTab;
+    return onOpenTab != oldWidget.onOpenTab ||
+        activeIndex != oldWidget.activeIndex;
   }
 }
 
 /// Atajo para abrir una pestaña del shell actual desde una pantalla hija.
 void openRoleTab(BuildContext context, int index) {
   _RoleTabHost.of(context)?.call(index);
+}
+
+/// Indice de la pestaña visible en el shell de rol, si aplica.
+int? roleShellActiveTabIndex(BuildContext context) {
+  return _RoleTabHost.activeIndexOf(context);
 }

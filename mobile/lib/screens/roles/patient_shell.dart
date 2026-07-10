@@ -74,6 +74,7 @@ class PatientShell extends StatelessWidget {
         MedicationsScreen(
           api: api,
           notificationScheduler: notificationScheduler,
+          shellTabIndex: 1,
         ),
         HistoryScreen(api: api),
         AppointmentsScreen(api: api),

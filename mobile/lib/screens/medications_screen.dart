@@ -10,12 +10,19 @@ import '../services/api_service.dart';
 import '../services/notification_scheduler.dart';
 import '../theme/app_theme.dart';
 import '../utils/form_inputs.dart';
+import '../widgets/role_shell_scaffold.dart';
 
 class MedicationsScreen extends StatefulWidget {
-  const MedicationsScreen({super.key, this.api, this.notificationScheduler});
+  const MedicationsScreen({
+    super.key,
+    this.api,
+    this.notificationScheduler,
+    this.shellTabIndex,
+  });
 
   final UleamMedApi? api;
   final NotificationScheduler? notificationScheduler;
+  final int? shellTabIndex;
 
   @override
   State<MedicationsScreen> createState() => _MedicationsScreenState();
@@ -25,6 +32,7 @@ class _MedicationsScreenState extends State<MedicationsScreen> {
   late final UleamMedApi _api = widget.api ?? ApiService();
   late Future<_MedicationData> _data = _loadData();
   final Set<String> _savingIds = {};
+  int? _lastShellTabIndex;
 
   Future<_MedicationData> _loadData() async {
     final medications = await _api.listMedications();
@@ -58,6 +66,22 @@ class _MedicationsScreenState extends State<MedicationsScreen> {
     setState(() {
       _data = _loadData();
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final shellTabIndex = widget.shellTabIndex;
+    if (shellTabIndex == null) {
+      return;
+    }
+    final activeIndex = roleShellActiveTabIndex(context);
+    if (activeIndex == shellTabIndex &&
+        _lastShellTabIndex != null &&
+        _lastShellTabIndex != activeIndex) {
+      _reload();
+    }
+    _lastShellTabIndex = activeIndex;
   }
 
   Future<void> _recordStatus(
