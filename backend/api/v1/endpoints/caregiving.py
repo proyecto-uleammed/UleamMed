@@ -10,6 +10,12 @@ from backend.api.deps import (
 )
 from backend.core.database import get_db
 from backend.models.user import User
+from backend.schemas.appointment import (
+    AppointmentCreate,
+    AppointmentListResponse,
+    AppointmentRead,
+    AppointmentUpdate,
+)
 from backend.schemas.caregiving import (
     CaregiverInvitationRead,
     CaregiverInvitationRedeem,
@@ -33,10 +39,13 @@ from backend.services.caregiving_service import (
     approve_link,
     cancel_invitation,
     create_invitation,
+    create_linked_patient_appointment,
     create_linked_patient_medication,
+    delete_linked_patient_appointment,
     delete_linked_patient_medication,
     get_linked_patient_medication,
     list_caregiver_patients,
+    list_linked_patient_appointments,
     list_linked_patient_deleted_medications,
     list_linked_patient_dose_events,
     list_linked_patient_medications,
@@ -46,6 +55,7 @@ from backend.services.caregiving_service import (
     reject_link,
     restore_linked_patient_medication,
     revoke_link,
+    update_linked_patient_appointment,
     update_linked_patient_medication,
 )
 from backend.services.medication_photo_service import (
@@ -532,3 +542,116 @@ def delete_patient_medication_photo(
     db.add(medication)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get(
+    "/patients/{patient_id}/appointments",
+    response_model=AppointmentListResponse,
+)
+def get_patient_appointments(
+    patient_id: int,
+    caregiver: User = Depends(get_current_caregiver),
+    db: Session = Depends(get_db),
+) -> AppointmentListResponse:
+    """Consulta citas del paciente vinculado activo."""
+    appointments = list_linked_patient_appointments(db, caregiver.id, patient_id)
+    if appointments is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Paciente no encontrado",
+        )
+    return AppointmentListResponse(items=appointments)
+
+
+@router.post(
+    "/patients/{patient_id}/appointments",
+    response_model=AppointmentRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_patient_appointment(
+    patient_id: int,
+    payload: AppointmentCreate,
+    caregiver: User = Depends(get_current_caregiver),
+    db: Session = Depends(get_db),
+) -> AppointmentRead:
+    """Crea una consulta para el paciente vinculado activo."""
+    try:
+        appointment = create_linked_patient_appointment(
+            db,
+            caregiver.id,
+            patient_id,
+            payload,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    if appointment is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Paciente no encontrado",
+        )
+    return appointment
+
+
+@router.patch(
+    "/patients/{patient_id}/appointments/{appointment_id}",
+    response_model=AppointmentRead,
+)
+def update_patient_appointment(
+    patient_id: int,
+    appointment_id: int,
+    payload: AppointmentUpdate,
+    caregiver: User = Depends(get_current_caregiver),
+    db: Session = Depends(get_db),
+) -> AppointmentRead:
+    """Actualiza una consulta del paciente vinculado activo."""
+    try:
+        appointment = update_linked_patient_appointment(
+            db,
+            caregiver.id,
+            patient_id,
+            appointment_id,
+            payload,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    if appointment is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Consulta no encontrada",
+        )
+    return appointment
+
+
+@router.delete(
+    "/patients/{patient_id}/appointments/{appointment_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_patient_appointment(
+    patient_id: int,
+    appointment_id: int,
+    caregiver: User = Depends(get_current_caregiver),
+    db: Session = Depends(get_db),
+) -> None:
+    """Elimina una consulta del paciente vinculado activo."""
+    removed = delete_linked_patient_appointment(
+        db,
+        caregiver.id,
+        patient_id,
+        appointment_id,
+    )
+    if removed is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Paciente no encontrado",
+        )
+    if not removed:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Consulta no encontrada",
+        )

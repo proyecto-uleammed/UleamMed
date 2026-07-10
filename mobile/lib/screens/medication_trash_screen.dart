@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../services/api_service.dart';
@@ -32,9 +34,14 @@ class _MedicationTrashScreenState extends State<MedicationTrashScreen> {
   }
 
   void _reload() {
+    unawaited(_refresh());
+  }
+
+  Future<void> _refresh() async {
     setState(() {
       _medications = _load();
     });
+    await _medications;
   }
 
   Future<void> _restore(MedicationItem medication) async {
@@ -91,15 +98,21 @@ class _MedicationTrashScreenState extends State<MedicationTrashScreen> {
           }
           final medications = snapshot.data ?? const [];
           if (medications.isEmpty) {
-            return const EmptyStateView(
-              icon: Icons.delete_outline,
-              title: 'Papelera vacia',
-              message:
-                  'Los medicamentos eliminados apareceran aqui para poder restaurarlos.',
+            return RefreshableScrollView(
+              onRefresh: _refresh,
+              child: const EmptyStateView(
+                icon: Icons.delete_outline,
+                title: 'Papelera vacia',
+                message:
+                    'Los medicamentos eliminados apareceran aqui para poder restaurarlos.',
+              ),
             );
           }
-          return ListView.separated(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+          return RefreshIndicator(
+            onRefresh: _refresh,
+            child: ListView.separated(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
             itemCount: medications.length,
             separatorBuilder: (_, _) => const SizedBox(height: 10),
             itemBuilder: (context, index) {
@@ -126,6 +139,7 @@ class _MedicationTrashScreenState extends State<MedicationTrashScreen> {
                 ),
               );
             },
+            ),
           );
         },
       ),

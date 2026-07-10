@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../services/api_service.dart';
@@ -49,9 +51,24 @@ class AppointmentsScreen extends StatefulWidget {
   State<AppointmentsScreen> createState() => _AppointmentsScreenState();
 }
 
-class _AppointmentsScreenState extends State<AppointmentsScreen> {
+class _AppointmentsScreenState extends State<AppointmentsScreen>
+    with SingleTickerProviderStateMixin {
   late final UleamMedApi _api = widget.api ?? ApiService();
   late Future<List<Appointment>> _appointments = _loadAppointments();
+  late final TabController _tabController = TabController(
+    length: 2,
+    vsync: this,
+  )..addListener(() {
+      if (!_tabController.indexIsChanging) {
+        setState(() {});
+      }
+    });
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
 
   Future<List<Appointment>> _loadAppointments() {
     final patientId = widget.caregiverPatientId;
@@ -77,10 +94,15 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
     return _api.deleteAppointment(appointmentId);
   }
 
-  void _reload() {
+  Future<void> _refresh() async {
     setState(() {
       _appointments = _loadAppointments();
     });
+    await _appointments;
+  }
+
+  void _reload() {
+    unawaited(_refresh());
   }
 
   Future<void> _openForm([Appointment? appointment]) async {
@@ -90,13 +112,14 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
       useSafeArea: true,
       builder: (context) => _AppointmentForm(
         appointment: appointment,
+        readonlySchedule: appointment?.isPast ?? false,
         onSave: (item) async {
           await _saveAppointment(item);
         },
       ),
     );
     if (saved == true && mounted) {
-      _reload();
+      await _refresh();
       showAppSnackBar(context, 'Consulta guardada');
     }
   }
@@ -129,72 +152,83 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
       ),
     );
     if (changed == true && mounted) {
-      _reload();
+      await _refresh();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 2,
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text(widget.title ?? 'Consultas'),
-          bottom: const TabBar(
-            labelColor: Colors.white,
-            unselectedLabelColor: Colors.white70,
-            indicatorColor: Colors.white,
-            tabs: [
-              Tab(text: 'Proximas'),
-              Tab(text: 'Pasadas'),
-            ],
-          ),
-        ),
-        floatingActionButton: FloatingActionButton.extended(
-          heroTag: 'fab-appointments',
-          onPressed: () => _openForm(),
-          icon: const Icon(Icons.add),
-          label: const Text('Agregar'),
-        ),
-        body: FutureBuilder<List<Appointment>>(
-          future: _appointments,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const LoadingView(message: 'Cargando consultas...');
-            }
-            if (snapshot.hasError) {
-              return ErrorStateView(
-                title: 'No se pudieron cargar las consultas',
-                onRetry: _reload,
-              );
-            }
+    final showAddButton = _tabController.index == 0;
 
-            final all = snapshot.data ?? const [];
-            final upcoming = all.where((a) => !a.isPast).toList()
-              ..sort(_byScheduled);
-            final past = all.where((a) => a.isPast).toList()
-              ..sort((a, b) => -_byScheduled(a, b));
-
-            return TabBarView(
-              children: [
-                _AppointmentList(
-                  appointments: upcoming,
-                  emptyTitle: 'Sin consultas proximas',
-                  emptyMessage: 'Agrega una consulta con el boton +.',
-                  onTap: _openDetail,
-                  onAdd: () => _openForm(),
-                ),
-                _AppointmentList(
-                  appointments: past,
-                  emptyTitle: 'Sin consultas pasadas',
-                  emptyMessage: 'Aqui veras tus consultas realizadas.',
-                  onTap: _openDetail,
-                  onAdd: () => _openForm(),
-                ),
-              ],
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.title ?? 'Consultas'),
+        actions: [
+          ReloadIconButton(onPressed: _reload),
+        ],
+        bottom: TabBar(
+          controller: _tabController,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white70,
+          indicatorColor: Colors.white,
+          tabs: const [
+            Tab(text: 'Proximas'),
+            Tab(text: 'Pasadas'),
+          ],
+        ),
+      ),
+      floatingActionButton: showAddButton
+          ? FloatingActionButton.extended(
+              heroTag: 'fab-appointments',
+              onPressed: () => _openForm(),
+              icon: const Icon(Icons.add),
+              label: const Text('Agregar'),
+            )
+          : null,
+      body: FutureBuilder<List<Appointment>>(
+        future: _appointments,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              !snapshot.hasData) {
+            return const LoadingView(message: 'Cargando consultas...');
+          }
+          if (snapshot.hasError) {
+            return ErrorStateView(
+              title: 'No se pudieron cargar las consultas',
+              onRetry: _reload,
             );
-          },
-        ),
+          }
+
+          final all = snapshot.data ?? const [];
+          final upcoming = all.where((a) => !a.isPast).toList()
+            ..sort(_byScheduled);
+          final past = all.where((a) => a.isPast).toList()
+            ..sort((a, b) => -_byScheduled(a, b));
+
+          return TabBarView(
+            controller: _tabController,
+            children: [
+              _AppointmentList(
+                appointments: upcoming,
+                emptyTitle: 'Sin consultas proximas',
+                emptyMessage: 'Agrega una consulta con el boton +.',
+                onTap: _openDetail,
+                onRefresh: _refresh,
+                showAddAction: true,
+                onAdd: () => _openForm(),
+              ),
+              _AppointmentList(
+                appointments: past,
+                emptyTitle: 'Sin historial de consultas',
+                emptyMessage:
+                    'Las consultas realizadas o vencidas apareceran aqui.',
+                onTap: _openDetail,
+                onRefresh: _refresh,
+                showAddAction: false,
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -221,31 +255,45 @@ class _AppointmentList extends StatelessWidget {
     required this.emptyTitle,
     required this.emptyMessage,
     required this.onTap,
-    required this.onAdd,
+    required this.onRefresh,
+    this.showAddAction = false,
+    this.onAdd,
   });
 
   final List<Appointment> appointments;
   final String emptyTitle;
   final String emptyMessage;
   final ValueChanged<Appointment> onTap;
-  final VoidCallback onAdd;
+  final Future<void> Function() onRefresh;
+  final bool showAddAction;
+  final VoidCallback? onAdd;
 
   @override
   Widget build(BuildContext context) {
     if (appointments.isEmpty) {
-      return EmptyStateView(
-        icon: Icons.event_available,
-        title: emptyTitle,
-        message: emptyMessage,
-        actionLabel: 'Agregar consulta',
-        onAction: onAdd,
+      return RefreshableScrollView(
+        onRefresh: onRefresh,
+        child: EmptyStateView(
+          icon: Icons.event_available,
+          title: emptyTitle,
+          message: emptyMessage,
+          actionLabel: showAddAction ? 'Agregar consulta' : null,
+          onAction: showAddAction ? onAdd : null,
+        ),
       );
     }
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-      children: appointments
-          .map((a) => _AppointmentCard(appointment: a, onTap: () => onTap(a)))
-          .toList(),
+
+    return RefreshIndicator(
+      onRefresh: onRefresh,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+        children: appointments
+            .map(
+              (a) => _AppointmentCard(appointment: a, onTap: () => onTap(a)),
+            )
+            .toList(),
+      ),
     );
   }
 }
@@ -460,9 +508,14 @@ class _AppointmentDetail extends StatelessWidget {
 }
 
 class _AppointmentForm extends StatefulWidget {
-  const _AppointmentForm({required this.onSave, this.appointment});
+  const _AppointmentForm({
+    required this.onSave,
+    this.appointment,
+    this.readonlySchedule = false,
+  });
 
   final Appointment? appointment;
+  final bool readonlySchedule;
   final Future<void> Function(Appointment appointment) onSave;
 
   @override
@@ -510,13 +563,20 @@ class _AppointmentFormState extends State<_AppointmentForm> {
 
   static const _locale = Locale('es', 'ES');
 
-  Future<void> _pickDate() async {
+  DateTime get _today {
     final now = DateTime.now();
-    final firstDate = DateTime(1950);
-    final lastDate = DateTime(now.year + 5);
-    var initialDate = _date ?? now;
-    if (initialDate.isBefore(firstDate)) {
-      initialDate = firstDate;
+    return DateTime(now.year, now.month, now.day);
+  }
+
+  Future<void> _pickDate() async {
+    if (widget.readonlySchedule) {
+      return;
+    }
+    final today = _today;
+    final lastDate = DateTime(today.year + 5);
+    var initialDate = _date ?? today;
+    if (initialDate.isBefore(today)) {
+      initialDate = today;
     } else if (initialDate.isAfter(lastDate)) {
       initialDate = lastDate;
     }
@@ -524,7 +584,7 @@ class _AppointmentFormState extends State<_AppointmentForm> {
       context: context,
       locale: _locale,
       initialDate: initialDate,
-      firstDate: firstDate,
+      firstDate: today,
       lastDate: lastDate,
       helpText: 'Seleccionar fecha',
       cancelText: 'Cancelar',
@@ -536,16 +596,40 @@ class _AppointmentFormState extends State<_AppointmentForm> {
   }
 
   Future<void> _pickTime() async {
+    if (widget.readonlySchedule) {
+      return;
+    }
     final picked = await showTimePicker(
       context: context,
+      locale: _locale,
       initialTime: _time ?? TimeOfDay.now(),
       helpText: 'Seleccionar hora',
       cancelText: 'Cancelar',
       confirmText: 'Aceptar',
     );
-    if (picked != null) {
-      setState(() => _time = picked);
+    if (picked == null) {
+      return;
     }
+    if (_date != null) {
+      final selected = DateTime(
+        _date!.year,
+        _date!.month,
+        _date!.day,
+        picked.hour,
+        picked.minute,
+      );
+      if (!selected.isAfter(DateTime.now())) {
+        if (mounted) {
+          showAppSnackBar(
+            context,
+            'Selecciona una hora futura',
+            isError: true,
+          );
+        }
+        return;
+      }
+    }
+    setState(() => _time = picked);
   }
 
   Future<void> _save() async {
@@ -565,6 +649,14 @@ class _AppointmentFormState extends State<_AppointmentForm> {
         _time!.hour,
         _time!.minute,
       );
+      if (!widget.readonlySchedule && !scheduled.isAfter(DateTime.now())) {
+        showAppSnackBar(
+          context,
+          'La consulta debe programarse en el futuro',
+          isError: true,
+        );
+        return;
+      }
       final id =
           widget.appointment?.id ??
           'cita-${DateTime.now().millisecondsSinceEpoch}';
@@ -642,25 +734,36 @@ class _AppointmentFormState extends State<_AppointmentForm> {
               ),
             ),
             const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _pickDate,
-                    icon: const Icon(Icons.event),
-                    label: Text(_date == null ? 'Fecha' : _formatDate(_date!)),
-                  ),
+            if (widget.readonlySchedule) ...[
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.event),
+                title: Text(
+                  _date == null ? 'Sin fecha' : _formatDate(_date!),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _pickTime,
-                    icon: const Icon(Icons.schedule),
-                    label: Text(_time == null ? 'Hora' : _formatTime(_time!)),
+                subtitle: Text(_time == null ? 'Sin hora' : _formatTime(_time!)),
+              ),
+            ] else ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _pickDate,
+                      icon: const Icon(Icons.event),
+                      label: Text(_date == null ? 'Fecha' : _formatDate(_date!)),
+                    ),
                   ),
-                ),
-              ],
-            ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _pickTime,
+                      icon: const Icon(Icons.schedule),
+                      label: Text(_time == null ? 'Hora' : _formatTime(_time!)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
             const SizedBox(height: 12),
             TextFormField(
               controller: _locationController,
