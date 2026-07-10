@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
 from backend.api.deps import (
@@ -15,7 +15,12 @@ from backend.schemas.caregiving import (
     CaregiverLinkRead,
     CaregiverPatientListResponse,
 )
-from backend.schemas.medication import MedicationListResponse
+from backend.schemas.medication import (
+    MedicationCreate,
+    MedicationListResponse,
+    MedicationRead,
+    MedicationUpdate,
+)
 from backend.services.caregiving_service import (
     CaregiverLinkNotFoundError,
     CaregiverLinkStateError,
@@ -24,13 +29,24 @@ from backend.services.caregiving_service import (
     approve_link,
     cancel_invitation,
     create_invitation,
+    create_linked_patient_medication,
+    delete_linked_patient_medication,
+    get_linked_patient_medication,
     list_caregiver_patients,
     list_linked_patient_medications,
     list_links,
     redeem_invitation,
     reject_link,
     revoke_link,
+    update_linked_patient_medication,
 )
+from backend.services.medication_photo_service import (
+    MAX_PHOTO_BYTES,
+    MedicationPhotoConfigurationError,
+    delete_medication_photo,
+    upload_medication_photo,
+)
+from backend.services.medication_service import medication_to_read
 
 
 router = APIRouter(prefix="/caregiving", tags=["caregiving"])
@@ -183,7 +199,7 @@ def get_patient_medications(
     caregiver: User = Depends(get_current_caregiver),
     db: Session = Depends(get_db),
 ) -> MedicationListResponse:
-    """Consulta medicamentos sin permitir cambios del cuidador."""
+    """Consulta medicamentos del paciente vinculado."""
     medications = list_linked_patient_medications(db, caregiver.id, patient_id)
     if medications is None:
         raise HTTPException(
@@ -191,3 +207,146 @@ def get_patient_medications(
             detail="Paciente no encontrado",
         )
     return MedicationListResponse(items=medications)
+
+
+@router.post(
+    "/patients/{patient_id}/medications",
+    response_model=MedicationRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_patient_medication(
+    patient_id: int,
+    payload: MedicationCreate,
+    caregiver: User = Depends(get_current_caregiver),
+    db: Session = Depends(get_db),
+) -> MedicationRead:
+    """Crea un medicamento para un paciente vinculado activo."""
+    try:
+        medication = create_linked_patient_medication(
+            db,
+            caregiver.id,
+            patient_id,
+            payload,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    if medication is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Paciente no encontrado",
+        )
+    return medication
+
+
+@router.patch(
+    "/patients/{patient_id}/medications/{medication_id}",
+    response_model=MedicationRead,
+)
+def update_patient_medication(
+    patient_id: int,
+    medication_id: int,
+    payload: MedicationUpdate,
+    caregiver: User = Depends(get_current_caregiver),
+    db: Session = Depends(get_db),
+) -> MedicationRead:
+    """Actualiza un medicamento del paciente vinculado activo."""
+    try:
+        medication = update_linked_patient_medication(
+            db,
+            caregiver.id,
+            patient_id,
+            medication_id,
+            payload,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    if medication is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Medicamento no encontrado",
+        )
+    return medication
+
+
+@router.delete(
+    "/patients/{patient_id}/medications/{medication_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_patient_medication(
+    patient_id: int,
+    medication_id: int,
+    caregiver: User = Depends(get_current_caregiver),
+    db: Session = Depends(get_db),
+) -> None:
+    """Elimina un medicamento del paciente vinculado activo."""
+    medication = get_linked_patient_medication(
+        db,
+        caregiver.id,
+        patient_id,
+        medication_id,
+    )
+    if medication is not None and medication.photo_path:
+        try:
+            delete_medication_photo(medication.photo_path)
+        except Exception:
+            pass
+    removed = delete_linked_patient_medication(
+        db,
+        caregiver.id,
+        patient_id,
+        medication_id,
+    )
+    if removed is None or not removed:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Medicamento no encontrado",
+        )
+
+
+@router.post(
+    "/patients/{patient_id}/medications/{medication_id}/photo",
+    response_model=MedicationRead,
+)
+def upload_patient_medication_photo(
+    patient_id: int,
+    medication_id: int,
+    photo: UploadFile = File(...),
+    caregiver: User = Depends(get_current_caregiver),
+    db: Session = Depends(get_db),
+) -> MedicationRead:
+    """Sube la foto de un medicamento del paciente vinculado activo."""
+    medication = get_linked_patient_medication(
+        db,
+        caregiver.id,
+        patient_id,
+        medication_id,
+    )
+    if medication is None:
+        raise HTTPException(status_code=404, detail="Medicamento no encontrado")
+    previous_path = medication.photo_path
+    try:
+        new_path = upload_medication_photo(
+            user_id=patient_id,
+            medication_id=medication.id,
+            content=photo.file.read(MAX_PHOTO_BYTES + 1),
+            content_type=photo.content_type or "",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except MedicationPhotoConfigurationError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    medication.photo_path = new_path
+    db.add(medication)
+    db.commit()
+    try:
+        delete_medication_photo(previous_path)
+    except Exception:
+        pass
+    return medication_to_read(db, patient_id, medication.id)

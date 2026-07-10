@@ -501,6 +501,37 @@ class BackendIntegratedFlowTest(unittest.TestCase):
         self.assertEqual(shared_medications.status_code, 200)
         self.assertEqual(shared_medications.json()["items"][0]["name"], "Losartan")
 
+        caregiver_created = self.client.post(
+            f"/api/v1/caregiving/patients/{patient_id}/medications",
+            headers=caregiver_headers,
+            json={
+                "name": "Aspirina",
+                "dose": "100 mg",
+                "time": "20:00",
+            },
+        )
+        self.assertEqual(caregiver_created.status_code, 201)
+        created_id = caregiver_created.json()["id"]
+
+        patient_medications = self.client.get(
+            "/api/v1/medications",
+            headers=patient_headers,
+        )
+        self.assertEqual(patient_medications.status_code, 200)
+        patient_names = {item["name"] for item in patient_medications.json()["items"]}
+        self.assertIn("Aspirina", patient_names)
+
+        caregiver_updated = self.client.patch(
+            f"/api/v1/caregiving/patients/{patient_id}/medications/{created_id}",
+            headers=caregiver_headers,
+            json={"instructions": "Tomar con alimentos"},
+        )
+        self.assertEqual(caregiver_updated.status_code, 200)
+        self.assertEqual(
+            caregiver_updated.json()["instructions"],
+            "Tomar con alimentos",
+        )
+
         unrelated_access = self.client.get(
             f"/api/v1/caregiving/patients/{patient_id}/medications",
             headers=other_headers,

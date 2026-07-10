@@ -19,8 +19,15 @@ from backend.schemas.caregiving import (
     CaregiverLinkRead,
     CaregiverPatientRead,
 )
-from backend.schemas.medication import MedicationRead
-from backend.services.medication_service import list_user_medications
+from backend.schemas.medication import MedicationCreate, MedicationRead, MedicationUpdate
+from backend.services.medication_service import (
+    create_user_medication,
+    delete_user_medication,
+    get_user_medication_model,
+    list_user_medications,
+    medication_to_read,
+    update_user_medication,
+)
 
 
 _CODE_ALPHABET = string.ascii_uppercase.replace("I", "").replace("O", "") + "23456789"
@@ -111,6 +118,10 @@ def redeem_invitation(
 
     patient = db.get(User, invitation.patient_user_id)
     if patient is None or not patient.is_active or patient.role != UserRole.PATIENT:
+        _record_attempt(db, caregiver.id, successful=False)
+        raise InvalidInvitationCodeError("Codigo invalido o expirado")
+
+    if patient.id == caregiver.id:
         _record_attempt(db, caregiver.id, successful=False)
         raise InvalidInvitationCodeError("Codigo invalido o expirado")
 
@@ -291,6 +302,76 @@ def list_linked_patient_medications(
     if patient is None or not patient.is_active or patient.role != UserRole.PATIENT:
         return None
     return list_user_medications(db, patient_id)
+
+
+def _active_link_exists(db: Session, caregiver_id: int, patient_id: int) -> bool:
+    link = db.scalar(
+        select(PatientCaregiverLink.id).where(
+            PatientCaregiverLink.patient_user_id == patient_id,
+            PatientCaregiverLink.caregiver_user_id == caregiver_id,
+            PatientCaregiverLink.status == CaregiverLinkStatus.ACTIVE,
+        )
+    )
+    if link is None:
+        return False
+    patient = db.get(User, patient_id)
+    return (
+        patient is not None
+        and patient.is_active
+        and patient.role == UserRole.PATIENT
+    )
+
+
+def create_linked_patient_medication(
+    db: Session,
+    caregiver_id: int,
+    patient_id: int,
+    payload: MedicationCreate,
+) -> MedicationRead | None:
+    """Crea un medicamento para un paciente vinculado activo."""
+    if not _active_link_exists(db, caregiver_id, patient_id):
+        return None
+    return create_user_medication(db, patient_id, payload)
+
+
+def update_linked_patient_medication(
+    db: Session,
+    caregiver_id: int,
+    patient_id: int,
+    medication_id: int,
+    payload: MedicationUpdate,
+) -> MedicationRead | None:
+    """Actualiza un medicamento del paciente vinculado activo."""
+    if not _active_link_exists(db, caregiver_id, patient_id):
+        return None
+    try:
+        return update_user_medication(db, patient_id, medication_id, payload)
+    except ValueError:
+        return None
+
+
+def delete_linked_patient_medication(
+    db: Session,
+    caregiver_id: int,
+    patient_id: int,
+    medication_id: int,
+) -> bool | None:
+    """Elimina un medicamento del paciente vinculado activo."""
+    if not _active_link_exists(db, caregiver_id, patient_id):
+        return None
+    return delete_user_medication(db, patient_id, medication_id)
+
+
+def get_linked_patient_medication(
+    db: Session,
+    caregiver_id: int,
+    patient_id: int,
+    medication_id: int,
+):
+    """Obtiene el modelo de medicamento si el vinculo sigue activo."""
+    if not _active_link_exists(db, caregiver_id, patient_id):
+        return None
+    return get_user_medication_model(db, patient_id, medication_id)
 
 
 def _get_patient_link(
