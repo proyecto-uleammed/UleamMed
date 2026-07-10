@@ -23,6 +23,7 @@ from backend.schemas.caregiving import (
     CaregiverLinkRead,
     CaregiverPatientListResponse,
 )
+from backend.schemas.emergency_contact import EmergencyContactListResponse
 from backend.schemas.health_entry import (
     HealthEntryCreate,
     HealthEntryListResponse,
@@ -48,6 +49,7 @@ from backend.services.caregiving_service import (
     approve_link,
     cancel_invitation,
     create_invitation,
+    clear_linked_patient_dose_events,
     create_linked_patient_appointment,
     create_linked_patient_health_entry,
     create_linked_patient_medication,
@@ -58,6 +60,7 @@ from backend.services.caregiving_service import (
     get_linked_patient_medication,
     list_caregiver_patients,
     list_linked_patient_appointments,
+    list_linked_patient_emergency_contacts,
     list_linked_patient_health_entries,
     list_linked_patient_deleted_medications,
     list_linked_patient_dose_events,
@@ -854,3 +857,85 @@ def delete_patient_health_entry(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Registro no encontrado",
         )
+
+
+@router.get(
+    "/patients/{patient_id}/emergency-contacts",
+    response_model=EmergencyContactListResponse,
+)
+def get_patient_emergency_contacts(
+    patient_id: int,
+    caregiver: User = Depends(get_current_caregiver),
+    db: Session = Depends(get_db),
+) -> EmergencyContactListResponse:
+    """Consulta contactos de emergencia compartidos del paciente vinculado."""
+    contacts = list_linked_patient_emergency_contacts(db, caregiver.id, patient_id)
+    if contacts is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Paciente no encontrado",
+        )
+    return EmergencyContactListResponse(items=contacts)
+
+
+@router.delete("/patients/{patient_id}/medications/dose-events")
+def clear_patient_medication_dose_events(
+    patient_id: int,
+    before: datetime | None = None,
+    caregiver: User = Depends(get_current_caregiver),
+    db: Session = Depends(get_db),
+) -> dict[str, int]:
+    """Elimina eventos antiguos del historial de tomas del paciente vinculado."""
+    deleted = clear_linked_patient_dose_events(
+        db,
+        caregiver.id,
+        patient_id,
+        before=before,
+    )
+    if deleted is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Paciente no encontrado",
+        )
+    return {"deleted": deleted}
+
+
+@router.get(
+    "/patients/{patient_id}/emergency-contacts",
+    response_model=EmergencyContactListResponse,
+)
+def get_patient_emergency_contacts(
+    patient_id: int,
+    caregiver: User = Depends(get_current_caregiver),
+    db: Session = Depends(get_db),
+) -> EmergencyContactListResponse:
+    """Consulta contactos de emergencia compartidos del paciente vinculado."""
+    contacts = list_linked_patient_emergency_contacts(db, caregiver.id, patient_id)
+    if contacts is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Paciente no encontrado",
+        )
+    return EmergencyContactListResponse(items=contacts)
+
+
+@router.delete("/patients/{patient_id}/medications/dose-events")
+def clear_patient_medication_dose_events(
+    patient_id: int,
+    before: datetime | None = None,
+    caregiver: User = Depends(get_current_caregiver),
+    db: Session = Depends(get_db),
+) -> dict[str, int]:
+    """Elimina eventos antiguos del historial de tomas del paciente vinculado."""
+    deleted = clear_linked_patient_dose_events(
+        db,
+        caregiver.id,
+        patient_id,
+        before=before,
+    )
+    if deleted is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Paciente no encontrado",
+        )
+    return {"deleted": deleted}

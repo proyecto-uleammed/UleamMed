@@ -29,6 +29,7 @@ from backend.schemas.health_entry import (
     HealthEntryRead,
     HealthEntryUpdate,
 )
+from backend.schemas.emergency_contact import EmergencyContactRead
 from backend.schemas.user_medical_profile import UserMedicalProfileRead
 from backend.schemas.medication import (
     MedicationCreate,
@@ -44,6 +45,9 @@ from backend.services.appointment_service import (
     delete_user_appointment,
     list_user_appointments,
     update_user_appointment,
+)
+from backend.services.emergency_contact_service import (
+    list_user_emergency_contacts,
 )
 from backend.services.health_entry_service import (
     create_user_health_entry,
@@ -62,6 +66,7 @@ from backend.services.medication_service import (
     list_deleted_user_medications,
     list_dose_events,
     list_user_medications,
+    clear_user_dose_events,
     record_dose_event,
     restore_user_medication,
     sync_user_medication_actions,
@@ -681,6 +686,30 @@ def get_linked_patient_medical_profile(
     if not patient_shares_health_data(db, patient_id):
         return None
     return get_user_medical_profile(db, patient_id)
+
+
+def list_linked_patient_emergency_contacts(
+    db: Session,
+    caregiver_id: int,
+    patient_id: int,
+) -> list[EmergencyContactRead] | None:
+    if not _active_link_exists(db, caregiver_id, patient_id):
+        return None
+    if not patient_shares_health_data(db, patient_id):
+        return []
+    return list_user_emergency_contacts(db, patient_id)
+
+
+def clear_linked_patient_dose_events(
+    db: Session,
+    caregiver_id: int,
+    patient_id: int,
+    *,
+    before: datetime | None = None,
+) -> int | None:
+    if not _active_link_exists(db, caregiver_id, patient_id):
+        return None
+    return clear_user_dose_events(db, patient_id, before=before)
 
 
 def _mask_email(email: str) -> str:

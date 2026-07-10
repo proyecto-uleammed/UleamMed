@@ -12,6 +12,7 @@ from backend.core.database import Base, get_db
 from backend.core.roles import UserRole
 from backend.core.security import create_access_token, generate_password_hash
 from backend.models.appointment import Appointment  # noqa: F401
+from backend.models.emergency_contact import EmergencyContact  # noqa: F401
 from backend.models.health_entry import HealthEntry  # noqa: F401
 from backend.models.user_medical_profile import UserMedicalProfile  # noqa: F401
 from backend.models.caregiver_invitation import CaregiverInvitation
@@ -876,6 +877,25 @@ class BackendIntegratedFlowTest(unittest.TestCase):
             },
         )
         self.assertEqual(invalid_health_entry.status_code, 422)
+
+        patient_creates_contact = self.client.post(
+            "/api/v1/emergency-contacts",
+            headers=patient_headers,
+            json={
+                "name": "Maria Lopez",
+                "phone": "0991234567",
+                "relationship": "Hija",
+                "isPrimary": True,
+            },
+        )
+        self.assertEqual(patient_creates_contact.status_code, 201)
+
+        caregiver_contacts = self.client.get(
+            f"/api/v1/caregiving/patients/{patient_id}/emergency-contacts",
+            headers=caregiver_headers,
+        )
+        self.assertEqual(caregiver_contacts.status_code, 200)
+        self.assertEqual(len(caregiver_contacts.json()["items"]), 1)
 
         caregiver_schedule_update = self.client.patch(
             f"/api/v1/caregiving/patients/{patient_id}/medications/{patient_medication_id}",
