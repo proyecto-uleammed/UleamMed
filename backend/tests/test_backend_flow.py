@@ -573,6 +573,79 @@ class BackendIntegratedFlowTest(unittest.TestCase):
         self.assertEqual(caregiver_photo.status_code, 200)
         self.assertEqual(caregiver_photo.content, b"imagen-compartida")
 
+        dose_event = {
+            "client_event_id": "evento-cuidador-0001",
+            "scheduled_at": "2026-07-09T08:00:00Z",
+            "sequence_number": 1,
+            "status": "taken",
+            "acted_at": "2026-07-09T08:05:00Z",
+        }
+        patient_event = self.client.post(
+            f"/api/v1/medications/{patient_medication_id}/dose-events",
+            headers=patient_headers,
+            json=dose_event,
+        )
+        self.assertEqual(patient_event.status_code, 200)
+
+        caregiver_events = self.client.get(
+            f"/api/v1/caregiving/patients/{patient_id}/medications/dose-events",
+            headers=caregiver_headers,
+        )
+        self.assertEqual(caregiver_events.status_code, 200)
+        self.assertEqual(len(caregiver_events.json()), 1)
+        self.assertEqual(
+            caregiver_events.json()[0]["medication_name"],
+            "Losartan",
+        )
+
+        with (
+            patch(
+                "backend.api.v1.endpoints.caregiving.upload_medication_photo",
+                return_value=f"users/{patient_id}/medications/{patient_medication_id}/cuidador.jpg",
+            ),
+            patch(
+                "backend.api.v1.endpoints.caregiving.delete_medication_photo",
+            ),
+            patch(
+                "backend.api.v1.endpoints.medications.download_medication_photo",
+                return_value=b"foto-cuidador",
+            ),
+        ):
+            caregiver_upload = self.client.post(
+                f"/api/v1/caregiving/patients/{patient_id}/medications/{patient_medication_id}/photo",
+                headers=caregiver_headers,
+                files={"photo": ("foto.jpg", b"foto-cuidador", "image/jpeg")},
+            )
+            self.assertEqual(caregiver_upload.status_code, 200)
+            self.assertTrue(caregiver_upload.json()["photoAvailable"])
+
+            patient_photo = self.client.get(
+                f"/api/v1/medications/{patient_medication_id}/photo",
+                headers=patient_headers,
+            )
+        self.assertEqual(patient_photo.status_code, 200)
+        self.assertEqual(patient_photo.content, b"foto-cuidador")
+
+        with patch(
+            "backend.api.v1.endpoints.caregiving.delete_medication_photo",
+        ):
+            deleted_by_caregiver = self.client.delete(
+                f"/api/v1/caregiving/patients/{patient_id}/medications/{patient_medication_id}/photo",
+                headers=caregiver_headers,
+            )
+        self.assertEqual(deleted_by_caregiver.status_code, 204)
+
+        patient_meds_after_delete = self.client.get(
+            "/api/v1/medications",
+            headers=patient_headers,
+        )
+        losartan = next(
+            item
+            for item in patient_meds_after_delete.json()["items"]
+            if item["id"] == patient_medication_id
+        )
+        self.assertFalse(losartan["photoAvailable"])
+
         caregiver_created = self.client.post(
             f"/api/v1/caregiving/patients/{patient_id}/medications",
             headers=caregiver_headers,

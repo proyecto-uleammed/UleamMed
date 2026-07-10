@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
@@ -17,6 +19,7 @@ from backend.schemas.caregiving import (
 )
 from backend.schemas.medication import (
     MedicationCreate,
+    MedicationDoseEventRead,
     MedicationListResponse,
     MedicationRead,
     MedicationUpdate,
@@ -33,6 +36,7 @@ from backend.services.caregiving_service import (
     delete_linked_patient_medication,
     get_linked_patient_medication,
     list_caregiver_patients,
+    list_linked_patient_dose_events,
     list_linked_patient_medications,
     list_links,
     redeem_invitation,
@@ -211,6 +215,33 @@ def get_patient_medications(
     return MedicationListResponse(items=medications)
 
 
+@router.get(
+    "/patients/{patient_id}/medications/dose-events",
+    response_model=list[MedicationDoseEventRead],
+)
+def get_patient_medication_dose_events(
+    patient_id: int,
+    start: datetime | None = None,
+    end: datetime | None = None,
+    caregiver: User = Depends(get_current_caregiver),
+    db: Session = Depends(get_db),
+) -> list[MedicationDoseEventRead]:
+    """Consulta el historial de tomas del paciente vinculado activo."""
+    events = list_linked_patient_dose_events(
+        db,
+        caregiver.id,
+        patient_id,
+        start=start,
+        end=end,
+    )
+    if events is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Paciente no encontrado",
+        )
+    return events
+
+
 @router.post(
     "/patients/{patient_id}/medications",
     response_model=MedicationRead,
@@ -385,3 +416,34 @@ def download_patient_medication_photo(
         else "image/jpeg"
     )
     return Response(content=content, media_type=media_type)
+
+
+@router.delete(
+    "/patients/{patient_id}/medications/{medication_id}/photo",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_patient_medication_photo(
+    patient_id: int,
+    medication_id: int,
+    caregiver: User = Depends(get_current_caregiver),
+    db: Session = Depends(get_db),
+) -> Response:
+    """Elimina la foto de un medicamento del paciente vinculado activo."""
+    medication = get_linked_patient_medication(
+        db,
+        caregiver.id,
+        patient_id,
+        medication_id,
+    )
+    if medication is None:
+        raise HTTPException(status_code=404, detail="Medicamento no encontrado")
+    if not medication.photo_path:
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+    try:
+        delete_medication_photo(medication.photo_path)
+    except MedicationPhotoConfigurationError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    medication.photo_path = None
+    db.add(medication)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

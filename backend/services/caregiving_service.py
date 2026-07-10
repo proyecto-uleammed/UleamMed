@@ -19,11 +19,17 @@ from backend.schemas.caregiving import (
     CaregiverLinkRead,
     CaregiverPatientRead,
 )
-from backend.schemas.medication import MedicationCreate, MedicationRead, MedicationUpdate
+from backend.schemas.medication import (
+    MedicationCreate,
+    MedicationDoseEventRead,
+    MedicationRead,
+    MedicationUpdate,
+)
 from backend.services.medication_service import (
     create_user_medication,
     delete_user_medication,
     get_user_medication_model,
+    list_dose_events,
     list_user_medications,
     medication_to_read,
     update_user_medication,
@@ -371,6 +377,20 @@ def get_linked_patient_medication(
     if not _active_link_exists(db, caregiver_id, patient_id):
         return None
     return get_user_medication_model(db, patient_id, medication_id)
+
+
+def list_linked_patient_dose_events(
+    db: Session,
+    caregiver_id: int,
+    patient_id: int,
+    *,
+    start: datetime | None = None,
+    end: datetime | None = None,
+) -> list[MedicationDoseEventRead] | None:
+    """Lista eventos de toma del paciente vinculado activo."""
+    if not _active_link_exists(db, caregiver_id, patient_id):
+        return None
+    return list_dose_events(db, patient_id, start=start, end=end)
 
 
 def _get_patient_link(
