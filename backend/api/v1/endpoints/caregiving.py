@@ -23,6 +23,12 @@ from backend.schemas.caregiving import (
     CaregiverLinkRead,
     CaregiverPatientListResponse,
 )
+from backend.schemas.health_entry import (
+    HealthEntryCreate,
+    HealthEntryListResponse,
+    HealthEntryRead,
+    HealthEntryUpdate,
+)
 from backend.schemas.medication import (
     MedicationCreate,
     MedicationDoseEventCreate,
@@ -31,6 +37,7 @@ from backend.schemas.medication import (
     MedicationRead,
     MedicationUpdate,
 )
+from backend.schemas.user_medical_profile import UserMedicalProfileRead
 from backend.services.caregiving_service import (
     CaregiverLinkNotFoundError,
     CaregiverLinkStateError,
@@ -40,12 +47,16 @@ from backend.services.caregiving_service import (
     cancel_invitation,
     create_invitation,
     create_linked_patient_appointment,
+    create_linked_patient_health_entry,
     create_linked_patient_medication,
     delete_linked_patient_appointment,
+    delete_linked_patient_health_entry,
     delete_linked_patient_medication,
+    get_linked_patient_medical_profile,
     get_linked_patient_medication,
     list_caregiver_patients,
     list_linked_patient_appointments,
+    list_linked_patient_health_entries,
     list_linked_patient_deleted_medications,
     list_linked_patient_dose_events,
     list_linked_patient_medications,
@@ -56,8 +67,10 @@ from backend.services.caregiving_service import (
     restore_linked_patient_medication,
     revoke_link,
     update_linked_patient_appointment,
+    update_linked_patient_health_entry,
     update_linked_patient_medication,
 )
+from backend.services.user_medical_profile_service import patient_shares_health_data
 from backend.services.medication_photo_service import (
     MAX_PHOTO_BYTES,
     MedicationPhotoConfigurationError,
@@ -654,4 +667,162 @@ def delete_patient_appointment(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Consulta no encontrada",
+        )
+
+
+def _ensure_linked_health_write_access(
+    db: Session,
+    caregiver_id: int,
+    patient_id: int,
+) -> None:
+    entries = list_linked_patient_health_entries(db, caregiver_id, patient_id)
+    if entries is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Paciente no encontrado",
+        )
+    if not patient_shares_health_data(db, patient_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="El paciente no comparte informacion medica",
+        )
+
+
+@router.get(
+    "/patients/{patient_id}/medical-profile",
+    response_model=UserMedicalProfileRead,
+)
+def get_patient_medical_profile(
+    patient_id: int,
+    caregiver: User = Depends(get_current_caregiver),
+    db: Session = Depends(get_db),
+) -> UserMedicalProfileRead:
+    """Consulta el perfil medico compartido del paciente vinculado."""
+    profile = get_linked_patient_medical_profile(db, caregiver.id, patient_id)
+    if profile is None:
+        if list_linked_patient_health_entries(db, caregiver.id, patient_id) is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Paciente no encontrado",
+            )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="El paciente no comparte informacion medica",
+        )
+    return profile
+
+
+@router.get(
+    "/patients/{patient_id}/health-entries",
+    response_model=HealthEntryListResponse,
+)
+def get_patient_health_entries(
+    patient_id: int,
+    caregiver: User = Depends(get_current_caregiver),
+    db: Session = Depends(get_db),
+) -> HealthEntryListResponse:
+    """Consulta enfermedades y alergias del paciente vinculado activo."""
+    entries = list_linked_patient_health_entries(db, caregiver.id, patient_id)
+    if entries is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Paciente no encontrado",
+        )
+    return HealthEntryListResponse(items=entries)
+
+
+@router.post(
+    "/patients/{patient_id}/health-entries",
+    response_model=HealthEntryRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_patient_health_entry(
+    patient_id: int,
+    payload: HealthEntryCreate,
+    caregiver: User = Depends(get_current_caregiver),
+    db: Session = Depends(get_db),
+) -> HealthEntryRead:
+    """Crea una enfermedad o alergia para el paciente vinculado activo."""
+    _ensure_linked_health_write_access(db, caregiver.id, patient_id)
+    try:
+        entry = create_linked_patient_health_entry(
+            db,
+            caregiver.id,
+            patient_id,
+            payload,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    if entry is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Paciente no encontrado",
+        )
+    return entry
+
+
+@router.patch(
+    "/patients/{patient_id}/health-entries/{entry_id}",
+    response_model=HealthEntryRead,
+)
+def update_patient_health_entry(
+    patient_id: int,
+    entry_id: int,
+    payload: HealthEntryUpdate,
+    caregiver: User = Depends(get_current_caregiver),
+    db: Session = Depends(get_db),
+) -> HealthEntryRead:
+    """Actualiza una enfermedad o alergia del paciente vinculado activo."""
+    _ensure_linked_health_write_access(db, caregiver.id, patient_id)
+    try:
+        entry = update_linked_patient_health_entry(
+            db,
+            caregiver.id,
+            patient_id,
+            entry_id,
+            payload,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    if entry is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Registro no encontrado",
+        )
+    return entry
+
+
+@router.delete(
+    "/patients/{patient_id}/health-entries/{entry_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_patient_health_entry(
+    patient_id: int,
+    entry_id: int,
+    caregiver: User = Depends(get_current_caregiver),
+    db: Session = Depends(get_db),
+) -> None:
+    """Elimina una enfermedad o alergia del paciente vinculado activo."""
+    _ensure_linked_health_write_access(db, caregiver.id, patient_id)
+    removed = delete_linked_patient_health_entry(
+        db,
+        caregiver.id,
+        patient_id,
+        entry_id,
+    )
+    if removed is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Paciente no encontrado",
+        )
+    if not removed:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Registro no encontrado",
         )

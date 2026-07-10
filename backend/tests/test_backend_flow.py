@@ -12,6 +12,8 @@ from backend.core.database import Base, get_db
 from backend.core.roles import UserRole
 from backend.core.security import create_access_token, generate_password_hash
 from backend.models.appointment import Appointment  # noqa: F401
+from backend.models.health_entry import HealthEntry  # noqa: F401
+from backend.models.user_medical_profile import UserMedicalProfile  # noqa: F401
 from backend.models.caregiver_invitation import CaregiverInvitation
 from backend.models.user import User
 
@@ -578,6 +580,88 @@ class BackendIntegratedFlowTest(unittest.TestCase):
             },
         )
         self.assertEqual(past_appointment_rejected.status_code, 422)
+
+        health_entry_payload = {
+            "kind": "allergy",
+            "name": "Penicilina",
+            "severity": "high",
+            "detail": "Erupcion cutanea",
+            "date": "2018",
+        }
+        patient_creates_entry = self.client.post(
+            "/api/v1/health-entries",
+            headers=patient_headers,
+            json=health_entry_payload,
+        )
+        self.assertEqual(patient_creates_entry.status_code, 201)
+        self.assertEqual(patient_creates_entry.json()["name"], "Penicilina")
+
+        caregiver_health_hidden = self.client.get(
+            f"/api/v1/caregiving/patients/{patient_id}/health-entries",
+            headers=caregiver_headers,
+        )
+        self.assertEqual(caregiver_health_hidden.status_code, 200)
+        self.assertEqual(len(caregiver_health_hidden.json()["items"]), 0)
+
+        patient_shares_profile = self.client.put(
+            "/api/v1/medical-profile",
+            headers=patient_headers,
+            json={
+                "birthDate": "01/01/1950",
+                "bloodType": "O+",
+                "conditions": "Hipertension",
+                "allergies": "Penicilina",
+                "importantNotes": "Usar identificacion medica",
+                "emergencyContactName": "Maria Lopez",
+                "emergencyContactPhone": "0991234567",
+                "shareWithCaregivers": True,
+            },
+        )
+        self.assertEqual(patient_shares_profile.status_code, 200)
+        self.assertTrue(patient_shares_profile.json()["shareWithCaregivers"])
+
+        caregiver_health_entries = self.client.get(
+            f"/api/v1/caregiving/patients/{patient_id}/health-entries",
+            headers=caregiver_headers,
+        )
+        self.assertEqual(caregiver_health_entries.status_code, 200)
+        self.assertEqual(len(caregiver_health_entries.json()["items"]), 1)
+
+        caregiver_profile = self.client.get(
+            f"/api/v1/caregiving/patients/{patient_id}/medical-profile",
+            headers=caregiver_headers,
+        )
+        self.assertEqual(caregiver_profile.status_code, 200)
+        self.assertEqual(caregiver_profile.json()["bloodType"], "O+")
+
+        caregiver_creates_entry = self.client.post(
+            f"/api/v1/caregiving/patients/{patient_id}/health-entries",
+            headers=caregiver_headers,
+            json={
+                **health_entry_payload,
+                "kind": "condition",
+                "name": "Diabetes",
+                "severity": "medium",
+            },
+        )
+        self.assertEqual(caregiver_creates_entry.status_code, 201)
+
+        patient_health_entries = self.client.get(
+            "/api/v1/health-entries",
+            headers=patient_headers,
+        )
+        self.assertEqual(patient_health_entries.status_code, 200)
+        self.assertEqual(len(patient_health_entries.json()["items"]), 2)
+
+        invalid_health_entry = self.client.post(
+            "/api/v1/health-entries",
+            headers=patient_headers,
+            json={
+                **health_entry_payload,
+                "name": "X1",
+            },
+        )
+        self.assertEqual(invalid_health_entry.status_code, 422)
 
         caregiver_schedule_update = self.client.patch(
             f"/api/v1/caregiving/patients/{patient_id}/medications/{patient_medication_id}",

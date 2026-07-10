@@ -108,6 +108,16 @@ abstract class UleamMedApi {
     int patientId,
     String appointmentId,
   );
+  Future<List<HealthEntry>> listCaregiverPatientHealthEntries(int patientId);
+  Future<HealthEntry> saveCaregiverPatientHealthEntry(
+    int patientId,
+    HealthEntry entry,
+  );
+  Future<void> deleteCaregiverPatientHealthEntry(
+    int patientId,
+    String entryId,
+  );
+  Future<MedicalProfile> loadCaregiverPatientMedicalProfile(int patientId);
   Future<int> pendingSyncCount();
   Future<SyncSummary> synchronizePendingChanges();
 }
@@ -287,14 +297,36 @@ class ApiService implements UleamMedApi {
   }
 
   @override
-  Future<MedicalProfile> loadMedicalProfile() {
-    return _localStore.readMedicalProfile();
+  Future<MedicalProfile> loadMedicalProfile() async {
+    try {
+      final data = await _getAuthorizedJson(
+        Uri.parse('$_baseUrl/api/v1/medical-profile'),
+        fallback: 'No se pudo cargar el perfil medico',
+      );
+      final remote = MedicalProfile.fromBackendJson(data);
+      await _localStore.saveMedicalProfile(remote);
+      return remote;
+    } catch (_) {
+      return _localStore.readMedicalProfile();
+    }
   }
 
   @override
   Future<MedicalProfile> saveMedicalProfile(MedicalProfile profile) async {
-    await _localStore.saveMedicalProfile(profile);
-    return _localStore.readMedicalProfile();
+    final localPending = profile.copyWith(syncStatus: SyncStatus.pending);
+    await _localStore.saveMedicalProfile(localPending);
+    try {
+      final data = await _putAuthorizedJson(
+        Uri.parse('$_baseUrl/api/v1/medical-profile'),
+        body: _medicalProfilePayload(profile),
+        fallback: 'No se pudo guardar el perfil medico',
+      );
+      final saved = MedicalProfile.fromBackendJson(data);
+      await _localStore.saveMedicalProfile(saved);
+      return saved;
+    } catch (_) {
+      return localPending;
+    }
   }
 
   @override
@@ -654,18 +686,72 @@ class ApiService implements UleamMedApi {
   }
 
   @override
-  Future<List<HealthEntry>> listHealthEntries() {
-    return _localStore.readHealthEntries();
+  Future<List<HealthEntry>> listHealthEntries() async {
+    try {
+      final data = await _getAuthorizedJson(
+        Uri.parse('$_baseUrl/api/v1/health-entries'),
+        fallback: 'No se pudieron cargar las condiciones',
+      );
+      final remote = _decodeList(data, HealthEntry.fromBackendJson);
+      final local = await _localStore.readHealthEntries();
+      final pending = local.where(
+        (item) =>
+            item.syncStatus == SyncStatus.pending &&
+            !_isPersistedBackendId(item.id),
+      );
+      final merged = <String, HealthEntry>{
+        for (final item in remote) item.id: item,
+        for (final item in pending) item.id: item,
+      }.values.toList();
+      await _localStore.saveHealthEntries(merged);
+      return merged;
+    } catch (_) {
+      return _localStore.readHealthEntries();
+    }
   }
 
   @override
-  Future<HealthEntry> saveHealthEntry(HealthEntry entry) {
-    return _localStore.upsertHealthEntry(entry);
+  Future<HealthEntry> saveHealthEntry(HealthEntry entry) async {
+    final localPending = await _localStore.upsertHealthEntry(
+      entry.copyWith(syncStatus: SyncStatus.pending),
+    );
+    final isBackendId = _isPersistedBackendId(entry.id);
+    final uri = isBackendId
+        ? Uri.parse('$_baseUrl/api/v1/health-entries/${entry.id}')
+        : Uri.parse('$_baseUrl/api/v1/health-entries');
+    final body = _healthEntryPayload(entry);
+    try {
+      final data = isBackendId
+          ? await _patchAuthorizedJson(
+              uri,
+              body: body,
+              fallback: 'No se pudo actualizar el registro',
+            )
+          : await _postAuthorizedJson(
+              uri,
+              body: body,
+              fallback: 'No se pudo crear el registro',
+            );
+      final saved = HealthEntry.fromBackendJson(data);
+      if (!isBackendId) {
+        await _localStore.deleteHealthEntry(entry.id);
+      }
+      await _localStore.upsertHealthEntry(saved);
+      return saved;
+    } catch (_) {
+      return localPending;
+    }
   }
 
   @override
-  Future<void> deleteHealthEntry(String entryId) {
-    return _localStore.deleteHealthEntry(entryId);
+  Future<void> deleteHealthEntry(String entryId) async {
+    if (_isPersistedBackendId(entryId)) {
+      await _deleteAuthorized(
+        Uri.parse('$_baseUrl/api/v1/health-entries/$entryId'),
+        fallback: 'No se pudo eliminar el registro',
+      );
+    }
+    await _localStore.deleteHealthEntry(entryId);
   }
 
   @override
@@ -970,6 +1056,76 @@ class ApiService implements UleamMedApi {
     );
   }
 
+  @override
+  Future<List<HealthEntry>> listCaregiverPatientHealthEntries(
+    int patientId,
+  ) async {
+    final data = await _getAuthorizedJson(
+      Uri.parse(
+        '$_baseUrl/api/v1/caregiving/patients/$patientId/health-entries',
+      ),
+      fallback: 'No se pudieron cargar las condiciones',
+    );
+    return _decodeList(data, HealthEntry.fromBackendJson);
+  }
+
+  @override
+  Future<HealthEntry> saveCaregiverPatientHealthEntry(
+    int patientId,
+    HealthEntry entry,
+  ) async {
+    final isBackendId = _isPersistedBackendId(entry.id);
+    final uri = isBackendId
+        ? Uri.parse(
+            '$_baseUrl/api/v1/caregiving/patients/$patientId/health-entries/${entry.id}',
+          )
+        : Uri.parse(
+            '$_baseUrl/api/v1/caregiving/patients/$patientId/health-entries',
+          );
+    final body = _healthEntryPayload(entry);
+    final data = isBackendId
+        ? await _patchAuthorizedJson(
+            uri,
+            body: body,
+            fallback: 'No se pudo actualizar el registro',
+          )
+        : await _postAuthorizedJson(
+            uri,
+            body: body,
+            fallback: 'No se pudo crear el registro',
+          );
+    return HealthEntry.fromBackendJson(data);
+  }
+
+  @override
+  Future<void> deleteCaregiverPatientHealthEntry(
+    int patientId,
+    String entryId,
+  ) async {
+    if (!_isPersistedBackendId(entryId)) {
+      return;
+    }
+    await _deleteAuthorized(
+      Uri.parse(
+        '$_baseUrl/api/v1/caregiving/patients/$patientId/health-entries/$entryId',
+      ),
+      fallback: 'No se pudo eliminar el registro',
+    );
+  }
+
+  @override
+  Future<MedicalProfile> loadCaregiverPatientMedicalProfile(
+    int patientId,
+  ) async {
+    final data = await _getAuthorizedJson(
+      Uri.parse(
+        '$_baseUrl/api/v1/caregiving/patients/$patientId/medical-profile',
+      ),
+      fallback: 'No se pudo cargar el perfil medico',
+    );
+    return MedicalProfile.fromBackendJson(data);
+  }
+
   Future<MedicationItem> _syncCaregiverPatientMedicationPhoto({
     required int patientId,
     required MedicationItem saved,
@@ -1250,6 +1406,30 @@ class ApiService implements UleamMedApi {
       'completed': appointment.completed,
       'reminder': appointment.reminder.name,
       'scheduledAt': scheduled.toUtc().toIso8601String(),
+    };
+  }
+
+  Map<String, dynamic> _healthEntryPayload(HealthEntry entry) {
+    return {
+      'kind': entry.kind.name,
+      'name': entry.name,
+      'severity': entry.severity.name,
+      'detail': entry.detail,
+      'date': entry.date,
+      'active': entry.active,
+    };
+  }
+
+  Map<String, dynamic> _medicalProfilePayload(MedicalProfile profile) {
+    return {
+      'birthDate': profile.birthDate,
+      'bloodType': profile.bloodType,
+      'conditions': profile.conditions,
+      'allergies': profile.allergies,
+      'importantNotes': profile.importantNotes,
+      'emergencyContactName': profile.emergencyContactName,
+      'emergencyContactPhone': profile.emergencyContactPhone,
+      'shareWithCaregivers': profile.shareWithCaregivers,
     };
   }
 
@@ -1625,6 +1805,21 @@ class ApiService implements UleamMedApi {
   }) {
     return _authorizedJson(
       request: (token) => _client.patch(
+        uri,
+        headers: _authorizedHeaders(token),
+        body: jsonEncode(body),
+      ),
+      fallback: fallback,
+    );
+  }
+
+  Future<Map<String, dynamic>> _putAuthorizedJson(
+    Uri uri, {
+    required Object body,
+    required String fallback,
+  }) {
+    return _authorizedJson(
+      request: (token) => _client.put(
         uri,
         headers: _authorizedHeaders(token),
         body: jsonEncode(body),

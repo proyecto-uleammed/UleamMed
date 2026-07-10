@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../services/api_service.dart';
 import '../../theme/app_theme.dart';
 import '../appointments_screen.dart';
+import '../conditions_screen.dart';
 import 'caregiver_patient_medications_screen.dart';
 
 class CaregiverPatientHubScreen extends StatelessWidget {
@@ -60,6 +61,25 @@ class CaregiverPatientHubScreen extends StatelessWidget {
                     api: api,
                     caregiverPatientId: patient.id,
                     title: 'Consultas de ${patient.fullName}',
+                  ),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 12),
+          _PatientModuleCard(
+            icon: Icons.monitor_heart,
+            title: 'Condiciones y alergias',
+            subtitle: 'Enfermedades, alergias y perfil medico compartido',
+            color: const Color(0xFF1565C0),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (context) => ConditionsScreen(
+                    api: api,
+                    caregiverPatientId: patient.id,
+                    title: 'Salud de ${patient.fullName}',
                   ),
                 ),
               );

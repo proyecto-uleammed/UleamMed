@@ -56,6 +56,20 @@ class MedicalProfile {
     );
   }
 
+  factory MedicalProfile.fromBackendJson(Map<String, dynamic> json) {
+    return MedicalProfile(
+      birthDate: json['birthDate']?.toString() ?? '',
+      bloodType: json['bloodType']?.toString() ?? '',
+      conditions: json['conditions']?.toString() ?? '',
+      allergies: json['allergies']?.toString() ?? '',
+      importantNotes: json['importantNotes']?.toString() ?? '',
+      emergencyContactName: json['emergencyContactName']?.toString() ?? '',
+      emergencyContactPhone: json['emergencyContactPhone']?.toString() ?? '',
+      shareWithCaregivers: json['shareWithCaregivers'] == true,
+      syncStatus: SyncStatus.synced,
+    );
+  }
+
   final String birthDate;
   final String bloodType;
   final String conditions;
@@ -658,6 +672,19 @@ class HealthEntry {
       date: json['date']?.toString() ?? '',
       active: json['active'] != false,
       syncStatus: SyncStatus.fromJson(json['syncStatus']),
+    );
+  }
+
+  factory HealthEntry.fromBackendJson(Map<String, dynamic> json) {
+    return HealthEntry(
+      id: json['id'].toString(),
+      kind: HealthEntryKind.fromJson(json['kind']),
+      name: json['name'].toString(),
+      severity: SeverityLevel.fromJson(json['severity']),
+      detail: json['detail']?.toString() ?? '',
+      date: json['date']?.toString() ?? '',
+      active: json['active'] != false,
+      syncStatus: SyncStatus.synced,
     );
   }
 
