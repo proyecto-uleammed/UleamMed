@@ -834,6 +834,10 @@ class BackendIntegratedFlowTest(unittest.TestCase):
         )
         self.assertEqual(patient_shares_profile.status_code, 200)
         self.assertTrue(patient_shares_profile.json()["shareWithCaregivers"])
+        self.assertEqual(
+            patient_shares_profile.json()["emergencyContactPhone"],
+            "+593991234567",
+        )
 
         caregiver_health_entries = self.client.get(
             f"/api/v1/caregiving/patients/{patient_id}/health-entries",
@@ -848,6 +852,10 @@ class BackendIntegratedFlowTest(unittest.TestCase):
         )
         self.assertEqual(caregiver_profile.status_code, 200)
         self.assertEqual(caregiver_profile.json()["bloodType"], "O+")
+        self.assertEqual(
+            caregiver_profile.json()["emergencyContactPhone"],
+            "+593991234567",
+        )
 
         caregiver_creates_entry = self.client.post(
             f"/api/v1/caregiving/patients/{patient_id}/health-entries",
@@ -889,6 +897,7 @@ class BackendIntegratedFlowTest(unittest.TestCase):
             },
         )
         self.assertEqual(patient_creates_contact.status_code, 201)
+        self.assertEqual(patient_creates_contact.json()["phone"], "+593991234567")
 
         caregiver_contacts = self.client.get(
             f"/api/v1/caregiving/patients/{patient_id}/emergency-contacts",
@@ -896,6 +905,10 @@ class BackendIntegratedFlowTest(unittest.TestCase):
         )
         self.assertEqual(caregiver_contacts.status_code, 200)
         self.assertEqual(len(caregiver_contacts.json()["items"]), 1)
+        self.assertEqual(
+            caregiver_contacts.json()["items"][0]["phone"],
+            "+593991234567",
+        )
 
         caregiver_schedule_update = self.client.patch(
             f"/api/v1/caregiving/patients/{patient_id}/medications/{patient_medication_id}",

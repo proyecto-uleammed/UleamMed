@@ -113,10 +113,6 @@ class _AppointmentsScreenState extends State<AppointmentsScreen>
     return _api.deleteAppointment(appointmentId);
   }
 
-  void _reload() {
-    unawaited(_refresh());
-  }
-
   Future<void> _refresh() async {
     setState(() {
       _appointments = _loadAppointments();

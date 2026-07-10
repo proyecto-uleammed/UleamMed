@@ -8,12 +8,16 @@ Future<void> confirmAndCallPhone(
   BuildContext context, {
   required String rawPhone,
   String? contactName,
+  bool allowShortCode = false,
 }) async {
-  final phone = rawPhone.trim();
-  if (phone.isEmpty) {
+  final phone = normalizeEcuadorPhoneForDialer(
+    rawPhone,
+    allowShortCode: allowShortCode,
+  );
+  if (phone == null) {
     showAppSnackBar(
       context,
-      'Este contacto no tiene numero. Agrega uno para poder llamar.',
+      'Este contacto no tiene un numero valido.',
       isError: true,
     );
     return;
@@ -26,7 +30,7 @@ Future<void> confirmAndCallPhone(
     context: context,
     builder: (context) => AlertDialog(
       title: const Text('Llamar ahora'),
-      content: Text('Se iniciara una llamada a $label ($phone). Deseas continuar?'),
+      content: Text('Se abrira el marcador para llamar a $label ($phone).'),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context, false),
@@ -46,15 +50,46 @@ Future<void> confirmAndCallPhone(
   }
 
   try {
-    final digits = phone.replaceAll(RegExp(r'\D'), '');
-    final uri = Uri(scheme: 'tel', path: digits.isEmpty ? phone : digits);
-    final launched = await launchUrl(uri);
+    final uri = Uri(scheme: 'tel', path: phone);
+    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!launched && context.mounted) {
-      showAppSnackBar(context, 'No se pudo iniciar la llamada', isError: true);
+      showAppSnackBar(context, 'No se pudo abrir el marcador', isError: true);
     }
   } catch (_) {
     if (context.mounted) {
-      showAppSnackBar(context, 'No se pudo iniciar la llamada', isError: true);
+      showAppSnackBar(context, 'No se pudo abrir el marcador', isError: true);
     }
   }
+}
+
+String? normalizeEcuadorPhoneForDialer(
+  String rawPhone, {
+  bool allowShortCode = false,
+}) {
+  final trimmed = rawPhone.trim();
+  if (trimmed.isEmpty) {
+    return null;
+  }
+
+  final digits = trimmed.replaceAll(RegExp(r'\D'), '');
+  if (allowShortCode && digits.length >= 3 && digits.length <= 4) {
+    return digits;
+  }
+  if (digits.isEmpty) {
+    return null;
+  }
+
+  String national;
+  if (trimmed.startsWith('+593') || digits.startsWith('593')) {
+    national = digits.substring(3);
+  } else if (digits.startsWith('0')) {
+    national = digits.substring(1);
+  } else {
+    national = digits;
+  }
+
+  if (national.length < 8 || national.length > 9) {
+    return null;
+  }
+  return '+593$national';
 }
