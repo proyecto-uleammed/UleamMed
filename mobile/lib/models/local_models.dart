@@ -462,6 +462,24 @@ class Appointment {
     );
   }
 
+  factory Appointment.fromBackendJson(Map<String, dynamic> json) {
+    final scheduled = _parseDate(json['scheduledAt'] ?? json['scheduled_at']);
+    final local = scheduled?.toLocal();
+    return Appointment(
+      id: json['id'].toString(),
+      doctor: json['doctor'].toString(),
+      specialty: json['specialty'].toString(),
+      date: local != null ? _formatAppointmentDate(local) : '',
+      time: local != null ? _formatAppointmentTime(local) : '',
+      location: json['location']?.toString() ?? '',
+      notes: json['notes']?.toString() ?? '',
+      completed: json['completed'] == true,
+      reminder: AppointmentReminder.fromJson(json['reminder']),
+      scheduledAt: local,
+      syncStatus: SyncStatus.synced,
+    );
+  }
+
   final String id;
   final String doctor;
   final String specialty;
@@ -723,6 +741,32 @@ class SyncSummary {
   final int processed;
   final int pending;
   final String message;
+}
+
+const _appointmentMonths = [
+  'Ene',
+  'Feb',
+  'Mar',
+  'Abr',
+  'May',
+  'Jun',
+  'Jul',
+  'Ago',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dic',
+];
+
+String _formatAppointmentDate(DateTime date) {
+  final day = date.day.toString().padLeft(2, '0');
+  return '$day ${_appointmentMonths[date.month - 1]} ${date.year}';
+}
+
+String _formatAppointmentTime(DateTime date) {
+  final hour = date.hour.toString().padLeft(2, '0');
+  final minute = date.minute.toString().padLeft(2, '0');
+  return '$hour:$minute';
 }
 
 DateTime? _parseDate(Object? value) {

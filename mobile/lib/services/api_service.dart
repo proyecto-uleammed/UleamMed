@@ -570,18 +570,64 @@ class ApiService implements UleamMedApi {
   }
 
   @override
-  Future<List<Appointment>> listAppointments() {
-    return _localStore.readAppointments();
+  Future<List<Appointment>> listAppointments() async {
+    final local = await _localStore.readAppointments();
+    try {
+      final data = await _getAuthorizedJson(
+        Uri.parse('$_baseUrl/api/v1/appointments'),
+        fallback: 'No se pudieron cargar las consultas',
+      );
+      final remote = _decodeList(data, Appointment.fromBackendJson);
+      final merged = _mergeAppointments(local, remote);
+      await _localStore.saveAppointments(merged);
+      return merged;
+    } catch (_) {
+      return local;
+    }
   }
 
   @override
-  Future<Appointment> saveAppointment(Appointment appointment) {
-    return _localStore.upsertAppointment(appointment);
+  Future<Appointment> saveAppointment(Appointment appointment) async {
+    final localPending = await _localStore.upsertAppointment(
+      appointment.copyWith(syncStatus: SyncStatus.pending),
+    );
+    final isBackendId = _isPersistedBackendId(appointment.id);
+    final uri = isBackendId
+        ? Uri.parse('$_baseUrl/api/v1/appointments/${appointment.id}')
+        : Uri.parse('$_baseUrl/api/v1/appointments');
+    final body = _appointmentPayload(appointment);
+    try {
+      final data = isBackendId
+          ? await _patchAuthorizedJson(
+              uri,
+              body: body,
+              fallback: 'No se pudo actualizar la consulta',
+            )
+          : await _postAuthorizedJson(
+              uri,
+              body: body,
+              fallback: 'No se pudo crear la consulta',
+            );
+      final saved = Appointment.fromBackendJson(data);
+      if (!isBackendId) {
+        await _localStore.deleteAppointment(appointment.id);
+      }
+      await _localStore.upsertAppointment(saved);
+      return saved;
+    } catch (_) {
+      return localPending;
+    }
   }
 
   @override
-  Future<void> deleteAppointment(String appointmentId) {
-    return _localStore.deleteAppointment(appointmentId);
+  Future<void> deleteAppointment(String appointmentId) async {
+    if (_isPersistedBackendId(appointmentId)) {
+      await _deleteAuthorized(
+        Uri.parse('$_baseUrl/api/v1/appointments/$appointmentId'),
+        fallback: 'No se pudo eliminar la consulta',
+      );
+    }
+    await _localStore.deleteAppointment(appointmentId);
   }
 
   @override
@@ -851,26 +897,57 @@ class ApiService implements UleamMedApi {
   }
 
   @override
-  Future<List<Appointment>> listCaregiverPatientAppointments(int patientId) {
-    return _localStore.readCaregiverPatientAppointments(patientId);
+  Future<List<Appointment>> listCaregiverPatientAppointments(int patientId) async {
+    final data = await _getAuthorizedJson(
+      Uri.parse(
+        '$_baseUrl/api/v1/caregiving/patients/$patientId/appointments',
+      ),
+      fallback: 'No se pudieron cargar las consultas',
+    );
+    return _decodeList(data, Appointment.fromBackendJson);
   }
 
   @override
   Future<Appointment> saveCaregiverPatientAppointment(
     int patientId,
     Appointment appointment,
-  ) {
-    return _localStore.upsertCaregiverPatientAppointment(patientId, appointment);
+  ) async {
+    final isBackendId = _isPersistedBackendId(appointment.id);
+    final uri = isBackendId
+        ? Uri.parse(
+            '$_baseUrl/api/v1/caregiving/patients/$patientId/appointments/${appointment.id}',
+          )
+        : Uri.parse(
+            '$_baseUrl/api/v1/caregiving/patients/$patientId/appointments',
+          );
+    final body = _appointmentPayload(appointment);
+    final data = isBackendId
+        ? await _patchAuthorizedJson(
+            uri,
+            body: body,
+            fallback: 'No se pudo actualizar la consulta',
+          )
+        : await _postAuthorizedJson(
+            uri,
+            body: body,
+            fallback: 'No se pudo crear la consulta',
+          );
+    return Appointment.fromBackendJson(data);
   }
 
   @override
   Future<void> deleteCaregiverPatientAppointment(
     int patientId,
     String appointmentId,
-  ) {
-    return _localStore.deleteCaregiverPatientAppointment(
-      patientId,
-      appointmentId,
+  ) async {
+    if (!_isPersistedBackendId(appointmentId)) {
+      return;
+    }
+    await _deleteAuthorized(
+      Uri.parse(
+        '$_baseUrl/api/v1/caregiving/patients/$patientId/appointments/$appointmentId',
+      ),
+      fallback: 'No se pudo eliminar la consulta',
     );
   }
 
@@ -1124,6 +1201,51 @@ class ApiService implements UleamMedApi {
     }
     return byId.values.toList()
       ..sort((a, b) => b.recordedAt.compareTo(a.recordedAt));
+  }
+
+  List<Appointment> _mergeAppointments(
+    List<Appointment> local,
+    List<Appointment> remote,
+  ) {
+    final byId = <String, Appointment>{
+      for (final item in remote) item.id: item,
+    };
+    for (final item in local) {
+      if (item.syncStatus == SyncStatus.pending || !byId.containsKey(item.id)) {
+        byId[item.id] = item;
+      }
+    }
+    return byId.values.toList()
+      ..sort((a, b) {
+        final aDate = a.scheduledAt;
+        final bDate = b.scheduledAt;
+        if (aDate == null && bDate == null) {
+          return 0;
+        }
+        if (aDate == null) {
+          return 1;
+        }
+        if (bDate == null) {
+          return -1;
+        }
+        return aDate.compareTo(bDate);
+      });
+  }
+
+  Map<String, dynamic> _appointmentPayload(Appointment appointment) {
+    final scheduled = appointment.scheduledAt;
+    if (scheduled == null) {
+      throw const ApiException('La consulta debe tener fecha y hora');
+    }
+    return {
+      'doctor': appointment.doctor,
+      'specialty': appointment.specialty,
+      'location': appointment.location,
+      'notes': appointment.notes,
+      'completed': appointment.completed,
+      'reminder': appointment.reminder.name,
+      'scheduledAt': scheduled.toUtc().toIso8601String(),
+    };
   }
 
   Future<List<MedicationItem>> _cacheMedicationPhotos(

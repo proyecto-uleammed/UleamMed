@@ -503,32 +503,48 @@ void main() {
       );
     });
 
-    test('persists appointments locally for patient and caregiver scope', () async {
+    test('syncs appointments through backend for patient and caregiver', () async {
       final localStore = LocalStore(jsonStore: _MemoryJsonStore());
-      localStore.scopeToUser('caregiver-1');
+      await localStore.saveActiveUserId('1');
       final api = ApiService(
         baseUrl: 'http://localhost:8000',
-        tokenStore: _MemoryTokenStore(),
+        tokenStore: _MemoryTokenStore(
+          const AuthTokens(
+            accessToken: 'access-ok',
+            refreshToken: 'refresh-ok',
+          ),
+        ),
         localStore: localStore,
         client: MockClient((request) async {
-          return _jsonResponse({'detail': 'No autorizado'}, statusCode: 401);
+          if (request.url.path == '/api/v1/appointments' &&
+              request.method == 'GET') {
+            return _jsonResponse({
+              'items': [
+                {
+                  'id': '12',
+                  'doctor': 'Dr. Perez',
+                  'specialty': 'Cardiologia',
+                  'location': 'Hospital',
+                  'notes': '',
+                  'completed': false,
+                  'reminder': 'none',
+                  'scheduledAt': '2026-12-15T15:00:00.000Z',
+                },
+              ],
+            });
+          }
+          if (request.url.path == '/api/v1/caregiving/patients/7/appointments' &&
+              request.method == 'GET') {
+            return _jsonResponse({'items': []});
+          }
+          return _jsonResponse({'detail': 'No permitido'}, statusCode: 405);
         }),
       );
-      final appointment = Appointment(
-        id: 'cita-1',
-        doctor: 'Dr. Perez',
-        specialty: 'Cardiologia',
-        date: '10 Jul 2026',
-        time: '09:00',
-        location: 'Hospital',
-        scheduledAt: DateTime(2026, 7, 10, 9),
-      );
 
-      await api.saveCaregiverPatientAppointment(7, appointment);
-      final saved = await api.listCaregiverPatientAppointments(7);
+      final appointments = await api.listAppointments();
 
-      expect(saved, hasLength(1));
-      expect(saved.first.doctor, 'Dr. Perez');
+      expect(appointments, hasLength(1));
+      expect(appointments.first.doctor, 'Dr. Perez');
     });
   });
 }
