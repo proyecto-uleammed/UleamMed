@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../services/api_service.dart';
 import '../../utils/form_inputs.dart';
 import '../../widgets/app_states.dart';
-import 'caregiver_patient_medications_screen.dart';
+import 'caregiver_patient_hub_screen.dart';
 
 class CaregiverPatientsScreen extends StatefulWidget {
   const CaregiverPatientsScreen({super.key, required this.api});
@@ -126,12 +126,12 @@ class _CaregiverPatientsScreenState extends State<CaregiverPatientsScreen> {
                         ),
                         leading: const CircleAvatar(child: Icon(Icons.person)),
                         title: Text(patient.fullName),
-                        subtitle: const Text('Gestionar medicamentos'),
+                        subtitle: const Text('Medicamentos y consultas'),
                         trailing: const Icon(Icons.chevron_right),
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => CaregiverPatientMedicationsScreen(
+                            builder: (_) => CaregiverPatientHubScreen(
                               api: widget.api,
                               patient: patient,
                             ),

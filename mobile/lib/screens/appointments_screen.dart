@@ -34,9 +34,16 @@ String _formatTime(TimeOfDay time) {
 /// Consultas medicas con registro, detalle y recordatorio
 /// (PB-037/038/040/039).
 class AppointmentsScreen extends StatefulWidget {
-  const AppointmentsScreen({super.key, this.api});
+  const AppointmentsScreen({
+    super.key,
+    this.api,
+    this.caregiverPatientId,
+    this.title,
+  });
 
   final UleamMedApi? api;
+  final int? caregiverPatientId;
+  final String? title;
 
   @override
   State<AppointmentsScreen> createState() => _AppointmentsScreenState();
@@ -44,11 +51,35 @@ class AppointmentsScreen extends StatefulWidget {
 
 class _AppointmentsScreenState extends State<AppointmentsScreen> {
   late final UleamMedApi _api = widget.api ?? ApiService();
-  late Future<List<Appointment>> _appointments = _api.listAppointments();
+  late Future<List<Appointment>> _appointments = _loadAppointments();
+
+  Future<List<Appointment>> _loadAppointments() {
+    final patientId = widget.caregiverPatientId;
+    if (patientId != null) {
+      return _api.listCaregiverPatientAppointments(patientId);
+    }
+    return _api.listAppointments();
+  }
+
+  Future<Appointment> _saveAppointment(Appointment appointment) {
+    final patientId = widget.caregiverPatientId;
+    if (patientId != null) {
+      return _api.saveCaregiverPatientAppointment(patientId, appointment);
+    }
+    return _api.saveAppointment(appointment);
+  }
+
+  Future<void> _deleteAppointment(String appointmentId) {
+    final patientId = widget.caregiverPatientId;
+    if (patientId != null) {
+      return _api.deleteCaregiverPatientAppointment(patientId, appointmentId);
+    }
+    return _api.deleteAppointment(appointmentId);
+  }
 
   void _reload() {
     setState(() {
-      _appointments = _api.listAppointments();
+      _appointments = _loadAppointments();
     });
   }
 
@@ -59,7 +90,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
       useSafeArea: true,
       builder: (context) => _AppointmentForm(
         appointment: appointment,
-        onSave: (item) => _api.saveAppointment(item),
+        onSave: _saveAppointment,
       ),
     );
     if (saved == true && mounted) {
@@ -80,7 +111,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
           await _openForm(appointment);
         },
         onToggleCompleted: () async {
-          await _api.saveAppointment(
+          await _saveAppointment(
             appointment.copyWith(completed: !appointment.completed),
           );
           if (context.mounted) {
@@ -88,7 +119,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
           }
         },
         onDelete: () async {
-          await _api.deleteAppointment(appointment.id);
+          await _deleteAppointment(appointment.id);
           if (context.mounted) {
             Navigator.pop(context, true);
           }
@@ -106,8 +137,11 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
       length: 2,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Consultas'),
+          title: Text(widget.title ?? 'Consultas'),
           bottom: const TabBar(
+            labelColor: Colors.white,
+            unselectedLabelColor: Colors.white70,
+            indicatorColor: Colors.white,
             tabs: [
               Tab(text: 'Proximas'),
               Tab(text: 'Pasadas'),
