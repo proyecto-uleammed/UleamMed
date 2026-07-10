@@ -621,6 +621,25 @@ class ApiService implements UleamMedApi {
     MedicationItem medication,
   ) async {
     final isBackendId = _isPersistedBackendId(medication.id);
+    MedicationItem? existing;
+    if (isBackendId) {
+      try {
+        final data = await _getAuthorizedJson(
+          Uri.parse(
+            '$_baseUrl/api/v1/caregiving/patients/$patientId/medications',
+          ),
+          fallback: 'No se pudieron cargar los medicamentos',
+        );
+        for (final item in _decodeList(data, MedicationItem.fromJson)) {
+          if (item.id == medication.id) {
+            existing = item;
+            break;
+          }
+        }
+      } catch (_) {
+        // Si falla la lectura previa, igual intentamos guardar.
+      }
+    }
     final uri = isBackendId
         ? Uri.parse(
             '$_baseUrl/api/v1/caregiving/patients/$patientId/medications/${medication.id}',
@@ -656,23 +675,12 @@ class ApiService implements UleamMedApi {
       var saved = MedicationItem.fromJson(
         data,
       ).copyWith(syncStatus: SyncStatus.synced, photoPath: medication.photoPath);
-      if (medication.photoPath.isNotEmpty &&
-          File(medication.photoPath).existsSync()) {
-        try {
-          final photoData = await _uploadCaregiverPatientMedicationPhoto(
-            patientId,
-            saved.id,
-            medication.photoPath,
-          );
-          saved = MedicationItem.fromJson(photoData).copyWith(
-            syncStatus: SyncStatus.synced,
-            photoPath: medication.photoPath,
-            photoAvailable: true,
-          );
-        } catch (_) {
-          // El medicamento se guardo; la foto puede reintentarse luego.
-        }
-      }
+      saved = await _syncCaregiverPatientMedicationPhoto(
+        patientId: patientId,
+        saved: saved,
+        medication: medication,
+        existing: existing,
+      );
       return saved;
     } on ApiException catch (error) {
       if (error.statusCode == 405 || error.statusCode == 404) {
@@ -700,6 +708,41 @@ class ApiService implements UleamMedApi {
       ),
       fallback: 'No se pudo eliminar el medicamento',
     );
+  }
+
+  Future<MedicationItem> _syncCaregiverPatientMedicationPhoto({
+    required int patientId,
+    required MedicationItem saved,
+    required MedicationItem medication,
+    MedicationItem? existing,
+  }) async {
+    try {
+      final photoChanged = existing?.photoPath != medication.photoPath;
+      final needsPhotoUpload =
+          medication.photoPath.isNotEmpty &&
+          File(medication.photoPath).existsSync() &&
+          (photoChanged || !saved.photoAvailable);
+      if (!needsPhotoUpload) {
+        return saved;
+      }
+      final photoData = await _uploadCaregiverPatientMedicationPhoto(
+        patientId,
+        saved.id,
+        medication.photoPath,
+      );
+      final cachedFile = await _writeMedicationPhotoFile(
+        scope: 'caregiver/$patientId',
+        medicationId: saved.id,
+        bytes: await File(medication.photoPath).readAsBytes(),
+      );
+      return MedicationItem.fromJson(photoData).copyWith(
+        syncStatus: SyncStatus.synced,
+        photoPath: cachedFile.path,
+        photoAvailable: true,
+      );
+    } catch (_) {
+      return saved;
+    }
   }
 
   Future<Map<String, dynamic>> _uploadCaregiverPatientMedicationPhoto(
@@ -850,12 +893,8 @@ class ApiService implements UleamMedApi {
       final backend = byId[local.id];
       if (backend != null) {
         byId[local.id] = backend.copyWith(
-          taken: local.taken || backend.taken,
-          frequency: local.frequency,
-          duration: local.duration,
-          instructions: local.instructions,
-          isImportant: local.isImportant,
-          photoPath: local.photoPath,
+          taken: backend.taken,
+          photoPath: '',
         );
       }
     }
@@ -867,9 +906,7 @@ class ApiService implements UleamMedApi {
   ) async {
     final result = <MedicationItem>[];
     for (final medication in medications) {
-      if (!medication.photoAvailable ||
-          (medication.photoPath.isNotEmpty &&
-              File(medication.photoPath).existsSync())) {
+      if (!medication.photoAvailable) {
         result.add(medication);
         continue;
       }
@@ -896,9 +933,7 @@ class ApiService implements UleamMedApi {
   ) async {
     final result = <MedicationItem>[];
     for (final medication in medications) {
-      if (!medication.photoAvailable ||
-          (medication.photoPath.isNotEmpty &&
-              File(medication.photoPath).existsSync())) {
+      if (!medication.photoAvailable) {
         result.add(medication);
         continue;
       }
