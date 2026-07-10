@@ -574,8 +574,25 @@ class ApiService implements UleamMedApi {
   }
 
   @override
-  Future<List<DoseConfirmation>> listDoseConfirmations() {
-    return _localStore.readDoseConfirmations();
+  Future<List<DoseConfirmation>> listDoseConfirmations() async {
+    final local = await _localStore.readDoseConfirmations();
+    try {
+      final data = await _getAuthorizedList(
+        Uri.parse('$_baseUrl/api/v1/medications/dose-events'),
+        fallback: 'No se pudo cargar el historial',
+      );
+      final remote = data
+          .whereType<Map>()
+          .map(
+            (json) => DoseConfirmation.fromBackendEvent(
+              Map<String, dynamic>.from(json),
+            ),
+          )
+          .toList();
+      return _mergeDoseConfirmations(local, remote);
+    } catch (_) {
+      return local;
+    }
   }
 
   @override
@@ -1117,6 +1134,22 @@ class ApiService implements UleamMedApi {
       }
     }
     return byId.values.toList()..sort((a, b) => a.time.compareTo(b.time));
+  }
+
+  List<DoseConfirmation> _mergeDoseConfirmations(
+    List<DoseConfirmation> local,
+    List<DoseConfirmation> remote,
+  ) {
+    final byId = <String, DoseConfirmation>{
+      for (final item in remote) item.id: item,
+    };
+    for (final item in local) {
+      if (item.syncStatus == SyncStatus.pending || !byId.containsKey(item.id)) {
+        byId[item.id] = item;
+      }
+    }
+    return byId.values.toList()
+      ..sort((a, b) => b.recordedAt.compareTo(a.recordedAt));
   }
 
   Future<List<MedicationItem>> _cacheMedicationPhotos(
