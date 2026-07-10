@@ -344,10 +344,9 @@ def update_linked_patient_medication(
     """Actualiza un medicamento del paciente vinculado activo."""
     if not _active_link_exists(db, caregiver_id, patient_id):
         return None
-    try:
-        return update_user_medication(db, patient_id, medication_id, payload)
-    except ValueError:
+    if get_user_medication_model(db, patient_id, medication_id) is None:
         return None
+    return update_user_medication(db, patient_id, medication_id, payload)
 
 
 def delete_linked_patient_medication(
