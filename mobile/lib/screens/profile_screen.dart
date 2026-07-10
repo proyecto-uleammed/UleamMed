@@ -243,7 +243,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Padding(
                     padding: const EdgeInsets.only(bottom: 14),
                     child: DropdownButtonFormField<String>(
-                      value: _bloodType,
+                      key: ValueKey(_bloodType),
+                      initialValue: _bloodType,
                       decoration: const InputDecoration(
                         labelText: 'Tipo de sangre',
                         prefixIcon: Icon(Icons.bloodtype),
