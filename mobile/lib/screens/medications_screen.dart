@@ -64,9 +64,14 @@ class _MedicationsScreenState extends State<MedicationsScreen> {
   }
 
   void _reload() {
+    unawaited(_refresh());
+  }
+
+  Future<void> _refresh() async {
     setState(() {
       _data = _loadData();
     });
+    await _data;
   }
 
   @override
@@ -280,9 +285,12 @@ class _MedicationsScreenState extends State<MedicationsScreen> {
               .where((medication) => medication.taken)
               .length;
 
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-            children: [
+          return RefreshIndicator(
+            onRefresh: _refresh,
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+              children: [
               _MedicationSummary(
                 totalCount: data.medications.length,
                 takenCount: takenCount,
@@ -307,6 +315,7 @@ class _MedicationsScreenState extends State<MedicationsScreen> {
               const SizedBox(height: 20),
               _ConfirmationHistory(confirmations: data.confirmations),
             ],
+            ),
           );
         },
       ),

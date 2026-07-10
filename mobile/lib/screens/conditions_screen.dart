@@ -26,6 +26,13 @@ class _ConditionsScreenState extends State<ConditionsScreen> {
     });
   }
 
+  Future<void> _refresh() async {
+    setState(() {
+      _entries = _api.listHealthEntries();
+    });
+    await _entries;
+  }
+
   Future<void> _openForm(HealthEntryKind kind, [HealthEntry? entry]) async {
     final saved = await showModalBottomSheet<bool>(
       context: context,
@@ -48,7 +55,10 @@ class _ConditionsScreenState extends State<ConditionsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Condiciones y alergias')),
+      appBar: AppBar(
+        title: const Text('Condiciones y alergias'),
+        actions: [ReloadIconButton(onPressed: _reload)],
+      ),
       body: FutureBuilder<List<HealthEntry>>(
         future: _entries,
         builder: (context, snapshot) {
@@ -70,9 +80,12 @@ class _ConditionsScreenState extends State<ConditionsScreen> {
               .where((e) => e.isSevereAllergy)
               .toList();
 
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-            children: [
+          return RefreshIndicator(
+            onRefresh: _refresh,
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+              children: [
               if (severeAllergies.isNotEmpty)
                 _WarningBanner(
                   message:
@@ -113,6 +126,7 @@ class _ConditionsScreenState extends State<ConditionsScreen> {
                   ),
                 ),
             ],
+            ),
           );
         },
       ),

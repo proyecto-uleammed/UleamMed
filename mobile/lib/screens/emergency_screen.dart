@@ -43,6 +43,13 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
     });
   }
 
+  Future<void> _refresh() async {
+    setState(() {
+      _data = _loadData();
+    });
+    await _data;
+  }
+
   Future<void> _call(String rawPhone) async {
     final phone = rawPhone.trim();
     if (phone.isEmpty) {
@@ -121,7 +128,10 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Emergencia')),
+      appBar: AppBar(
+        title: const Text('Emergencia'),
+        actions: [ReloadIconButton(onPressed: _reload)],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'fab-emergency',
         onPressed: () => _openContactForm(),
@@ -145,9 +155,12 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
 
           final data = snapshot.data!;
           final primary = data.primaryContact;
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-            children: [
+          return RefreshIndicator(
+            onRefresh: _refresh,
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+              children: [
               _EmergencyHeader(
                 primaryContact: primary,
                 onCall911: () => _call('911'),
@@ -184,6 +197,7 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
                   ),
                 ),
             ],
+            ),
           );
         },
       ),

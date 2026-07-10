@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../services/api_service.dart';
@@ -37,9 +39,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   void _reload() {
+    unawaited(_refresh());
+  }
+
+  Future<void> _refresh() async {
     setState(() {
       _confirmations = _loadConfirmations();
     });
+    await _confirmations;
   }
 
   void _clearFilters() {
@@ -77,12 +84,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
           final all = snapshot.data ?? const [];
           if (all.isEmpty) {
-            return const EmptyStateView(
-              icon: Icons.history,
-              title: 'Aun no hay registros',
-              message:
-                  'Cuando confirmes una toma como tomada, omitida o pospuesta '
-                  'aparecera aqui.',
+            return RefreshableScrollView(
+              onRefresh: _refresh,
+              child: const EmptyStateView(
+                icon: Icons.history,
+                title: 'Aun no hay registros',
+                message:
+                    'Cuando confirmes una toma como tomada, omitida o pospuesta '
+                    'aparecera aqui.',
+              ),
             );
           }
 
@@ -99,9 +109,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
             return statusOk && medicationOk;
           }).toList();
 
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-            children: [
+          return RefreshIndicator(
+            onRefresh: _refresh,
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+              children: [
               _WeeklyComplianceCard(confirmations: all),
               const SizedBox(height: 16),
               _Filters(
@@ -134,6 +147,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
               else
                 ..._buildGroupedByDate(context, filtered),
             ],
+            ),
           );
         },
       ),

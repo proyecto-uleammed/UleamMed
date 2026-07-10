@@ -153,3 +153,52 @@ void showAppSnackBar(
     ),
   );
 }
+
+/// Contenedor con pull-to-refresh que funciona aunque el contenido sea corto.
+class RefreshableScrollView extends StatelessWidget {
+  const RefreshableScrollView({
+    super.key,
+    required this.onRefresh,
+    required this.child,
+    this.padding,
+  });
+
+  final Future<void> Function() onRefresh;
+  final Widget child;
+  final EdgeInsetsGeometry? padding;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return RefreshIndicator(
+          onRefresh: onRefresh,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: padding,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: child,
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Boton estandar para recargar datos en la barra superior.
+class ReloadIconButton extends StatelessWidget {
+  const ReloadIconButton({super.key, required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: 'Recargar',
+      icon: const Icon(Icons.refresh),
+      onPressed: onPressed,
+    );
+  }
+}
