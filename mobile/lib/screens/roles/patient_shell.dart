@@ -80,6 +80,7 @@ class PatientShell extends StatelessWidget {
         AppointmentsScreen(api: api, shellTabIndex: 3),
         ProfileScreen(
           api: api,
+          shellTabIndex: 4,
           settings: settings,
           permissionService: permissionService,
           notificationScheduler: notificationScheduler,

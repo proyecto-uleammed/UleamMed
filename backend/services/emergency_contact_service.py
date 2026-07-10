@@ -2,6 +2,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from backend.models.emergency_contact import EmergencyContact
+from backend.models.user_medical_profile import UserMedicalProfile
 from backend.schemas.emergency_contact import (
     EmergencyContactCreate,
     EmergencyContactRead,
@@ -23,16 +24,23 @@ def create_user_emergency_contact(
     user_id: int,
     payload: EmergencyContactCreate,
 ) -> EmergencyContactRead:
+    existing = db.scalar(
+        select(EmergencyContact).where(
+            EmergencyContact.user_id == user_id,
+            EmergencyContact.is_active.is_(True),
+            EmergencyContact.phone == payload.phone,
+        )
+    )
     if payload.isPrimary:
         _clear_primary_flag(db, user_id)
-    contact = EmergencyContact(
-        user_id=user_id,
-        name=payload.name.strip(),
-        phone=payload.phone.strip(),
-        relationship=payload.relationship.strip(),
-        is_primary=payload.isPrimary,
-    )
-    db.add(contact)
+    contact = existing or EmergencyContact(user_id=user_id)
+    contact.name = payload.name.strip()
+    contact.phone = payload.phone.strip()
+    contact.relationship = payload.relationship.strip()
+    contact.is_primary = payload.isPrimary
+    contact.is_active = True
+    if existing is None:
+        db.add(contact)
     db.commit()
     db.refresh(contact)
     return _to_read(contact)
@@ -66,6 +74,7 @@ def delete_user_emergency_contact(db: Session, user_id: int, contact_id: int) ->
     contact = _get_user_contact(db, user_id, contact_id)
     if contact is None:
         return False
+    _clear_profile_contact_if_matches(db, user_id, contact)
     contact.is_active = False
     db.commit()
     return True
@@ -91,6 +100,23 @@ def _clear_primary_flag(db: Session, user_id: int) -> None:
         .where(EmergencyContact.user_id == user_id, EmergencyContact.is_active.is_(True))
         .values(is_primary=False)
     )
+
+
+def _clear_profile_contact_if_matches(
+    db: Session,
+    user_id: int,
+    contact: EmergencyContact,
+) -> None:
+    profile = db.scalar(
+        select(UserMedicalProfile).where(UserMedicalProfile.user_id == user_id)
+    )
+    if profile is None:
+        return
+    same_phone = profile.emergency_contact_phone.strip() == contact.phone.strip()
+    same_name = profile.emergency_contact_name.strip() == contact.name.strip()
+    if same_phone or (contact.relationship == "Perfil medico" and same_name):
+        profile.emergency_contact_name = ""
+        profile.emergency_contact_phone = ""
 
 
 def _to_read(contact: EmergencyContact) -> EmergencyContactRead:

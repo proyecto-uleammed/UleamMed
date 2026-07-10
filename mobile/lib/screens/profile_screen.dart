@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -9,18 +11,21 @@ import '../theme/app_theme.dart';
 import '../utils/form_inputs.dart';
 import '../utils/time_picker_utils.dart';
 import '../widgets/app_states.dart';
+import '../widgets/role_shell_scaffold.dart';
 import 'settings_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({
     super.key,
     required this.api,
+    this.shellTabIndex,
     this.settings,
     this.permissionService,
     this.notificationScheduler,
   });
 
   final UleamMedApi api;
+  final int? shellTabIndex;
   final AppSettingsController? settings;
   final PermissionService? permissionService;
   final NotificationScheduler? notificationScheduler;
@@ -45,6 +50,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _didHydrateForm = false;
   bool _shareWithCaregivers = false;
   String? _error;
+  int? _lastShellTabIndex;
 
   @override
   void dispose() {
@@ -70,6 +76,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _profileData = _loadProfileData();
     });
     await _profileData;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final shellTabIndex = widget.shellTabIndex;
+    if (shellTabIndex == null) {
+      return;
+    }
+    final activeIndex = roleShellActiveTabIndex(context);
+    if (activeIndex == shellTabIndex && _lastShellTabIndex != activeIndex) {
+      unawaited(_refreshProfile());
+    }
+    _lastShellTabIndex = activeIndex;
   }
 
   void _hydrateForm(_ProfileData data) {
@@ -216,180 +236,185 @@ class _ProfileScreenState extends State<ProfileScreen> {
             return RefreshIndicator(
               onRefresh: _refreshProfile,
               child: Form(
-              key: _formKey,
-              child: ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(20),
-                children: [
-                  _ProfileHeader(data: data),
-                  const SizedBox(height: 20),
-                  _SectionTitle(
-                    icon: Icons.person,
-                    title: 'Datos del paciente',
-                  ),
-                  const SizedBox(height: 12),
-                  _TextField(
-                    controller: _nameController,
-                    label: 'Nombre completo',
-                    icon: Icons.person,
-                    inputFormatters: FormInputs.personName,
-                    validator: (value) => FormInputs.personNameValidator(value),
-                  ),
-                  _TextField(
-                    initialValue: data.session.user.email,
-                    label: 'Correo electronico',
-                    icon: Icons.email,
-                    enabled: false,
-                  ),
-                  _TextField(
-                    controller: _birthDateController,
-                    label: 'Fecha de nacimiento',
-                    icon: Icons.cake,
-                    hint: 'DD/MM/AAAA',
-                    readOnly: true,
-                    onTap: _pickBirthDate,
-                    validator: FormInputs.birthDateValidator,
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 14),
-                    child: DropdownButtonFormField<String>(
-                      key: ValueKey(_bloodType),
-                      initialValue: _bloodType,
-                      decoration: const InputDecoration(
-                        labelText: 'Tipo de sangre',
-                        prefixIcon: Icon(Icons.bloodtype),
-                        border: OutlineInputBorder(),
-                      ),
-                      hint: const Text('Selecciona un tipo'),
-                      items: bloodTypeOptions
-                          .map(
-                            (type) => DropdownMenuItem(
-                              value: type,
-                              child: Text(type),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (value) {
-                        setState(() => _bloodType = value);
-                      },
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return null;
-                        }
-                        return FormInputs.bloodTypeValidator(value);
-                      },
+                key: _formKey,
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.all(20),
+                  children: [
+                    _ProfileHeader(data: data),
+                    const SizedBox(height: 20),
+                    _SectionTitle(
+                      icon: Icons.person,
+                      title: 'Datos del paciente',
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  _SectionTitle(
-                    icon: Icons.medical_information,
-                    title: 'Informacion medica',
-                  ),
-                  const SizedBox(height: 12),
-                  _TextField(
-                    controller: _conditionsController,
-                    label: 'Enfermedades o condiciones',
-                    icon: Icons.monitor_heart,
-                    maxLines: 3,
-                    hint: 'Diabetes, hipertension, asma...',
-                    validator: (value) =>
-                        FormInputs.optionalMultiline(value, maxLength: 1000),
-                  ),
-                  _TextField(
-                    controller: _allergiesController,
-                    label: 'Alergias',
-                    icon: Icons.warning_amber,
-                    maxLines: 3,
-                    hint: 'Medicamentos, alimentos u otras alergias',
-                    validator: (value) =>
-                        FormInputs.optionalMultiline(value, maxLength: 1000),
-                  ),
-                  _TextField(
-                    controller: _notesController,
-                    label: 'Indicaciones importantes',
-                    icon: Icons.notes,
-                    maxLines: 4,
-                    hint: 'Datos que un cuidador o medico debe saber',
-                    validator: (value) =>
-                        FormInputs.optionalMultiline(value, maxLength: 1000),
-                  ),
-                  const SizedBox(height: 16),
-                  _SectionTitle(
-                    icon: Icons.emergency,
-                    title: 'Contacto de emergencia',
-                  ),
-                  const SizedBox(height: 12),
-                  _TextField(
-                    controller: _emergencyNameController,
-                    label: 'Nombre del contacto',
-                    icon: Icons.contact_phone,
-                    inputFormatters: FormInputs.personName,
-                    validator: (value) {
-                      final nameError = FormInputs.personNameValidator(
-                        value,
-                        required: false,
-                      );
-                      if (nameError != null) {
-                        return nameError;
-                      }
-                      return FormInputs.pairedEmergencyContactValidator(
-                        name: value,
-                        phone: _emergencyPhoneController.text,
-                      );
-                    },
-                  ),
-                  _TextField(
-                    controller: _emergencyPhoneController,
-                    label: 'Telefono',
-                    icon: Icons.phone,
-                    keyboardType: TextInputType.phone,
-                    inputFormatters: FormInputs.phone,
-                    validator: (value) {
-                      final paired = FormInputs.pairedEmergencyContactValidator(
-                        name: _emergencyNameController.text,
-                        phone: value,
-                      );
-                      if (paired != null) {
-                        return paired;
-                      }
-                      return FormInputs.phoneValidator(value, required: false);
-                    },
-                  ),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(
-                      'Compartir con cuidadores autorizados',
-                      style: Theme.of(context).textTheme.bodyLarge,
-                    ),
-                    subtitle: const Text(
-                      'Autorizas a tus cuidadores a ver perfil, condiciones, alergias y contactos. Guarda para aplicar.',
-                    ),
-                    value: _shareWithCaregivers,
-                    onChanged: (value) {
-                      setState(() {
-                        _shareWithCaregivers = value;
-                      });
-                    },
-                  ),
-                  if (_error != null) ...[
                     const SizedBox(height: 12),
-                    _ErrorBox(message: _error!),
+                    _TextField(
+                      controller: _nameController,
+                      label: 'Nombre completo',
+                      icon: Icons.person,
+                      inputFormatters: FormInputs.personName,
+                      validator: (value) =>
+                          FormInputs.personNameValidator(value),
+                    ),
+                    _TextField(
+                      initialValue: data.session.user.email,
+                      label: 'Correo electronico',
+                      icon: Icons.email,
+                      enabled: false,
+                    ),
+                    _TextField(
+                      controller: _birthDateController,
+                      label: 'Fecha de nacimiento',
+                      icon: Icons.cake,
+                      hint: 'DD/MM/AAAA',
+                      readOnly: true,
+                      onTap: _pickBirthDate,
+                      validator: FormInputs.birthDateValidator,
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 14),
+                      child: DropdownButtonFormField<String>(
+                        key: ValueKey(_bloodType),
+                        initialValue: _bloodType,
+                        decoration: const InputDecoration(
+                          labelText: 'Tipo de sangre',
+                          prefixIcon: Icon(Icons.bloodtype),
+                          border: OutlineInputBorder(),
+                        ),
+                        hint: const Text('Selecciona un tipo'),
+                        items: bloodTypeOptions
+                            .map(
+                              (type) => DropdownMenuItem(
+                                value: type,
+                                child: Text(type),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) {
+                          setState(() => _bloodType = value);
+                        },
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return null;
+                          }
+                          return FormInputs.bloodTypeValidator(value);
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    _SectionTitle(
+                      icon: Icons.medical_information,
+                      title: 'Informacion medica',
+                    ),
+                    const SizedBox(height: 12),
+                    _TextField(
+                      controller: _conditionsController,
+                      label: 'Enfermedades o condiciones',
+                      icon: Icons.monitor_heart,
+                      maxLines: 3,
+                      hint: 'Diabetes, hipertension, asma...',
+                      validator: (value) =>
+                          FormInputs.optionalMultiline(value, maxLength: 1000),
+                    ),
+                    _TextField(
+                      controller: _allergiesController,
+                      label: 'Alergias',
+                      icon: Icons.warning_amber,
+                      maxLines: 3,
+                      hint: 'Medicamentos, alimentos u otras alergias',
+                      validator: (value) =>
+                          FormInputs.optionalMultiline(value, maxLength: 1000),
+                    ),
+                    _TextField(
+                      controller: _notesController,
+                      label: 'Indicaciones importantes',
+                      icon: Icons.notes,
+                      maxLines: 4,
+                      hint: 'Datos que un cuidador o medico debe saber',
+                      validator: (value) =>
+                          FormInputs.optionalMultiline(value, maxLength: 1000),
+                    ),
+                    const SizedBox(height: 16),
+                    _SectionTitle(
+                      icon: Icons.emergency,
+                      title: 'Contacto de emergencia',
+                    ),
+                    const SizedBox(height: 12),
+                    _TextField(
+                      controller: _emergencyNameController,
+                      label: 'Nombre del contacto',
+                      icon: Icons.contact_phone,
+                      inputFormatters: FormInputs.personName,
+                      validator: (value) {
+                        final nameError = FormInputs.personNameValidator(
+                          value,
+                          required: false,
+                        );
+                        if (nameError != null) {
+                          return nameError;
+                        }
+                        return FormInputs.pairedEmergencyContactValidator(
+                          name: value,
+                          phone: _emergencyPhoneController.text,
+                        );
+                      },
+                    ),
+                    _TextField(
+                      controller: _emergencyPhoneController,
+                      label: 'Telefono',
+                      icon: Icons.phone,
+                      keyboardType: TextInputType.phone,
+                      inputFormatters: FormInputs.phone,
+                      validator: (value) {
+                        final paired =
+                            FormInputs.pairedEmergencyContactValidator(
+                              name: _emergencyNameController.text,
+                              phone: value,
+                            );
+                        if (paired != null) {
+                          return paired;
+                        }
+                        return FormInputs.phoneValidator(
+                          value,
+                          required: false,
+                        );
+                      },
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        'Compartir con cuidadores autorizados',
+                        style: Theme.of(context).textTheme.bodyLarge,
+                      ),
+                      subtitle: const Text(
+                        'Autorizas a tus cuidadores a ver perfil, condiciones, alergias y contactos. Guarda para aplicar.',
+                      ),
+                      value: _shareWithCaregivers,
+                      onChanged: (value) {
+                        setState(() {
+                          _shareWithCaregivers = value;
+                        });
+                      },
+                    ),
+                    if (_error != null) ...[
+                      const SizedBox(height: 12),
+                      _ErrorBox(message: _error!),
+                    ],
+                    const SizedBox(height: 20),
+                    FilledButton.icon(
+                      onPressed: _isSaving ? null : _save,
+                      icon: _isSaving
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.save),
+                      label: const Text('Guardar perfil medico'),
+                    ),
                   ],
-                  const SizedBox(height: 20),
-                  FilledButton.icon(
-                    onPressed: _isSaving ? null : _save,
-                    icon: _isSaving
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.save),
-                    label: const Text('Guardar perfil medico'),
-                  ),
-                ],
+                ),
               ),
-            ),
             );
           },
         ),

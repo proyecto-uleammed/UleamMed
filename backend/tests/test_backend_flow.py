@@ -838,6 +838,16 @@ class BackendIntegratedFlowTest(unittest.TestCase):
             patient_shares_profile.json()["emergencyContactPhone"],
             "+593991234567",
         )
+        patient_profile_contacts = self.client.get(
+            "/api/v1/emergency-contacts",
+            headers=patient_headers,
+        )
+        self.assertEqual(patient_profile_contacts.status_code, 200)
+        self.assertEqual(len(patient_profile_contacts.json()["items"]), 1)
+        self.assertEqual(
+            patient_profile_contacts.json()["items"][0]["phone"],
+            "+593991234567",
+        )
 
         caregiver_health_entries = self.client.get(
             f"/api/v1/caregiving/patients/{patient_id}/health-entries",
@@ -909,6 +919,18 @@ class BackendIntegratedFlowTest(unittest.TestCase):
             caregiver_contacts.json()["items"][0]["phone"],
             "+593991234567",
         )
+        delete_profile_contact = self.client.delete(
+            f"/api/v1/emergency-contacts/{caregiver_contacts.json()['items'][0]['id']}",
+            headers=patient_headers,
+        )
+        self.assertEqual(delete_profile_contact.status_code, 204)
+        profile_after_delete = self.client.get(
+            "/api/v1/medical-profile",
+            headers=patient_headers,
+        )
+        self.assertEqual(profile_after_delete.status_code, 200)
+        self.assertEqual(profile_after_delete.json()["emergencyContactName"], "")
+        self.assertEqual(profile_after_delete.json()["emergencyContactPhone"], "")
 
         caregiver_schedule_update = self.client.patch(
             f"/api/v1/caregiving/patients/{patient_id}/medications/{patient_medication_id}",
