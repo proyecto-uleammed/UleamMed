@@ -21,6 +21,7 @@ from backend.schemas.caregiving import (
 )
 from backend.schemas.medication import (
     MedicationCreate,
+    MedicationDoseEventCreate,
     MedicationDoseEventRead,
     MedicationRead,
     MedicationUpdate,
@@ -29,8 +30,11 @@ from backend.services.medication_service import (
     create_user_medication,
     delete_user_medication,
     get_user_medication_model,
+    list_deleted_user_medications,
     list_dose_events,
     list_user_medications,
+    record_dose_event,
+    restore_user_medication,
     update_user_medication,
 )
 
@@ -390,6 +394,45 @@ def list_linked_patient_dose_events(
     if not _active_link_exists(db, caregiver_id, patient_id):
         return None
     return list_dose_events(db, patient_id, start=start, end=end)
+
+
+def record_linked_patient_dose_event(
+    db: Session,
+    caregiver_id: int,
+    patient_id: int,
+    medication_id: int,
+    payload: MedicationDoseEventCreate,
+) -> MedicationDoseEventRead | None:
+    """Registra una toma del paciente vinculado activo."""
+    if not _active_link_exists(db, caregiver_id, patient_id):
+        return None
+    try:
+        return record_dose_event(db, patient_id, medication_id, payload)
+    except ValueError as exc:
+        raise ValueError(str(exc)) from exc
+
+
+def list_linked_patient_deleted_medications(
+    db: Session,
+    caregiver_id: int,
+    patient_id: int,
+) -> list[MedicationRead] | None:
+    """Lista medicamentos eliminados del paciente vinculado activo."""
+    if not _active_link_exists(db, caregiver_id, patient_id):
+        return None
+    return list_deleted_user_medications(db, patient_id)
+
+
+def restore_linked_patient_medication(
+    db: Session,
+    caregiver_id: int,
+    patient_id: int,
+    medication_id: int,
+) -> MedicationRead | None:
+    """Restaura un medicamento eliminado del paciente vinculado activo."""
+    if not _active_link_exists(db, caregiver_id, patient_id):
+        return None
+    return restore_user_medication(db, patient_id, medication_id)
 
 
 def _get_patient_link(

@@ -598,6 +598,26 @@ class BackendIntegratedFlowTest(unittest.TestCase):
             "Losartan",
         )
 
+        caregiver_records_dose = self.client.post(
+            f"/api/v1/caregiving/patients/{patient_id}/medications/{patient_medication_id}/dose-events",
+            headers=caregiver_headers,
+            json={
+                "client_event_id": "evento-cuidador-registro-0001",
+                "scheduled_at": "2026-07-09T21:00:00Z",
+                "sequence_number": 1,
+                "status": "taken",
+                "acted_at": "2026-07-09T21:10:00Z",
+            },
+        )
+        self.assertEqual(caregiver_records_dose.status_code, 200)
+        self.assertEqual(caregiver_records_dose.json()["status"], "taken")
+
+        caregiver_events_after = self.client.get(
+            f"/api/v1/caregiving/patients/{patient_id}/medications/dose-events",
+            headers=caregiver_headers,
+        )
+        self.assertGreaterEqual(len(caregiver_events_after.json()), 2)
+
         with (
             patch(
                 "backend.api.v1.endpoints.caregiving.upload_medication_photo",
@@ -676,6 +696,39 @@ class BackendIntegratedFlowTest(unittest.TestCase):
             caregiver_updated.json()["instructions"],
             "Tomar con alimentos",
         )
+
+        trash_before = self.client.get(
+            f"/api/v1/caregiving/patients/{patient_id}/medications/trash",
+            headers=caregiver_headers,
+        )
+        self.assertEqual(trash_before.status_code, 200)
+        self.assertEqual(trash_before.json()["items"], [])
+
+        delete_aspirin = self.client.delete(
+            f"/api/v1/caregiving/patients/{patient_id}/medications/{created_id}",
+            headers=caregiver_headers,
+        )
+        self.assertEqual(delete_aspirin.status_code, 204)
+
+        trash_after = self.client.get(
+            f"/api/v1/caregiving/patients/{patient_id}/medications/trash",
+            headers=caregiver_headers,
+        )
+        self.assertEqual(len(trash_after.json()["items"]), 1)
+        self.assertEqual(trash_after.json()["items"][0]["name"], "Aspirina")
+
+        history_after_delete = self.client.get(
+            f"/api/v1/caregiving/patients/{patient_id}/medications/dose-events",
+            headers=caregiver_headers,
+        )
+        self.assertGreaterEqual(len(history_after_delete.json()), 1)
+
+        restored = self.client.post(
+            f"/api/v1/caregiving/patients/{patient_id}/medications/{created_id}/restore",
+            headers=caregiver_headers,
+        )
+        self.assertEqual(restored.status_code, 200)
+        self.assertEqual(restored.json()["name"], "Aspirina")
 
         unrelated_access = self.client.get(
             f"/api/v1/caregiving/patients/{patient_id}/medications",

@@ -111,6 +111,33 @@ def delete_user_medication(db: Session, user_id: int, medication_id: int) -> boo
     return True
 
 
+def list_deleted_user_medications(db: Session, user_id: int) -> list[MedicationRead]:
+    """Lista medicamentos eliminados logicamente del usuario."""
+    statement = (
+        select(Medication)
+        .options(selectinload(Medication.schedule).selectinload(MedicationSchedule.times))
+        .where(Medication.user_id == user_id, Medication.is_active.is_(False))
+        .order_by(Medication.updated_at.desc(), Medication.name.asc())
+    )
+    return [_to_read(medication) for medication in db.scalars(statement)]
+
+
+def restore_user_medication(
+    db: Session,
+    user_id: int,
+    medication_id: int,
+) -> MedicationRead | None:
+    """Restaura un medicamento previamente eliminado logicamente."""
+    medication = _get_inactive_user_medication(db, user_id, medication_id)
+    if medication is None:
+        return None
+    medication.is_active = True
+    db.add(medication)
+    db.commit()
+    db.refresh(medication)
+    return _to_read(medication)
+
+
 def mark_user_medication_taken(
     db: Session,
     user_id: int,
@@ -222,6 +249,22 @@ def _get_user_medication(db: Session, user_id: int, medication_id: int) -> Medic
             Medication.id == medication_id,
             Medication.user_id == user_id,
             Medication.is_active.is_(True),
+        )
+    )
+
+
+def _get_inactive_user_medication(
+    db: Session,
+    user_id: int,
+    medication_id: int,
+) -> Medication | None:
+    return db.scalar(
+        select(Medication)
+        .options(selectinload(Medication.schedule).selectinload(MedicationSchedule.times))
+        .where(
+            Medication.id == medication_id,
+            Medication.user_id == user_id,
+            Medication.is_active.is_(False),
         )
     )
 
