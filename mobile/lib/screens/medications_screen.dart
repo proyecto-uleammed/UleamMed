@@ -2,12 +2,14 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../services/api_service.dart';
 import '../services/notification_scheduler.dart';
 import '../theme/app_theme.dart';
+import '../utils/form_inputs.dart';
 
 class MedicationsScreen extends StatefulWidget {
   const MedicationsScreen({super.key, this.api, this.notificationScheduler});
@@ -1009,7 +1011,7 @@ class _MedicationFormState extends State<_MedicationForm> {
               controller: _nameController,
               label: 'Nombre',
               icon: Icons.medication,
-              validator: _required,
+              validator: (value) => FormInputs.requiredText(value),
             ),
             _FormField(
               controller: _doseController,
@@ -1019,14 +1021,8 @@ class _MedicationFormState extends State<_MedicationForm> {
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
-              validator: (value) {
-                final amount = double.tryParse(
-                  (value ?? '').trim().replaceAll(',', '.'),
-                );
-                return amount == null || amount <= 0
-                    ? 'Ingresa una cantidad válida'
-                    : null;
-              },
+              inputFormatters: FormInputs.decimalQuantity,
+              validator: FormInputs.positiveDecimal,
             ),
             DropdownButtonFormField<String>(
               initialValue: _doseUnit,
@@ -1261,10 +1257,7 @@ class _MedicationFormState extends State<_MedicationForm> {
   }
 
   String? _required(String? value) {
-    if ((value ?? '').trim().isEmpty) {
-      return 'Campo requerido';
-    }
-    return null;
+    return FormInputs.requiredText(value);
   }
 }
 
@@ -1277,6 +1270,7 @@ class _FormField extends StatelessWidget {
     this.maxLines = 1,
     this.validator,
     this.keyboardType,
+    this.inputFormatters,
   });
 
   final TextEditingController controller;
@@ -1286,6 +1280,7 @@ class _FormField extends StatelessWidget {
   final int maxLines;
   final FormFieldValidator<String>? validator;
   final TextInputType? keyboardType;
+  final List<TextInputFormatter>? inputFormatters;
 
   @override
   Widget build(BuildContext context) {
@@ -1295,6 +1290,7 @@ class _FormField extends StatelessWidget {
         controller: controller,
         maxLines: maxLines,
         keyboardType: keyboardType,
+        inputFormatters: inputFormatters,
         decoration: InputDecoration(
           labelText: label,
           hintText: hint,

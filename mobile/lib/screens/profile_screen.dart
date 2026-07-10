@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../services/api_service.dart';
 import '../services/app_settings.dart';
 import '../services/notification_scheduler.dart';
 import '../services/permission_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/form_inputs.dart';
 import 'settings_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -208,12 +210,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     controller: _nameController,
                     label: 'Nombre completo',
                     icon: Icons.person,
-                    validator: (value) {
-                      if ((value ?? '').trim().length < 3) {
-                        return 'Ingresa tu nombre';
-                      }
-                      return null;
-                    },
+                    inputFormatters: FormInputs.personName,
+                    validator: (value) => FormInputs.personNameValidator(value),
                   ),
                   _TextField(
                     initialValue: data.session.user.email,
@@ -225,13 +223,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     controller: _birthDateController,
                     label: 'Fecha de nacimiento',
                     icon: Icons.cake,
-                    hint: 'Ej. 12/03/1954',
+                    hint: 'DD/MM/AAAA',
+                    keyboardType: TextInputType.datetime,
+                    inputFormatters: FormInputs.birthDate,
+                    validator: FormInputs.birthDateValidator,
                   ),
                   _TextField(
                     controller: _bloodTypeController,
                     label: 'Tipo de sangre',
                     icon: Icons.bloodtype,
                     hint: 'Ej. O+',
+                    textCapitalization: TextCapitalization.characters,
+                    inputFormatters: FormInputs.bloodType,
+                    validator: FormInputs.bloodTypeValidator,
                   ),
                   const SizedBox(height: 16),
                   _SectionTitle(
@@ -270,12 +274,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     controller: _emergencyNameController,
                     label: 'Nombre del contacto',
                     icon: Icons.contact_phone,
+                    inputFormatters: FormInputs.personName,
+                    validator: (value) =>
+                        FormInputs.personNameValidator(value, required: false),
                   ),
                   _TextField(
                     controller: _emergencyPhoneController,
                     label: 'Telefono',
                     icon: Icons.phone,
                     keyboardType: TextInputType.phone,
+                    inputFormatters: FormInputs.phone,
+                    validator: (value) =>
+                        FormInputs.phoneValidator(value, required: false),
                   ),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
@@ -393,6 +403,8 @@ class _TextField extends StatelessWidget {
     this.hint,
     this.keyboardType,
     this.validator,
+    this.inputFormatters,
+    this.textCapitalization = TextCapitalization.none,
   });
 
   final TextEditingController? controller;
@@ -404,6 +416,8 @@ class _TextField extends StatelessWidget {
   final String? hint;
   final TextInputType? keyboardType;
   final FormFieldValidator<String>? validator;
+  final List<TextInputFormatter>? inputFormatters;
+  final TextCapitalization textCapitalization;
 
   @override
   Widget build(BuildContext context) {
@@ -415,6 +429,8 @@ class _TextField extends StatelessWidget {
         enabled: enabled,
         maxLines: maxLines,
         keyboardType: keyboardType,
+        inputFormatters: inputFormatters,
+        textCapitalization: textCapitalization,
         textInputAction: maxLines == 1 ? TextInputAction.next : null,
         decoration: InputDecoration(
           labelText: label,
