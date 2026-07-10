@@ -73,6 +73,14 @@ abstract class UleamMedApi {
   Future<void> revokeCaregiverLink(int linkId);
   Future<List<CaregiverPatient>> listCaregiverPatients();
   Future<List<MedicationItem>> listCaregiverPatientMedications(int patientId);
+  Future<MedicationItem> saveCaregiverPatientMedication(
+    int patientId,
+    MedicationItem medication,
+  );
+  Future<void> deleteCaregiverPatientMedication(
+    int patientId,
+    String medicationId,
+  );
   Future<int> pendingSyncCount();
   Future<SyncSummary> synchronizePendingChanges();
 }
@@ -598,6 +606,117 @@ class ApiService implements UleamMedApi {
       fallback: 'No se pudieron cargar los medicamentos',
     );
     return _decodeList(data, MedicationItem.fromJson);
+  }
+
+  @override
+  Future<MedicationItem> saveCaregiverPatientMedication(
+    int patientId,
+    MedicationItem medication,
+  ) async {
+    final isBackendId = int.tryParse(medication.id) != null;
+    final uri = isBackendId
+        ? Uri.parse(
+            '$_baseUrl/api/v1/caregiving/patients/$patientId/medications/${medication.id}',
+          )
+        : Uri.parse(
+            '$_baseUrl/api/v1/caregiving/patients/$patientId/medications',
+          );
+    final body = {
+      'name': medication.name,
+      'dose': medication.dose,
+      'doseAmount': medication.doseAmount,
+      'doseUnit': medication.doseUnit,
+      'time': medication.time,
+      'frequency': medication.frequency,
+      'duration': medication.duration,
+      'instructions': medication.instructions,
+      'isImportant': medication.isImportant,
+      'schedule': medication.effectiveSchedule.toJson(),
+      if (isBackendId) 'taken': medication.taken,
+    };
+    final data = isBackendId
+        ? await _patchAuthorizedJson(
+            uri,
+            body: body,
+            fallback: 'No se pudo actualizar el medicamento',
+          )
+        : await _postAuthorizedJson(
+            uri,
+            body: body,
+            fallback: 'No se pudo crear el medicamento',
+          );
+    var saved = MedicationItem.fromJson(
+      data,
+    ).copyWith(syncStatus: SyncStatus.synced, photoPath: medication.photoPath);
+    if (medication.photoPath.isNotEmpty &&
+        File(medication.photoPath).existsSync()) {
+      try {
+        final photoData = await _uploadCaregiverPatientMedicationPhoto(
+          patientId,
+          saved.id,
+          medication.photoPath,
+        );
+        saved = MedicationItem.fromJson(photoData).copyWith(
+          syncStatus: SyncStatus.synced,
+          photoPath: medication.photoPath,
+          photoAvailable: true,
+        );
+      } catch (_) {
+        // El medicamento se guardo; la foto puede reintentarse luego.
+      }
+    }
+    return saved;
+  }
+
+  @override
+  Future<void> deleteCaregiverPatientMedication(
+    int patientId,
+    String medicationId,
+  ) async {
+    if (int.tryParse(medicationId) == null) {
+      return;
+    }
+    await _deleteAuthorized(
+      Uri.parse(
+        '$_baseUrl/api/v1/caregiving/patients/$patientId/medications/$medicationId',
+      ),
+      fallback: 'No se pudo eliminar el medicamento',
+    );
+  }
+
+  Future<Map<String, dynamic>> _uploadCaregiverPatientMedicationPhoto(
+    int patientId,
+    String medicationId,
+    String path,
+  ) async {
+    Future<http.StreamedResponse> send(String token) async {
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse(
+          '$_baseUrl/api/v1/caregiving/patients/$patientId/medications/$medicationId/photo',
+        ),
+      );
+      request.headers['Authorization'] = 'Bearer $token';
+      request.files.add(
+        await http.MultipartFile.fromPath(
+          'photo',
+          path,
+          contentType: _photoContentType(path),
+        ),
+      );
+      return _client.send(request);
+    }
+
+    var response = await send(await _ensureAccessToken());
+    if (response.statusCode == 401 && await _refreshAccessToken()) {
+      response = await send(await _ensureAccessToken());
+    }
+    final body = await response.stream.bytesToString();
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw ApiException('No se pudo subir la foto', response.statusCode);
+    }
+    final decoded = jsonDecode(body);
+    return Map<String, dynamic>.from(decoded as Map);
   }
 
   @override
