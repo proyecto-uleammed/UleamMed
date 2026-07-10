@@ -249,6 +249,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     icon: Icons.monitor_heart,
                     maxLines: 3,
                     hint: 'Diabetes, hipertension, asma...',
+                    validator: (value) =>
+                        FormInputs.optionalMultiline(value, maxLength: 1000),
                   ),
                   _TextField(
                     controller: _allergiesController,
@@ -256,6 +258,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     icon: Icons.warning_amber,
                     maxLines: 3,
                     hint: 'Medicamentos, alimentos u otras alergias',
+                    validator: (value) =>
+                        FormInputs.optionalMultiline(value, maxLength: 1000),
                   ),
                   _TextField(
                     controller: _notesController,
@@ -263,6 +267,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     icon: Icons.notes,
                     maxLines: 4,
                     hint: 'Datos que un cuidador o medico debe saber',
+                    validator: (value) =>
+                        FormInputs.optionalMultiline(value, maxLength: 1000),
                   ),
                   const SizedBox(height: 16),
                   _SectionTitle(
@@ -275,8 +281,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     label: 'Nombre del contacto',
                     icon: Icons.contact_phone,
                     inputFormatters: FormInputs.personName,
-                    validator: (value) =>
-                        FormInputs.personNameValidator(value, required: false),
+                    validator: (value) {
+                      final nameError = FormInputs.personNameValidator(
+                        value,
+                        required: false,
+                      );
+                      if (nameError != null) {
+                        return nameError;
+                      }
+                      return FormInputs.pairedEmergencyContactValidator(
+                        name: value,
+                        phone: _emergencyPhoneController.text,
+                      );
+                    },
                   ),
                   _TextField(
                     controller: _emergencyPhoneController,
@@ -284,8 +301,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     icon: Icons.phone,
                     keyboardType: TextInputType.phone,
                     inputFormatters: FormInputs.phone,
-                    validator: (value) =>
-                        FormInputs.phoneValidator(value, required: false),
+                    validator: (value) {
+                      final paired = FormInputs.pairedEmergencyContactValidator(
+                        name: _emergencyNameController.text,
+                        phone: value,
+                      );
+                      if (paired != null) {
+                        return paired;
+                      }
+                      return FormInputs.phoneValidator(value, required: false);
+                    },
                   ),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
