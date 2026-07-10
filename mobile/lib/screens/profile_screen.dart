@@ -469,7 +469,6 @@ class _TextField extends StatelessWidget {
     this.keyboardType,
     this.validator,
     this.inputFormatters,
-    this.textCapitalization = TextCapitalization.none,
     this.readOnly = false,
     this.onTap,
   });
@@ -484,7 +483,6 @@ class _TextField extends StatelessWidget {
   final TextInputType? keyboardType;
   final FormFieldValidator<String>? validator;
   final List<TextInputFormatter>? inputFormatters;
-  final TextCapitalization textCapitalization;
   final bool readOnly;
   final VoidCallback? onTap;
 
@@ -501,7 +499,7 @@ class _TextField extends StatelessWidget {
         maxLines: maxLines,
         keyboardType: keyboardType,
         inputFormatters: inputFormatters,
-        textCapitalization: textCapitalization,
+        textCapitalization: TextCapitalization.none,
         textInputAction: maxLines == 1 ? TextInputAction.next : null,
         decoration: InputDecoration(
           labelText: label,
