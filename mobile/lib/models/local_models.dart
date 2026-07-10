@@ -1,6 +1,8 @@
 enum SyncStatus {
   synced,
   pending,
+  syncing,
+  conflict,
   failed;
 
   static SyncStatus fromJson(Object? value) {
@@ -22,6 +24,120 @@ enum DoseStatus {
       (status) => status.name == value,
       orElse: () => DoseStatus.taken,
     );
+  }
+}
+
+enum SyncActionType {
+  createMedication,
+  updateMedication,
+  deleteMedication,
+  doseEvent;
+
+  String get apiValue => switch (this) {
+    createMedication => 'create_medication',
+    updateMedication => 'update_medication',
+    deleteMedication => 'delete_medication',
+    doseEvent => 'dose_event',
+  };
+
+  static SyncActionType fromJson(Object? value) {
+    return SyncActionType.values.firstWhere(
+      (type) => type.name == value,
+      orElse: () => SyncActionType.createMedication,
+    );
+  }
+}
+
+class PendingSyncAction {
+  const PendingSyncAction({
+    required this.clientOperationId,
+    required this.operationType,
+    required this.createdAt,
+    required this.payload,
+    this.clientMedicationId,
+    this.serverMedicationId,
+    this.patientId,
+    this.actorRole = '',
+    this.retryCount = 0,
+    this.syncStatus = SyncStatus.pending,
+    this.lastError = '',
+  });
+
+  factory PendingSyncAction.fromJson(Map<String, dynamic> json) {
+    return PendingSyncAction(
+      clientOperationId: json['clientOperationId']?.toString() ?? '',
+      operationType: SyncActionType.fromJson(json['operationType']),
+      createdAt: _parseDate(json['createdAt']) ?? DateTime.now(),
+      payload: json['payload'] is Map
+          ? Map<String, dynamic>.from(json['payload'] as Map)
+          : const {},
+      clientMedicationId: json['clientMedicationId']?.toString(),
+      serverMedicationId: json['serverMedicationId']?.toString(),
+      patientId: _parseInt(json['patientId']),
+      actorRole: json['actorRole']?.toString() ?? '',
+      retryCount: _parseInt(json['retryCount']) ?? 0,
+      syncStatus: SyncStatus.fromJson(json['syncStatus']),
+      lastError: json['lastError']?.toString() ?? '',
+    );
+  }
+
+  final String clientOperationId;
+  final SyncActionType operationType;
+  final DateTime createdAt;
+  final Map<String, dynamic> payload;
+  final String? clientMedicationId;
+  final String? serverMedicationId;
+  final int? patientId;
+  final String actorRole;
+  final int retryCount;
+  final SyncStatus syncStatus;
+  final String lastError;
+
+  PendingSyncAction copyWith({
+    SyncStatus? syncStatus,
+    int? retryCount,
+    String? lastError,
+  }) {
+    return PendingSyncAction(
+      clientOperationId: clientOperationId,
+      operationType: operationType,
+      createdAt: createdAt,
+      payload: payload,
+      clientMedicationId: clientMedicationId,
+      serverMedicationId: serverMedicationId,
+      patientId: patientId,
+      actorRole: actorRole,
+      retryCount: retryCount ?? this.retryCount,
+      syncStatus: syncStatus ?? this.syncStatus,
+      lastError: lastError ?? this.lastError,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'clientOperationId': clientOperationId,
+      'operationType': operationType.name,
+      'createdAt': createdAt.toIso8601String(),
+      'payload': payload,
+      'clientMedicationId': clientMedicationId,
+      'serverMedicationId': serverMedicationId,
+      'patientId': patientId,
+      'actorRole': actorRole,
+      'retryCount': retryCount,
+      'syncStatus': syncStatus.name,
+      'lastError': lastError,
+    };
+  }
+
+  Map<String, dynamic> toApiJson() {
+    return {
+      'client_operation_id': clientOperationId,
+      'client_medication_id': clientMedicationId,
+      'server_medication_id': serverMedicationId,
+      'operation_type': operationType.apiValue,
+      'created_at': createdAt.toUtc().toIso8601String(),
+      'payload': payload,
+    };
   }
 }
 
@@ -133,6 +249,10 @@ class MedicationItem {
     this.doseUnit = '',
     this.photoAvailable = false,
     this.schedule,
+    this.clientMedicationId,
+    this.syncFingerprint,
+    this.syncConflictId,
+    this.lastSyncError = '',
   });
 
   factory MedicationItem.fromJson(Map<String, dynamic> json) {
@@ -158,6 +278,10 @@ class MedicationItem {
               Map<String, dynamic>.from(json['schedule'] as Map),
             )
           : null,
+      clientMedicationId: json['clientMedicationId']?.toString(),
+      syncFingerprint: json['syncFingerprint']?.toString(),
+      syncConflictId: _parseInt(json['syncConflictId']),
+      lastSyncError: json['lastSyncError']?.toString() ?? '',
     );
   }
 
@@ -178,6 +302,10 @@ class MedicationItem {
   final String doseUnit;
   final bool photoAvailable;
   final MedicationSchedule? schedule;
+  final String? clientMedicationId;
+  final String? syncFingerprint;
+  final int? syncConflictId;
+  final String lastSyncError;
 
   MedicationSchedule get effectiveSchedule =>
       schedule ??
@@ -206,6 +334,10 @@ class MedicationItem {
     String? doseUnit,
     bool? photoAvailable,
     MedicationSchedule? schedule,
+    String? clientMedicationId,
+    String? syncFingerprint,
+    int? syncConflictId,
+    String? lastSyncError,
   }) {
     return MedicationItem(
       id: id ?? this.id,
@@ -225,6 +357,10 @@ class MedicationItem {
       doseUnit: doseUnit ?? this.doseUnit,
       photoAvailable: photoAvailable ?? this.photoAvailable,
       schedule: schedule ?? this.schedule,
+      clientMedicationId: clientMedicationId ?? this.clientMedicationId,
+      syncFingerprint: syncFingerprint ?? this.syncFingerprint,
+      syncConflictId: syncConflictId ?? this.syncConflictId,
+      lastSyncError: lastSyncError ?? this.lastSyncError,
     );
   }
 
@@ -247,6 +383,10 @@ class MedicationItem {
       'doseUnit': doseUnit,
       'photoAvailable': photoAvailable,
       'schedule': schedule?.toJson(),
+      'clientMedicationId': clientMedicationId,
+      'syncFingerprint': syncFingerprint,
+      'syncConflictId': syncConflictId,
+      'lastSyncError': lastSyncError,
     };
   }
 }
@@ -784,6 +924,19 @@ double? _parseDouble(Object? value) {
     return value.toDouble();
   }
   return double.tryParse(value.toString().replaceAll(',', '.'));
+}
+
+int? _parseInt(Object? value) {
+  if (value == null) {
+    return null;
+  }
+  if (value is int) {
+    return value;
+  }
+  if (value is num) {
+    return value.toInt();
+  }
+  return int.tryParse(value.toString());
 }
 
 String _dateOnly(DateTime value) {

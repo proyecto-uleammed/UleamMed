@@ -279,7 +279,7 @@ void main() {
       },
     );
 
-    test('creates caregiver patient medication with POST', () async {
+    test('creates caregiver patient medication through sync queue', () async {
       final api = ApiService(
         baseUrl: 'http://localhost:8000',
         tokenStore: _MemoryTokenStore(
@@ -291,11 +291,16 @@ void main() {
         localStore: LocalStore(jsonStore: _MemoryJsonStore()),
         client: MockClient((request) async {
           expect(request.headers['authorization'], 'Bearer access-ok');
-          if (request.url.path == '/api/v1/caregiving/patients/3/medications' &&
+          if (request.url.path ==
+                  '/api/v1/caregiving/patients/3/medications/sync' &&
               request.method == 'POST') {
             final body = jsonDecode(request.body) as Map<String, dynamic>;
-            expect(body['name'], 'Aspirina');
-            return _jsonResponse({
+            final actions = body['actions'] as List<dynamic>;
+            final action = actions.single as Map<String, dynamic>;
+            final payload = action['payload'] as Map<String, dynamic>;
+            expect(action['operation_type'], 'create_medication');
+            expect(payload['name'], 'Aspirina');
+            final medication = {
               'id': '42',
               'name': 'Aspirina',
               'dose': '100 mg',
@@ -305,8 +310,21 @@ void main() {
               'duration': '',
               'instructions': '',
               'isImportant': true,
-              'schedule': body['schedule'],
-            }, statusCode: 201);
+              'schedule': payload['schedule'],
+              'clientMedicationId': action['client_medication_id'],
+            };
+            return _jsonResponse({
+              'results': [
+                {
+                  'client_operation_id': action['client_operation_id'],
+                  'client_medication_id': action['client_medication_id'],
+                  'status': 'synced',
+                  'medication': medication,
+                },
+              ],
+              'items': [medication],
+              'pending_conflicts': [],
+            });
           }
           return _jsonResponse({'detail': 'No permitido'}, statusCode: 405);
         }),
@@ -329,65 +347,71 @@ void main() {
       expect(saved.name, 'Aspirina');
     });
 
-    test('prefers backend medication updates from caregiver over stale cache', () async {
-      final localStore = LocalStore(jsonStore: _MemoryJsonStore());
-      await localStore.saveActiveUserId('1');
-      await localStore.upsertMedication(
-        const MedicationItem(
-          id: '7',
-          name: 'verdesol',
-          dose: '1500 mg',
-          time: '08:00',
-          taken: false,
-          instructions: 'tomar con agua',
-          syncStatus: SyncStatus.synced,
-        ),
-      );
-      final api = ApiService(
-        baseUrl: 'http://localhost:8000',
-        tokenStore: _MemoryTokenStore(
-          const AuthTokens(
-            accessToken: 'access-ok',
-            refreshToken: 'refresh-ok',
+    test(
+      'prefers backend medication updates from caregiver over stale cache',
+      () async {
+        final localStore = LocalStore(jsonStore: _MemoryJsonStore());
+        await localStore.saveActiveUserId('1');
+        await localStore.upsertMedication(
+          const MedicationItem(
+            id: '7',
+            name: 'verdesol',
+            dose: '1500 mg',
+            time: '08:00',
+            taken: false,
+            instructions: 'tomar con agua',
+            syncStatus: SyncStatus.synced,
           ),
-        ),
-        localStore: localStore,
-        client: MockClient((request) async {
-          expect(request.headers['authorization'], 'Bearer access-ok');
-          if (request.url.path == '/api/v1/medications') {
-            return _jsonResponse({
-              'items': [
-                {
-                  'id': '7',
-                  'name': 'verdesol',
-                  'dose': '1500 mg',
-                  'time': '08:00',
-                  'taken': true,
-                  'frequency': 'Diario',
-                  'duration': 'Permanente',
-                  'instructions': 'tomar con mucha agua',
-                  'isImportant': true,
-                  'photoAvailable': false,
-                  'schedule': {
-                    'mode': 'fixed_times',
-                    'times': ['08:00'],
-                    'weekdays': [1, 2, 3, 4, 5, 6, 7],
-                    'start_date': '2026-07-09',
+        );
+        final api = ApiService(
+          baseUrl: 'http://localhost:8000',
+          tokenStore: _MemoryTokenStore(
+            const AuthTokens(
+              accessToken: 'access-ok',
+              refreshToken: 'refresh-ok',
+            ),
+          ),
+          localStore: localStore,
+          client: MockClient((request) async {
+            expect(request.headers['authorization'], 'Bearer access-ok');
+            if (request.url.path == '/api/v1/medications') {
+              return _jsonResponse({
+                'items': [
+                  {
+                    'id': '7',
+                    'name': 'verdesol',
+                    'dose': '1500 mg',
+                    'time': '08:00',
+                    'taken': true,
+                    'frequency': 'Diario',
+                    'duration': 'Permanente',
+                    'instructions': 'tomar con mucha agua',
+                    'isImportant': true,
+                    'photoAvailable': false,
+                    'schedule': {
+                      'mode': 'fixed_times',
+                      'times': ['08:00'],
+                      'weekdays': [1, 2, 3, 4, 5, 6, 7],
+                      'start_date': '2026-07-09',
+                    },
                   },
-                },
-              ],
-            });
-          }
-          return _jsonResponse({'detail': 'No permitido'}, statusCode: 405);
-        }),
-      );
+                ],
+              });
+            }
+            if (request.url.path == '/api/v1/medications/sync-conflicts') {
+              return _jsonResponse({'items': []});
+            }
+            return _jsonResponse({'detail': 'No permitido'}, statusCode: 405);
+          }),
+        );
 
-      final medications = await api.listMedications();
+        final medications = await api.listMedications();
 
-      expect(medications, hasLength(1));
-      expect(medications.first.instructions, 'tomar con mucha agua');
-      expect(medications.first.taken, isTrue);
-    });
+        expect(medications, hasLength(1));
+        expect(medications.first.instructions, 'tomar con mucha agua');
+        expect(medications.first.taken, isTrue);
+      },
+    );
   });
 
   group('ApiService offline data', () {
@@ -503,49 +527,53 @@ void main() {
       );
     });
 
-    test('syncs appointments through backend for patient and caregiver', () async {
-      final localStore = LocalStore(jsonStore: _MemoryJsonStore());
-      await localStore.saveActiveUserId('1');
-      final api = ApiService(
-        baseUrl: 'http://localhost:8000',
-        tokenStore: _MemoryTokenStore(
-          const AuthTokens(
-            accessToken: 'access-ok',
-            refreshToken: 'refresh-ok',
+    test(
+      'syncs appointments through backend for patient and caregiver',
+      () async {
+        final localStore = LocalStore(jsonStore: _MemoryJsonStore());
+        await localStore.saveActiveUserId('1');
+        final api = ApiService(
+          baseUrl: 'http://localhost:8000',
+          tokenStore: _MemoryTokenStore(
+            const AuthTokens(
+              accessToken: 'access-ok',
+              refreshToken: 'refresh-ok',
+            ),
           ),
-        ),
-        localStore: localStore,
-        client: MockClient((request) async {
-          if (request.url.path == '/api/v1/appointments' &&
-              request.method == 'GET') {
-            return _jsonResponse({
-              'items': [
-                {
-                  'id': '12',
-                  'doctor': 'Dr. Perez',
-                  'specialty': 'Cardiologia',
-                  'location': 'Hospital',
-                  'notes': '',
-                  'completed': false,
-                  'reminder': 'none',
-                  'scheduledAt': '2026-12-15T15:00:00.000Z',
-                },
-              ],
-            });
-          }
-          if (request.url.path == '/api/v1/caregiving/patients/7/appointments' &&
-              request.method == 'GET') {
-            return _jsonResponse({'items': []});
-          }
-          return _jsonResponse({'detail': 'No permitido'}, statusCode: 405);
-        }),
-      );
+          localStore: localStore,
+          client: MockClient((request) async {
+            if (request.url.path == '/api/v1/appointments' &&
+                request.method == 'GET') {
+              return _jsonResponse({
+                'items': [
+                  {
+                    'id': '12',
+                    'doctor': 'Dr. Perez',
+                    'specialty': 'Cardiologia',
+                    'location': 'Hospital',
+                    'notes': '',
+                    'completed': false,
+                    'reminder': 'none',
+                    'scheduledAt': '2026-12-15T15:00:00.000Z',
+                  },
+                ],
+              });
+            }
+            if (request.url.path ==
+                    '/api/v1/caregiving/patients/7/appointments' &&
+                request.method == 'GET') {
+              return _jsonResponse({'items': []});
+            }
+            return _jsonResponse({'detail': 'No permitido'}, statusCode: 405);
+          }),
+        );
 
-      final appointments = await api.listAppointments();
+        final appointments = await api.listAppointments();
 
-      expect(appointments, hasLength(1));
-      expect(appointments.first.doctor, 'Dr. Perez');
-    });
+        expect(appointments, hasLength(1));
+        expect(appointments.first.doctor, 'Dr. Perez');
+      },
+    );
 
     test('replaces stale local appointments with backend data', () async {
       final localStore = LocalStore(jsonStore: _MemoryJsonStore());

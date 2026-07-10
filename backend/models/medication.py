@@ -18,8 +18,12 @@ class Medication(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    last_modified_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
 
     name: Mapped[str] = mapped_column(String(150), nullable=False)
+    client_medication_id: Mapped[str | None] = mapped_column(String(100), index=True, nullable=True)
+    sync_fingerprint: Mapped[str | None] = mapped_column(String(160), index=True, nullable=True)
     dose: Mapped[str] = mapped_column(String(100), nullable=False)
     dose_amount: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
     dose_unit: Mapped[str | None] = mapped_column(String(30), nullable=True)

@@ -41,10 +41,13 @@ class LocalStore {
 
   static const _medicalProfileKey = 'uleammed_medical_profile';
   static const _medicationsKey = 'uleammed_medications';
+  static const _syncActionsKey = 'uleammed_sync_actions';
   static const _confirmationsKey = 'uleammed_dose_confirmations';
   static const _appointmentsKey = 'uleammed_appointments';
   static const _caregiverPatientAppointmentsPrefix =
       'uleammed_caregiver_patient_appointments_';
+  static const _caregiverPatientMedicationsPrefix =
+      'uleammed_caregiver_patient_medications_';
   static const _emergencyContactsKey = 'uleammed_emergency_contacts';
   static const _legacyCaregiverPermissionsKey =
       'uleammed_caregiver_permissions';
@@ -56,6 +59,7 @@ class LocalStore {
     await Future.wait([
       _jsonStore.delete(_key(_medicalProfileKey)),
       _jsonStore.delete(_key(_medicationsKey)),
+      _jsonStore.delete(_key(_syncActionsKey)),
       _jsonStore.delete(_key(_confirmationsKey)),
       _jsonStore.delete(_key(_appointmentsKey)),
       _jsonStore.delete(_key(_emergencyContactsKey)),
@@ -134,6 +138,90 @@ class LocalStore {
     );
   }
 
+  Future<List<MedicationItem>> readCaregiverPatientMedications(int patientId) {
+    return _readList(
+      _caregiverPatientMedicationsKey(patientId),
+      (json) => MedicationItem.fromJson(json),
+    );
+  }
+
+  Future<void> saveCaregiverPatientMedications(
+    int patientId,
+    List<MedicationItem> medications,
+  ) {
+    return _writeList(
+      _caregiverPatientMedicationsKey(patientId),
+      medications.map((item) => item.toJson()).toList(),
+    );
+  }
+
+  Future<MedicationItem> upsertCaregiverPatientMedication(
+    int patientId,
+    MedicationItem medication,
+  ) async {
+    final now = DateTime.now();
+    final normalized = medication.copyWith(
+      createdAt: medication.createdAt ?? now,
+      updatedAt: now,
+    );
+    final medications = await readCaregiverPatientMedications(patientId);
+    final index = medications.indexWhere((item) => item.id == normalized.id);
+    if (index >= 0) {
+      medications[index] = normalized;
+    } else {
+      medications.add(normalized);
+    }
+    await saveCaregiverPatientMedications(patientId, medications);
+    return normalized;
+  }
+
+  Future<void> deleteCaregiverPatientMedication(
+    int patientId,
+    String medicationId,
+  ) async {
+    final medications = await readCaregiverPatientMedications(patientId);
+    await saveCaregiverPatientMedications(
+      patientId,
+      medications.where((item) => item.id != medicationId).toList(),
+    );
+  }
+
+  Future<List<PendingSyncAction>> readSyncActions() {
+    return _readList(
+      _syncActionsKey,
+      (json) => PendingSyncAction.fromJson(json),
+    );
+  }
+
+  Future<void> saveSyncActions(List<PendingSyncAction> actions) {
+    return _writeList(
+      _syncActionsKey,
+      actions.map((action) => action.toJson()).toList(),
+    );
+  }
+
+  Future<void> upsertSyncAction(PendingSyncAction action) async {
+    final actions = await readSyncActions();
+    final index = actions.indexWhere(
+      (item) => item.clientOperationId == action.clientOperationId,
+    );
+    if (index >= 0) {
+      actions[index] = action;
+    } else {
+      actions.add(action);
+    }
+    await saveSyncActions(actions);
+  }
+
+  Future<void> removeSyncAction(String clientOperationId) async {
+    final actions = await readSyncActions();
+    await saveSyncActions(
+      actions
+          .where((item) => item.clientOperationId != clientOperationId)
+          .toList(),
+    );
+  }
+
   Future<void> deleteDoseConfirmationsForMedication(String medicationId) async {
     final confirmations = await readDoseConfirmations();
     await _writeList(
@@ -172,6 +260,21 @@ class LocalStore {
     );
   }
 
+  Future<void> upsertDoseConfirmationByIdAsSynced(String id) async {
+    final confirmations = await readDoseConfirmations();
+    final index = confirmations.indexWhere((item) => item.id == id);
+    if (index < 0) {
+      return;
+    }
+    confirmations[index] = confirmations[index].copyWith(
+      syncStatus: SyncStatus.synced,
+    );
+    await _writeList(
+      _confirmationsKey,
+      confirmations.map((item) => item.toJson()).toList(),
+    );
+  }
+
   Future<List<Appointment>> readAppointments() {
     return _readList(_appointmentsKey, (json) => Appointment.fromJson(json));
   }
@@ -184,7 +287,7 @@ class LocalStore {
   }
 
   Future<Appointment> upsertAppointment(Appointment appointment) async {
-    final normalized = appointment.copyWith(syncStatus: SyncStatus.pending);
+    final normalized = appointment;
     final appointments = await readAppointments();
     final index = appointments.indexWhere((item) => item.id == normalized.id);
     if (index >= 0) {
@@ -224,7 +327,7 @@ class LocalStore {
     int patientId,
     Appointment appointment,
   ) async {
-    final normalized = appointment.copyWith(syncStatus: SyncStatus.pending);
+    final normalized = appointment;
     final appointments = await readCaregiverPatientAppointments(patientId);
     final index = appointments.indexWhere((item) => item.id == normalized.id);
     if (index >= 0) {
@@ -249,6 +352,10 @@ class LocalStore {
 
   String _caregiverPatientAppointmentsKey(int patientId) {
     return _key('$_caregiverPatientAppointmentsPrefix$patientId');
+  }
+
+  String _caregiverPatientMedicationsKey(int patientId) {
+    return _key('$_caregiverPatientMedicationsPrefix$patientId');
   }
 
   Future<List<EmergencyContact>> readEmergencyContacts() {
@@ -328,6 +435,9 @@ class LocalStore {
       total++;
     }
     total += (await readMedications())
+        .where((item) => item.syncStatus == SyncStatus.pending)
+        .length;
+    total += (await readSyncActions())
         .where((item) => item.syncStatus == SyncStatus.pending)
         .length;
     total += (await readDoseConfirmations())

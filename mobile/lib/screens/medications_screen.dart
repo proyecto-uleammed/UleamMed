@@ -226,6 +226,50 @@ class _MedicationsScreenState extends State<MedicationsScreen> {
     }
   }
 
+  Future<void> _resolveConflict(
+    MedicationItem medication,
+    String resolution,
+  ) async {
+    final conflictId = medication.syncConflictId;
+    if (conflictId == null || _savingIds.contains(medication.id)) {
+      return;
+    }
+
+    setState(() {
+      _savingIds.add(medication.id);
+    });
+
+    try {
+      await _api.resolveMedicationSyncConflict(conflictId, resolution);
+      if (!mounted) {
+        return;
+      }
+      _reload();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Duplicado revisado correctamente'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No se pudo resolver el duplicado'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _savingIds.remove(medication.id);
+        });
+      }
+    }
+  }
+
   String _statusMessage(String name, DoseStatus status) {
     switch (status) {
       case DoseStatus.taken:
@@ -286,30 +330,33 @@ class _MedicationsScreenState extends State<MedicationsScreen> {
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
               children: [
-              _MedicationSummary(
-                totalCount: data.medications.length,
-                takenCount: takenCount,
-              ),
-              const SizedBox(height: 16),
-              if (data.medications.isEmpty)
-                const _EmptyMedications()
-              else
-                ...data.medications.map(
-                  (medication) => _MedicationCard(
-                    medication: medication,
-                    isSaving: _savingIds.contains(medication.id),
-                    onEdit: () => _openMedicationForm(medication),
-                    onDelete: () => _deleteMedication(medication),
-                    onTaken: () => _recordStatus(medication, DoseStatus.taken),
-                    onPostponed: () =>
-                        _recordStatus(medication, DoseStatus.postponed),
-                    onOmitted: () =>
-                        _recordStatus(medication, DoseStatus.omitted),
-                  ),
+                _MedicationSummary(
+                  totalCount: data.medications.length,
+                  takenCount: takenCount,
                 ),
-              const SizedBox(height: 20),
-              _ConfirmationHistory(confirmations: data.confirmations),
-            ],
+                const SizedBox(height: 16),
+                if (data.medications.isEmpty)
+                  const _EmptyMedications()
+                else
+                  ...data.medications.map(
+                    (medication) => _MedicationCard(
+                      medication: medication,
+                      isSaving: _savingIds.contains(medication.id),
+                      onEdit: () => _openMedicationForm(medication),
+                      onDelete: () => _deleteMedication(medication),
+                      onTaken: () =>
+                          _recordStatus(medication, DoseStatus.taken),
+                      onPostponed: () =>
+                          _recordStatus(medication, DoseStatus.postponed),
+                      onOmitted: () =>
+                          _recordStatus(medication, DoseStatus.omitted),
+                      onResolveConflict: (resolution) =>
+                          _resolveConflict(medication, resolution),
+                    ),
+                  ),
+                const SizedBox(height: 20),
+                _ConfirmationHistory(confirmations: data.confirmations),
+              ],
             ),
           );
         },
@@ -418,6 +465,7 @@ class _MedicationCard extends StatelessWidget {
     required this.onTaken,
     required this.onPostponed,
     required this.onOmitted,
+    required this.onResolveConflict,
   });
 
   final MedicationItem medication;
@@ -427,6 +475,7 @@ class _MedicationCard extends StatelessWidget {
   final VoidCallback onTaken;
   final VoidCallback onPostponed;
   final VoidCallback onOmitted;
+  final ValueChanged<String> onResolveConflict;
 
   @override
   Widget build(BuildContext context) {
@@ -468,12 +517,18 @@ class _MedicationCard extends StatelessWidget {
                       ],
                       const SizedBox(height: 8),
                       Chip(
-                        label: Text(medication.taken ? 'Tomado' : 'Pendiente'),
-                        avatar: Icon(
-                          medication.taken ? Icons.check : Icons.schedule,
-                          size: 18,
-                        ),
+                        label: Text(_statusLabel(medication)),
+                        avatar: Icon(_statusIcon(medication), size: 18),
                       ),
+                      if (medication.lastSyncError.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          medication.lastSyncError,
+                          style: Theme.of(
+                            context,
+                          ).textTheme.bodySmall?.copyWith(color: Colors.red),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -498,35 +553,95 @@ class _MedicationCard extends StatelessWidget {
             Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: [
-                FilledButton.icon(
-                  onPressed: isSaving || medication.taken ? null : onTaken,
-                  icon: isSaving
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.check),
-                  label: const Text('Tomado'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: isSaving || medication.taken ? null : onPostponed,
-                  icon: const Icon(Icons.snooze),
-                  label: const Text('Posponer'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: isSaving || medication.taken ? null : onOmitted,
-                  icon: const Icon(Icons.close),
-                  label: const Text('Omitir'),
-                ),
-              ],
+              children: medication.syncStatus == SyncStatus.conflict
+                  ? [
+                      FilledButton.icon(
+                        onPressed: isSaving
+                            ? null
+                            : () => onResolveConflict('merge'),
+                        icon: isSaving
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.call_merge),
+                        label: const Text('Fusionar'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: isSaving
+                            ? null
+                            : () => onResolveConflict('create_separate'),
+                        icon: const Icon(Icons.call_split),
+                        label: const Text('Crear aparte'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: isSaving
+                            ? null
+                            : () => onResolveConflict('reject'),
+                        icon: const Icon(Icons.close),
+                        label: const Text('Descartar'),
+                      ),
+                    ]
+                  : [
+                      FilledButton.icon(
+                        onPressed: isSaving || medication.taken
+                            ? null
+                            : onTaken,
+                        icon: isSaving
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.check),
+                        label: const Text('Tomado'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: isSaving || medication.taken
+                            ? null
+                            : onPostponed,
+                        icon: const Icon(Icons.snooze),
+                        label: const Text('Posponer'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: isSaving || medication.taken
+                            ? null
+                            : onOmitted,
+                        icon: const Icon(Icons.close),
+                        label: const Text('Omitir'),
+                      ),
+                    ],
             ),
           ],
         ),
       ),
     );
   }
+}
+
+String _statusLabel(MedicationItem medication) {
+  return switch (medication.syncStatus) {
+    SyncStatus.pending => 'Pendiente de sincronizar',
+    SyncStatus.syncing => 'Sincronizando',
+    SyncStatus.conflict => 'Revisar duplicado',
+    SyncStatus.failed => 'Error de sincronización',
+    SyncStatus.synced => medication.taken ? 'Tomado' : 'Pendiente',
+  };
+}
+
+IconData _statusIcon(MedicationItem medication) {
+  return switch (medication.syncStatus) {
+    SyncStatus.pending => Icons.cloud_upload_outlined,
+    SyncStatus.syncing => Icons.sync,
+    SyncStatus.conflict => Icons.report_problem_outlined,
+    SyncStatus.failed => Icons.error_outline,
+    SyncStatus.synced => medication.taken ? Icons.check : Icons.schedule,
+  };
 }
 
 class _MedicationAvatar extends StatelessWidget {

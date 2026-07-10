@@ -312,6 +312,18 @@ class _FakeApi implements UleamMedApi {
   }
 
   @override
+  Future<MedicationItem?> resolveMedicationSyncConflict(
+    int conflictId,
+    String resolution,
+  ) async {
+    medications.removeWhere((item) => item.syncConflictId == conflictId);
+    if (resolution == 'reject') {
+      return null;
+    }
+    return medications.isEmpty ? null : medications.first;
+  }
+
+  @override
   Future<MedicationMarkResult> markMedicationTaken(String medicationId) async {
     return recordMedicationStatus(medicationId, DoseStatus.taken);
   }
@@ -587,7 +599,9 @@ class _FakeApi implements UleamMedApi {
   }
 
   @override
-  Future<List<Appointment>> listCaregiverPatientAppointments(int patientId) async {
+  Future<List<Appointment>> listCaregiverPatientAppointments(
+    int patientId,
+  ) async {
     return appointments;
   }
 
@@ -788,7 +802,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Panel Administrador'), findsOneWidget);
-    expect(find.text('Supervisa usuarios, reportes y configuracion.'), findsOneWidget);
+    expect(
+      find.text('Supervisa usuarios, reportes y configuracion.'),
+      findsOneWidget,
+    );
 
     await tester.tap(find.byIcon(Icons.manage_accounts_outlined));
     await tester.pumpAndSettle();

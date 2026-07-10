@@ -10,9 +10,13 @@ from backend.schemas.medication import (
     MedicationCreate,
     MedicationDoseEventCreate,
     MedicationDoseEventRead,
+    MedicationSyncConflictListResponse,
+    MedicationSyncConflictResolve,
     MedicationListResponse,
     MedicationMarkResponse,
     MedicationRead,
+    MedicationSyncRequest,
+    MedicationSyncResponse,
     MedicationUpdate,
 )
 from backend.services.medication_service import (
@@ -23,10 +27,13 @@ from backend.services.medication_service import (
     list_deleted_user_medications,
     list_dose_events,
     list_user_medications,
+    list_user_medication_sync_conflicts,
     mark_user_medication_taken,
     medication_to_read,
     record_dose_event,
+    resolve_user_medication_sync_conflict,
     restore_user_medication,
+    sync_user_medication_actions,
     update_user_medication,
 )
 from backend.services.medication_photo_service import (
@@ -73,6 +80,49 @@ def list_my_dose_events(
 ) -> list[MedicationDoseEventRead]:
     """Lista eventos de toma del paciente autenticado."""
     return list_dose_events(db, current_user.id, start=start, end=end)
+
+
+@router.post("/sync", response_model=MedicationSyncResponse)
+def sync_my_medications(
+    payload: MedicationSyncRequest,
+    current_user: User = Depends(get_current_patient),
+    db: Session = Depends(get_db),
+) -> MedicationSyncResponse:
+    """Procesa operaciones offline de medicamentos de forma idempotente."""
+    return sync_user_medication_actions(db, current_user.id, current_user.id, payload)
+
+
+@router.get("/sync-conflicts", response_model=MedicationSyncConflictListResponse)
+def list_my_medication_sync_conflicts(
+    current_user: User = Depends(get_current_patient),
+    db: Session = Depends(get_db),
+) -> MedicationSyncConflictListResponse:
+    """Lista posibles duplicados pendientes de decision del paciente."""
+    return MedicationSyncConflictListResponse(
+        items=list_user_medication_sync_conflicts(db, current_user.id)
+    )
+
+
+@router.post("/sync-conflicts/{conflict_id}/resolve", response_model=MedicationRead | None)
+def resolve_my_medication_sync_conflict(
+    conflict_id: int,
+    payload: MedicationSyncConflictResolve,
+    current_user: User = Depends(get_current_patient),
+    db: Session = Depends(get_db),
+) -> MedicationRead | None:
+    """Resuelve un posible duplicado detectado durante la sincronizacion."""
+    try:
+        result = resolve_user_medication_sync_conflict(
+            db,
+            current_user.id,
+            conflict_id,
+            payload.resolution,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    if result is None and payload.resolution.value != "reject":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conflicto no encontrado")
+    return result
 
 
 @router.get("/trash", response_model=MedicationListResponse)

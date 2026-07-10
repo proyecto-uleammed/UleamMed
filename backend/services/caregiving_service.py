@@ -29,6 +29,8 @@ from backend.schemas.medication import (
     MedicationDoseEventCreate,
     MedicationDoseEventRead,
     MedicationRead,
+    MedicationSyncRequest,
+    MedicationSyncResponse,
     MedicationUpdate,
 )
 from backend.services.appointment_service import (
@@ -46,6 +48,7 @@ from backend.services.medication_service import (
     list_user_medications,
     record_dose_event,
     restore_user_medication,
+    sync_user_medication_actions,
     update_user_medication,
 )
 
@@ -352,6 +355,18 @@ def create_linked_patient_medication(
     if not _active_link_exists(db, caregiver_id, patient_id):
         return None
     return create_user_medication(db, patient_id, payload)
+
+
+def sync_linked_patient_medication_actions(
+    db: Session,
+    caregiver_id: int,
+    patient_id: int,
+    payload: MedicationSyncRequest,
+) -> MedicationSyncResponse | None:
+    """Sincroniza operaciones offline del cuidador para un paciente vinculado."""
+    if not _active_link_exists(db, caregiver_id, patient_id):
+        return None
+    return sync_user_medication_actions(db, patient_id, caregiver_id, payload)
 
 
 def update_linked_patient_medication(

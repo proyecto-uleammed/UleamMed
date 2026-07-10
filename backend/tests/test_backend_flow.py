@@ -339,6 +339,220 @@ class BackendIntegratedFlowTest(unittest.TestCase):
         self.assertEqual(events.status_code, 200)
         self.assertEqual(len(events.json()), 1)
 
+    def test_sync_offline_medicamentos_es_idempotente_y_resuelve_conflictos(
+        self,
+    ) -> None:
+        """Evita duplicados por reintentos y deja dudas para decision del paciente."""
+        access_token = self._create_user_and_token()
+        headers = {"Authorization": f"Bearer {access_token}"}
+        base_payload = {
+            "name": "Paracetamol",
+            "doseAmount": 500,
+            "doseUnit": "mg",
+            "schedule": {
+                "mode": "fixed_times",
+                "times": ["08:00"],
+                "weekdays": [1, 2, 3, 4, 5, 6, 7],
+                "start_date": "2026-07-10",
+            },
+        }
+
+        create_action = {
+            "client_operation_id": "op-paracetamol-crear-001",
+            "client_medication_id": "local-paracetamol-001",
+            "operation_type": "create_medication",
+            "created_at": "2026-07-10T08:00:00Z",
+            "payload": base_payload,
+        }
+        first = self.client.post(
+            "/api/v1/medications/sync",
+            headers=headers,
+            json={"actions": [create_action]},
+        )
+        second = self.client.post(
+            "/api/v1/medications/sync",
+            headers=headers,
+            json={"actions": [create_action]},
+        )
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(first.json()["results"][0]["status"], "synced")
+        self.assertEqual(second.json()["results"][0]["status"], "synced")
+        self.assertEqual(len(second.json()["items"]), 1)
+        paracetamol_id = first.json()["results"][0]["medication"]["id"]
+
+        duplicate = self.client.post(
+            "/api/v1/medications/sync",
+            headers=headers,
+            json={
+                "actions": [
+                    {
+                        "client_operation_id": "op-paracetamol-dup-001",
+                        "client_medication_id": "local-paracetamol-dup",
+                        "operation_type": "create_medication",
+                        "payload": {**base_payload, "name": "paracetamol"},
+                    }
+                ]
+            },
+        )
+        self.assertEqual(duplicate.status_code, 200)
+        self.assertEqual(
+            duplicate.json()["results"][0]["medication"]["id"],
+            paracetamol_id,
+        )
+        self.assertEqual(len(duplicate.json()["items"]), 1)
+
+        conflict = self.client.post(
+            "/api/v1/medications/sync",
+            headers=headers,
+            json={
+                "actions": [
+                    {
+                        "client_operation_id": "op-paracetamol-conflict-001",
+                        "client_medication_id": "local-paracetamol-conflict",
+                        "operation_type": "create_medication",
+                        "payload": {**base_payload, "doseAmount": 250},
+                    }
+                ]
+            },
+        )
+        self.assertEqual(conflict.status_code, 200)
+        self.assertEqual(conflict.json()["results"][0]["status"], "conflict")
+        conflict_id = conflict.json()["results"][0]["conflict"]["id"]
+
+        conflicts = self.client.get(
+            "/api/v1/medications/sync-conflicts",
+            headers=headers,
+        )
+        self.assertEqual(conflicts.status_code, 200)
+        self.assertEqual(len(conflicts.json()["items"]), 1)
+
+        resolved = self.client.post(
+            f"/api/v1/medications/sync-conflicts/{conflict_id}/resolve",
+            headers=headers,
+            json={"resolution": "create_separate"},
+        )
+        self.assertEqual(resolved.status_code, 200)
+        self.assertEqual(resolved.json()["dose"], "250 mg")
+
+        listed = self.client.get("/api/v1/medications", headers=headers)
+        self.assertEqual(len(listed.json()["items"]), 2)
+
+        delete_sync = self.client.post(
+            "/api/v1/medications/sync",
+            headers=headers,
+            json={
+                "actions": [
+                    {
+                        "client_operation_id": "op-paracetamol-delete-001",
+                        "client_medication_id": "local-paracetamol-001",
+                        "server_medication_id": paracetamol_id,
+                        "operation_type": "delete_medication",
+                        "payload": {},
+                    }
+                ]
+            },
+        )
+        self.assertEqual(delete_sync.status_code, 200)
+        self.assertEqual(delete_sync.json()["results"][0]["status"], "synced")
+        after_delete = self.client.get("/api/v1/medications", headers=headers)
+        self.assertNotIn(
+            paracetamol_id,
+            {item["id"] for item in after_delete.json()["items"]},
+        )
+
+    def test_sync_cuidador_vinculado_deduplica_y_respeta_permisos(self) -> None:
+        """El cuidador sincroniza solo con vinculo activo y no duplica medicamentos obvios."""
+        _, patient_token = self._create_account_and_token(
+            email="paciente-sync@uleam.edu.ec",
+            full_name="Paciente Sync",
+        )
+        _, caregiver_token = self._create_account_and_token(
+            email="cuidador-sync@uleam.edu.ec",
+            full_name="Cuidador Sync",
+            account_type="caregiver",
+        )
+        _, other_caregiver_token = self._create_account_and_token(
+            email="cuidador-sync-ajeno@uleam.edu.ec",
+            full_name="Cuidador Sync Ajeno",
+            account_type="caregiver",
+        )
+        patient_headers = {"Authorization": f"Bearer {patient_token}"}
+        caregiver_headers = {"Authorization": f"Bearer {caregiver_token}"}
+        other_headers = {"Authorization": f"Bearer {other_caregiver_token}"}
+
+        medication_payload = {
+            "name": "Omeprazol",
+            "doseAmount": 20,
+            "doseUnit": "mg",
+            "schedule": {
+                "mode": "fixed_times",
+                "times": ["14:00"],
+                "weekdays": [1, 2, 3, 4, 5, 6, 7],
+                "start_date": "2026-07-10",
+            },
+        }
+        patient_sync = self.client.post(
+            "/api/v1/medications/sync",
+            headers=patient_headers,
+            json={
+                "actions": [
+                    {
+                        "client_operation_id": "op-omeprazol-paciente-001",
+                        "client_medication_id": "local-omeprazol-paciente",
+                        "operation_type": "create_medication",
+                        "payload": medication_payload,
+                    }
+                ]
+            },
+        )
+        self.assertEqual(patient_sync.status_code, 200)
+        patient_medication_id = patient_sync.json()["results"][0]["medication"]["id"]
+
+        invitation = self.client.post(
+            "/api/v1/caregiving/invitations",
+            headers=patient_headers,
+        )
+        redeem = self.client.post(
+            "/api/v1/caregiving/invitations/redeem",
+            headers=caregiver_headers,
+            json={"code": invitation.json()["code"]},
+        )
+        approve = self.client.post(
+            f"/api/v1/caregiving/links/{redeem.json()['id']}/approve",
+            headers=patient_headers,
+        )
+        self.assertEqual(approve.status_code, 200)
+        patient_id = redeem.json()["counterpart_user_id"]
+
+        caregiver_sync = self.client.post(
+            f"/api/v1/caregiving/patients/{patient_id}/medications/sync",
+            headers=caregiver_headers,
+            json={
+                "actions": [
+                    {
+                        "client_operation_id": "op-omeprazol-cuidador-001",
+                        "client_medication_id": "local-omeprazol-cuidador",
+                        "operation_type": "create_medication",
+                        "payload": {**medication_payload, "name": "omeprazol"},
+                    }
+                ]
+            },
+        )
+        self.assertEqual(caregiver_sync.status_code, 200)
+        self.assertEqual(
+            caregiver_sync.json()["results"][0]["medication"]["id"],
+            patient_medication_id,
+        )
+        self.assertEqual(len(caregiver_sync.json()["items"]), 1)
+
+        forbidden = self.client.post(
+            f"/api/v1/caregiving/patients/{patient_id}/medications/sync",
+            headers=other_headers,
+            json={"actions": []},
+        )
+        self.assertEqual(forbidden.status_code, 404)
+
     def test_foto_de_medicamento_se_mantiene_privada_en_backend(self) -> None:
         """La foto pasa por FastAPI y no expone una URL publica."""
         access_token = self._create_user_and_token()

@@ -1,6 +1,7 @@
 from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
+from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -15,6 +16,26 @@ class MedicationDoseStatus(StrEnum):
     postponed = "postponed"
     omitted = "omitted"
     missed = "missed"
+
+
+class MedicationSyncOperationType(StrEnum):
+    create_medication = "create_medication"
+    update_medication = "update_medication"
+    delete_medication = "delete_medication"
+    dose_event = "dose_event"
+
+
+class MedicationSyncResultStatus(StrEnum):
+    synced = "synced"
+    conflict = "conflict"
+    skipped = "skipped"
+    failed = "failed"
+
+
+class MedicationSyncConflictResolution(StrEnum):
+    merge = "merge"
+    create_separate = "create_separate"
+    reject = "reject"
 
 
 class MedicationSchedulePayload(BaseModel):
@@ -69,6 +90,9 @@ class MedicationRead(BaseModel):
     isImportant: bool = True
     photoAvailable: bool = False
     schedule: MedicationScheduleRead
+    clientMedicationId: str | None = None
+    syncFingerprint: str | None = None
+    updatedAt: datetime | None = None
 
 
 class MedicationCreate(BaseModel):
@@ -84,6 +108,7 @@ class MedicationCreate(BaseModel):
     instructions: str | None = Field(default="", max_length=500)
     isImportant: bool = True
     schedule: MedicationSchedulePayload | None = None
+    clientMedicationId: str | None = Field(default=None, max_length=100)
 
     @model_validator(mode="after")
     def validate_dose(self) -> "MedicationCreate":
@@ -110,6 +135,7 @@ class MedicationUpdate(BaseModel):
     isImportant: bool | None = None
     taken: bool | None = None
     schedule: MedicationSchedulePayload | None = None
+    clientMedicationId: str | None = Field(default=None, max_length=100)
 
 
 class MedicationListResponse(BaseModel):
@@ -147,3 +173,50 @@ class MedicationDoseEventRead(BaseModel):
     status: MedicationDoseStatus
     acted_at: datetime | None = None
     snoozed_until: datetime | None = None
+
+
+class MedicationSyncAction(BaseModel):
+    client_operation_id: str = Field(..., min_length=8, max_length=100)
+    client_medication_id: str | None = Field(default=None, max_length=100)
+    server_medication_id: str | None = Field(default=None, max_length=40)
+    operation_type: MedicationSyncOperationType
+    created_at: datetime | None = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class MedicationSyncRequest(BaseModel):
+    actions: list[MedicationSyncAction] = Field(default_factory=list, max_length=100)
+
+
+class MedicationSyncConflictRead(BaseModel):
+    id: int
+    candidateMedicationId: str | None = None
+    incomingClientMedicationId: str | None = None
+    incomingMedicationName: str
+    candidateMedicationName: str | None = None
+    similarityScore: float
+    status: str
+    createdAt: datetime
+
+
+class MedicationSyncActionResult(BaseModel):
+    client_operation_id: str
+    client_medication_id: str | None = None
+    status: MedicationSyncResultStatus
+    medication: MedicationRead | None = None
+    conflict: MedicationSyncConflictRead | None = None
+    message: str = ""
+
+
+class MedicationSyncResponse(BaseModel):
+    results: list[MedicationSyncActionResult]
+    items: list[MedicationRead]
+    pending_conflicts: list[MedicationSyncConflictRead]
+
+
+class MedicationSyncConflictListResponse(BaseModel):
+    items: list[MedicationSyncConflictRead]
+
+
+class MedicationSyncConflictResolve(BaseModel):
+    resolution: MedicationSyncConflictResolution

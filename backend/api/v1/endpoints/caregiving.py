@@ -29,6 +29,8 @@ from backend.schemas.medication import (
     MedicationDoseEventRead,
     MedicationListResponse,
     MedicationRead,
+    MedicationSyncRequest,
+    MedicationSyncResponse,
     MedicationUpdate,
 )
 from backend.services.caregiving_service import (
@@ -55,6 +57,7 @@ from backend.services.caregiving_service import (
     reject_link,
     restore_linked_patient_medication,
     revoke_link,
+    sync_linked_patient_medication_actions,
     update_linked_patient_appointment,
     update_linked_patient_medication,
 )
@@ -227,6 +230,31 @@ def get_patient_medications(
             detail="Paciente no encontrado",
         )
     return MedicationListResponse(items=medications)
+
+
+@router.post(
+    "/patients/{patient_id}/medications/sync",
+    response_model=MedicationSyncResponse,
+)
+def sync_patient_medications(
+    patient_id: int,
+    payload: MedicationSyncRequest,
+    caregiver: User = Depends(get_current_caregiver),
+    db: Session = Depends(get_db),
+) -> MedicationSyncResponse:
+    """Sincroniza operaciones offline del cuidador sobre un paciente vinculado."""
+    result = sync_linked_patient_medication_actions(
+        db,
+        caregiver.id,
+        patient_id,
+        payload,
+    )
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Paciente no encontrado",
+        )
+    return result
 
 
 @router.get(

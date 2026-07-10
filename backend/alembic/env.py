@@ -23,6 +23,8 @@ from backend.models import medication_adherence_record as medication_adherence_r
 from backend.models import medication_catalog as medication_catalog_model
 from backend.models import medication_dose_event as medication_dose_event_model
 from backend.models import medication_schedule as medication_schedule_model
+from backend.models import medication_sync_conflict as medication_sync_conflict_model
+from backend.models import medication_sync_operation as medication_sync_operation_model
 from backend.models import notification as notification_model
 from backend.models import notification_recipient as notification_recipient_model
 from backend.models import older_adult as older_adult_model
@@ -50,6 +52,8 @@ _MODEL_MODULES = (
     medication_catalog_model,
     medication_dose_event_model,
     medication_schedule_model,
+    medication_sync_conflict_model,
+    medication_sync_operation_model,
     notification_model,
     notification_recipient_model,
     older_adult_model,

@@ -59,14 +59,12 @@ class _AppointmentsScreenState extends State<AppointmentsScreen>
   late final UleamMedApi _api = widget.api ?? ApiService();
   late Future<List<Appointment>> _appointments = _loadAppointments();
   int? _lastShellTabIndex;
-  late final TabController _tabController = TabController(
-    length: 2,
-    vsync: this,
-  )..addListener(() {
-      if (!_tabController.indexIsChanging) {
-        setState(() {});
-      }
-    });
+  late final TabController _tabController =
+      TabController(length: 2, vsync: this)..addListener(() {
+        if (!_tabController.indexIsChanging) {
+          setState(() {});
+        }
+      });
 
   @override
   void dispose() {
@@ -140,6 +138,9 @@ class _AppointmentsScreenState extends State<AppointmentsScreen>
     );
     if (saved == true && mounted) {
       await _refresh();
+      if (!mounted) {
+        return;
+      }
       showAppSnackBar(context, 'Consulta guardada');
     }
   }
@@ -306,9 +307,7 @@ class _AppointmentList extends StatelessWidget {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
         children: appointments
-            .map(
-              (a) => _AppointmentCard(appointment: a, onTap: () => onTap(a)),
-            )
+            .map((a) => _AppointmentCard(appointment: a, onTap: () => onTap(a)))
             .toList(),
       ),
     );
@@ -618,7 +617,6 @@ class _AppointmentFormState extends State<_AppointmentForm> {
     }
     final picked = await showTimePicker(
       context: context,
-      locale: _locale,
       initialTime: _time ?? TimeOfDay.now(),
       helpText: 'Seleccionar hora',
       cancelText: 'Cancelar',
@@ -637,11 +635,7 @@ class _AppointmentFormState extends State<_AppointmentForm> {
       );
       if (!selected.isAfter(DateTime.now())) {
         if (mounted) {
-          showAppSnackBar(
-            context,
-            'Selecciona una hora futura',
-            isError: true,
-          );
+          showAppSnackBar(context, 'Selecciona una hora futura', isError: true);
         }
         return;
       }
@@ -755,10 +749,10 @@ class _AppointmentFormState extends State<_AppointmentForm> {
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: const Icon(Icons.event),
-                title: Text(
-                  _date == null ? 'Sin fecha' : _formatDate(_date!),
+                title: Text(_date == null ? 'Sin fecha' : _formatDate(_date!)),
+                subtitle: Text(
+                  _time == null ? 'Sin hora' : _formatTime(_time!),
                 ),
-                subtitle: Text(_time == null ? 'Sin hora' : _formatTime(_time!)),
               ),
             ] else ...[
               Row(
@@ -767,7 +761,9 @@ class _AppointmentFormState extends State<_AppointmentForm> {
                     child: OutlinedButton.icon(
                       onPressed: _pickDate,
                       icon: const Icon(Icons.event),
-                      label: Text(_date == null ? 'Fecha' : _formatDate(_date!)),
+                      label: Text(
+                        _date == null ? 'Fecha' : _formatDate(_date!),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 8),
