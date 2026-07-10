@@ -549,6 +549,13 @@ class _FakeApi implements UleamMedApi {
   }
 
   @override
+  Future<List<DoseConfirmation>> listCaregiverPatientDoseEvents(
+    int patientId,
+  ) async {
+    return confirmations;
+  }
+
+  @override
   Future<int> pendingSyncCount() async {
     return medicalProfile.syncStatus == SyncStatus.pending ? 1 : 0;
   }

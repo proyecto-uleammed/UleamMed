@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../services/api_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_states.dart';
+import '../history_screen.dart';
 import '../medications_screen.dart';
 
 class CaregiverPatientMedicationsScreen extends StatefulWidget {
@@ -155,6 +156,21 @@ class _CaregiverPatientMedicationsScreenState
       appBar: AppBar(
         title: Text(widget.patient.fullName),
         actions: [
+          IconButton(
+            tooltip: 'Historial de tomas',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (context) => HistoryScreen(
+                    api: widget.api,
+                    patientId: widget.patient.id,
+                    title: 'Historial de ${widget.patient.fullName}',
+                  ),
+                ),
+              );
+            },
+            icon: const Icon(Icons.history),
+          ),
           IconButton(
             tooltip: 'Actualizar',
             onPressed: _reload,
@@ -327,6 +343,7 @@ class _CaregiverMedicationAvatar extends StatelessWidget {
         borderRadius: BorderRadius.circular(24),
         child: Image.file(
           File(medication.photoPath),
+          key: ValueKey(medication.photoPath),
           width: 48,
           height: 48,
           fit: BoxFit.cover,

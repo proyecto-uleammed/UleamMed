@@ -6,9 +6,16 @@ import '../widgets/app_states.dart';
 
 /// Historial de tomas y cumplimiento semanal (PB-029/030/032).
 class HistoryScreen extends StatefulWidget {
-  const HistoryScreen({super.key, this.api});
+  const HistoryScreen({
+    super.key,
+    this.api,
+    this.patientId,
+    this.title,
+  });
 
   final UleamMedApi? api;
+  final int? patientId;
+  final String? title;
 
   @override
   State<HistoryScreen> createState() => _HistoryScreenState();
@@ -16,15 +23,22 @@ class HistoryScreen extends StatefulWidget {
 
 class _HistoryScreenState extends State<HistoryScreen> {
   late final UleamMedApi _api = widget.api ?? ApiService();
-  late Future<List<DoseConfirmation>> _confirmations = _api
-      .listDoseConfirmations();
+  late Future<List<DoseConfirmation>> _confirmations = _loadConfirmations();
 
   DoseStatus? _statusFilter;
   String? _medicationFilter;
 
+  Future<List<DoseConfirmation>> _loadConfirmations() {
+    final patientId = widget.patientId;
+    if (patientId != null) {
+      return _api.listCaregiverPatientDoseEvents(patientId);
+    }
+    return _api.listDoseConfirmations();
+  }
+
   void _reload() {
     setState(() {
-      _confirmations = _api.listDoseConfirmations();
+      _confirmations = _loadConfirmations();
     });
   }
 
@@ -39,7 +53,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Historial'),
+        title: Text(widget.title ?? 'Historial'),
         actions: [
           IconButton(
             tooltip: 'Actualizar',
