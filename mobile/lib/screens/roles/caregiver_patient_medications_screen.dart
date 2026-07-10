@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../services/api_service.dart';
+import '../../theme/app_theme.dart';
 import '../../widgets/app_states.dart';
+import '../medications_screen.dart';
 
 class CaregiverPatientMedicationsScreen extends StatefulWidget {
   const CaregiverPatientMedicationsScreen({
@@ -22,6 +24,7 @@ class _CaregiverPatientMedicationsScreenState
     extends State<CaregiverPatientMedicationsScreen> {
   late Future<List<MedicationItem>> _medications = widget.api
       .listCaregiverPatientMedications(widget.patient.id);
+  final Set<String> _busyIds = {};
 
   void _reload() {
     setState(() {
@@ -31,10 +34,105 @@ class _CaregiverPatientMedicationsScreenState
     });
   }
 
+  Future<void> _openMedicationForm([MedicationItem? medication]) async {
+    final saved = await showMedicationEditorSheet(
+      context,
+      medication: medication,
+      onSave: (item) => widget.api.saveCaregiverPatientMedication(
+        widget.patient.id,
+        item,
+      ),
+      onDelete: medication == null
+          ? null
+          : () => widget.api.deleteCaregiverPatientMedication(
+              widget.patient.id,
+              medication.id,
+            ),
+    );
+
+    if (saved == true && mounted) {
+      _reload();
+      showAppSnackBar(
+        context,
+        medication == null
+            ? 'Medicamento agregado para ${widget.patient.fullName}'
+            : 'Medicamento actualizado',
+      );
+    }
+  }
+
+  Future<void> _deleteMedication(MedicationItem medication) async {
+    if (_busyIds.contains(medication.id)) {
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Eliminar medicamento'),
+        content: Text(
+          'Se eliminará ${medication.name} del perfil de ${widget.patient.fullName}.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(context).pop(true),
+            icon: const Icon(Icons.delete),
+            label: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) {
+      return;
+    }
+
+    setState(() => _busyIds.add(medication.id));
+
+    try {
+      await widget.api.deleteCaregiverPatientMedication(
+        widget.patient.id,
+        medication.id,
+      );
+      if (!mounted) {
+        return;
+      }
+      _reload();
+      showAppSnackBar(context, '${medication.name} eliminado');
+    } on ApiException catch (error) {
+      if (mounted) {
+        showAppSnackBar(context, error.message);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _busyIds.remove(medication.id));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.patient.fullName)),
+      appBar: AppBar(
+        title: Text(widget.patient.fullName),
+        actions: [
+          IconButton(
+            tooltip: 'Actualizar',
+            onPressed: _reload,
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'add-patient-medication',
+        onPressed: () => _openMedicationForm(),
+        icon: const Icon(Icons.add),
+        label: const Text('Agregar'),
+      ),
       body: FutureBuilder<List<MedicationItem>>(
         future: _medications,
         builder: (context, snapshot) {
@@ -49,17 +147,24 @@ class _CaregiverPatientMedicationsScreenState
             return const EmptyStateView(
               icon: Icons.medication_outlined,
               title: 'Sin medicamentos',
-              message: 'Este paciente no tiene medicamentos registrados.',
+              message:
+                  'Agrega el primer medicamento para que el paciente lo vea en su panel.',
             );
           }
           return RefreshIndicator(
             onRefresh: () async => _reload(),
             child: ListView.separated(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
               itemCount: medications.length,
               separatorBuilder: (_, _) => const SizedBox(height: 10),
               itemBuilder: (context, index) {
-                return _ReadOnlyMedicationCard(medication: medications[index]);
+                final medication = medications[index];
+                return _CaregiverMedicationCard(
+                  medication: medication,
+                  busy: _busyIds.contains(medication.id),
+                  onEdit: () => _openMedicationForm(medication),
+                  onDelete: () => _deleteMedication(medication),
+                );
               },
             ),
           );
@@ -69,28 +174,85 @@ class _CaregiverPatientMedicationsScreenState
   }
 }
 
-class _ReadOnlyMedicationCard extends StatelessWidget {
-  const _ReadOnlyMedicationCard({required this.medication});
+class _CaregiverMedicationCard extends StatelessWidget {
+  const _CaregiverMedicationCard({
+    required this.medication,
+    required this.busy,
+    required this.onEdit,
+    required this.onDelete,
+  });
 
   final MedicationItem medication;
+  final bool busy;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
     return Card(
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        leading: CircleAvatar(
-          child: Icon(medication.taken ? Icons.check : Icons.medication),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CircleAvatar(
+                  backgroundColor: AppColors.accent.withValues(alpha: 0.35),
+                  child: Icon(
+                    medication.taken ? Icons.check : Icons.medication,
+                    color: AppColors.primaryDark,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        medication.name,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 16,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text('${medication.dose} · ${medication.time}'),
+                      Text(medication.frequency),
+                      if (medication.instructions.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          medication.instructions,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                Chip(
+                  label: Text(medication.taken ? 'Tomado' : 'Pendiente'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton.icon(
+                  onPressed: busy ? null : onEdit,
+                  icon: const Icon(Icons.edit_outlined),
+                  label: const Text('Editar'),
+                ),
+                TextButton.icon(
+                  onPressed: busy ? null : onDelete,
+                  icon: const Icon(Icons.delete_outline),
+                  label: const Text('Eliminar'),
+                ),
+              ],
+            ),
+          ],
         ),
-        title: Text(
-          medication.name,
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-        subtitle: Text(
-          '${medication.dose} · ${medication.time}\n${medication.frequency}',
-        ),
-        isThreeLine: true,
-        trailing: Chip(label: Text(medication.taken ? 'Tomado' : 'Pendiente')),
       ),
     );
   }

@@ -523,6 +523,32 @@ class _FakeApi implements UleamMedApi {
   }
 
   @override
+  Future<MedicationItem> saveCaregiverPatientMedication(
+    int patientId,
+    MedicationItem medication,
+  ) async {
+    final saved = medication.copyWith(
+      id: medication.id == 'new-med' ? 'caregiver-med-1' : medication.id,
+      syncStatus: SyncStatus.synced,
+    );
+    final index = medications.indexWhere((item) => item.id == saved.id);
+    if (index >= 0) {
+      medications[index] = saved;
+    } else {
+      medications.add(saved);
+    }
+    return saved;
+  }
+
+  @override
+  Future<void> deleteCaregiverPatientMedication(
+    int patientId,
+    String medicationId,
+  ) async {
+    medications.removeWhere((item) => item.id == medicationId);
+  }
+
+  @override
   Future<int> pendingSyncCount() async {
     return medicalProfile.syncStatus == SyncStatus.pending ? 1 : 0;
   }

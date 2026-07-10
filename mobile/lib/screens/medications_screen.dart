@@ -102,24 +102,16 @@ class _MedicationsScreenState extends State<MedicationsScreen> {
   }
 
   Future<void> _openMedicationForm([MedicationItem? medication]) async {
-    final saved = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (context) {
-        return _MedicationForm(
-          medication: medication,
-          onSave: (item) async {
-            await _api.saveMedication(item);
-          },
-          onDelete: medication == null
-              ? null
-              : () async {
-                  await widget.notificationScheduler?.cancel(medication.id);
-                  await _api.deleteMedication(medication.id);
-                },
-        );
-      },
+    final saved = await showMedicationEditorSheet(
+      context,
+      medication: medication,
+      onSave: (item) => _api.saveMedication(item),
+      onDelete: medication == null
+          ? null
+          : () async {
+              await widget.notificationScheduler?.cancel(medication.id);
+              await _api.deleteMedication(medication.id);
+            },
     );
 
     if (saved == true && mounted) {
@@ -609,6 +601,26 @@ class _ConfirmationHistory extends StatelessWidget {
     final minute = date.minute.toString().padLeft(2, '0');
     return '${date.day}/${date.month}/${date.year} $hour:$minute';
   }
+}
+
+Future<bool?> showMedicationEditorSheet(
+  BuildContext context, {
+  MedicationItem? medication,
+  required Future<void> Function(MedicationItem medication) onSave,
+  Future<void> Function()? onDelete,
+}) {
+  return showModalBottomSheet<bool>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    builder: (context) {
+      return _MedicationForm(
+        medication: medication,
+        onSave: onSave,
+        onDelete: onDelete,
+      );
+    },
+  );
 }
 
 class _MedicationForm extends StatefulWidget {

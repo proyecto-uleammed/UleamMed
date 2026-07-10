@@ -162,7 +162,7 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
                   ActionCard(
                     icon: Icons.people,
                     title: 'Personas a cargo',
-                    subtitle: 'Vincular y consultar medicamentos',
+                    subtitle: 'Vincular pacientes y gestionar medicamentos',
                     color: AppColors.primary,
                     onTap: () => openRoleTab(context, 1),
                   ),
