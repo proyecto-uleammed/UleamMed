@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 
-import '../medication_trash_screen.dart';
+import 'medication_trash_screen.dart';
 import '../services/api_service.dart';
 import '../services/notification_scheduler.dart';
 import '../theme/app_theme.dart';

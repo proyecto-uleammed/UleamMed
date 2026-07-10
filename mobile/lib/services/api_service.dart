@@ -475,32 +475,6 @@ class ApiService implements UleamMedApi {
   }
 
   @override
-  Future<List<MedicationItem>> listDeletedMedications() async {
-    try {
-      final data = await _getAuthorizedJson(
-        Uri.parse('$_baseUrl/api/v1/medications/trash'),
-        fallback: 'No se pudo cargar la papelera',
-      );
-      return _decodeList(data, MedicationItem.fromJson);
-    } catch (_) {
-      return const [];
-    }
-  }
-
-  @override
-  Future<MedicationItem> restoreMedication(String medicationId) async {
-    final data = await _postAuthorizedJson(
-      Uri.parse('$_baseUrl/api/v1/medications/$medicationId/restore'),
-      fallback: 'No se pudo restaurar el medicamento',
-    );
-    final restored = MedicationItem.fromJson(
-      data,
-    ).copyWith(syncStatus: SyncStatus.synced);
-    await _localStore.upsertMedication(restored);
-    return restored;
-  }
-
-  @override
   Future<MedicationMarkResult> recordMedicationStatus(
     String medicationId,
     DoseStatus status,

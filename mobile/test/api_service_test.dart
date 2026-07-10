@@ -486,7 +486,7 @@ void main() {
                   'sequence_number': 1,
                 },
               ]),
-              statusCode: 200,
+              200,
               headers: {'content-type': 'application/json'},
             );
           }

@@ -538,7 +538,6 @@ class _AppointmentFormState extends State<_AppointmentForm> {
   Future<void> _pickTime() async {
     final picked = await showTimePicker(
       context: context,
-      locale: _locale,
       initialTime: _time ?? TimeOfDay.now(),
       helpText: 'Seleccionar hora',
       cancelText: 'Cancelar',
