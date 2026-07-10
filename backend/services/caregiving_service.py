@@ -31,7 +31,6 @@ from backend.services.medication_service import (
     get_user_medication_model,
     list_dose_events,
     list_user_medications,
-    medication_to_read,
     update_user_medication,
 )
 
