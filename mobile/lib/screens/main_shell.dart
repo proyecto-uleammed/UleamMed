@@ -5,6 +5,7 @@ import '../services/api_service.dart';
 import '../services/app_settings.dart';
 import '../services/notification_scheduler.dart';
 import '../services/permission_service.dart';
+import 'roles/admin_shell.dart';
 import 'roles/caregiver_shell.dart';
 import 'roles/patient_shell.dart';
 
@@ -43,6 +44,9 @@ class MainShell extends StatelessWidget {
     }
     if (role == AppRole.caregiver) {
       return CaregiverShell(api: api, onLogout: onLogout, settings: settings);
+    }
+    if (role == AppRole.admin) {
+      return AdminShell(api: api, onLogout: onLogout, settings: settings);
     }
     return _UnsupportedRoleScreen(role: role, onLogout: onLogout);
   }
