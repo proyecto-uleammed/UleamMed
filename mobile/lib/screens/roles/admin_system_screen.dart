@@ -17,10 +17,11 @@ class AdminSystemScreen extends StatefulWidget {
 class _AdminSystemScreenState extends State<AdminSystemScreen> {
   late Future<AppSession> _session = widget.api.loadAppSession();
 
-  void _reload() {
+  Future<void> _refresh() async {
     setState(() {
       _session = widget.api.loadAppSession();
     });
+    await _session;
   }
 
   void _showPendingAction(String action) {
@@ -36,13 +37,6 @@ class _AdminSystemScreenState extends State<AdminSystemScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Configuracion del sistema'),
-        actions: [
-          IconButton(
-            tooltip: 'Actualizar',
-            onPressed: _reload,
-            icon: const Icon(Icons.refresh),
-          ),
-        ],
       ),
       body: FutureBuilder<AppSession>(
         future: _session,
@@ -51,12 +45,16 @@ class _AdminSystemScreenState extends State<AdminSystemScreen> {
             return const LoadingView();
           }
           if (snapshot.hasError || !snapshot.hasData) {
-            return ErrorStateView(onRetry: _reload);
+            return RefreshableScrollView(
+              onRefresh: _refresh,
+              child: const ErrorStateView(),
+            );
           }
           final session = snapshot.data!;
           return RefreshIndicator(
-            onRefresh: () async => _reload(),
+            onRefresh: _refresh,
             child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
               children: [
                 Card(

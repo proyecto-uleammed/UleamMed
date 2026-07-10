@@ -207,6 +207,14 @@ abstract final class FormInputs {
     return null;
   }
 
+  static String? optionalBirthDateValidator(String? value) {
+    final typed = (value ?? '').trim();
+    if (typed.isEmpty) {
+      return null;
+    }
+    return birthDateValidator(value);
+  }
+
   static String? caregiverCodeValidator(String? value) {
     final normalized = (value ?? '')
         .replaceAll('-', '')

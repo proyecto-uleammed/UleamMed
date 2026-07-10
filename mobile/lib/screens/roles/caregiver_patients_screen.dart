@@ -29,10 +29,11 @@ class _CaregiverPatientsScreenState extends State<CaregiverPatientsScreen> {
     );
   }
 
-  void _reload() {
+  Future<void> _refresh() async {
     setState(() {
       _overview = _load();
     });
+    await _overview;
   }
 
   Future<void> _linkPatient() async {
@@ -41,7 +42,7 @@ class _CaregiverPatientsScreenState extends State<CaregiverPatientsScreen> {
       builder: (_) => _RedeemCodeDialog(api: widget.api),
     );
     if (linked == true && mounted) {
-      _reload();
+      await _refresh();
       showAppSnackBar(context, 'Solicitud enviada al paciente');
     }
   }
@@ -51,13 +52,6 @@ class _CaregiverPatientsScreenState extends State<CaregiverPatientsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Personas a cargo'),
-        actions: [
-          IconButton(
-            tooltip: 'Actualizar',
-            onPressed: _reload,
-            icon: const Icon(Icons.refresh),
-          ),
-        ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'link-patient',
@@ -72,23 +66,30 @@ class _CaregiverPatientsScreenState extends State<CaregiverPatientsScreen> {
             return const LoadingView();
           }
           if (snapshot.hasError) {
-            return ErrorStateView(onRetry: _reload);
+            return RefreshableScrollView(
+              onRefresh: _refresh,
+              child: const ErrorStateView(),
+            );
           }
           final overview = snapshot.data ?? const _CaregiverOverview();
           final pending = overview.links
               .where((link) => link.status == CaregiverLinkStatus.pending)
               .toList();
           if (overview.patients.isEmpty && pending.isEmpty) {
-            return const EmptyStateView(
-              icon: Icons.family_restroom,
-              title: 'Aún no cuidas a ningún paciente',
-              message:
-                  'Solicita el código del paciente para enviarle una solicitud.',
+            return RefreshableScrollView(
+              onRefresh: _refresh,
+              child: const EmptyStateView(
+                icon: Icons.family_restroom,
+                title: 'Aún no cuidas a ningún paciente',
+                message:
+                    'Solicita el código del paciente para enviarle una solicitud.',
+              ),
             );
           }
           return RefreshIndicator(
-            onRefresh: () async => _reload(),
+            onRefresh: _refresh,
             child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
               children: [
                 if (pending.isNotEmpty) ...[

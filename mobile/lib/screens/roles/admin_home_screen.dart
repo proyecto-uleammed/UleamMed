@@ -31,26 +31,26 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   late final Future<AppSession> _session = widget.api.loadAppSession();
   late AdminDashboardStats _stats = AdminPanelData.dashboardStats();
 
-  void _reloadStats() {
+  Future<void> _refreshAll() async {
     setState(() {
       _stats = AdminPanelData.dashboardStats();
+      _session = widget.api.loadAppSession();
     });
+    await _session;
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: CustomScrollView(
-        slivers: [
+      body: RefreshIndicator(
+        onRefresh: _refreshAll,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
           SliverAppBar(
             expandedHeight: 200,
             pinned: true,
             actions: [
-              IconButton(
-                tooltip: 'Actualizar',
-                onPressed: _reloadStats,
-                icon: const Icon(Icons.refresh),
-              ),
               IconButton(
                 tooltip: 'Ajustes',
                 onPressed: () => Navigator.push(
@@ -169,6 +169,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
             ),
           ),
         ],
+        ),
       ),
     );
   }

@@ -27,7 +27,9 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     query: _searchController.text,
   );
 
-  void _reload() => setState(() {});
+  Future<void> _refresh() async {
+    setState(() {});
+  }
 
   void _showPendingAction(String action) {
     showAppSnackBar(
@@ -43,13 +45,6 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Gestion de usuarios'),
-        actions: [
-          IconButton(
-            tooltip: 'Actualizar',
-            onPressed: _reload,
-            icon: const Icon(Icons.refresh),
-          ),
-        ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'admin-invite-user',
@@ -124,15 +119,19 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
           ),
           Expanded(
             child: users.isEmpty
-                ? const EmptyStateView(
-                    icon: Icons.manage_accounts_outlined,
-                    title: 'Sin resultados',
-                    message:
-                        'No hay usuarios que coincidan con la busqueda actual.',
+                ? RefreshableScrollView(
+                    onRefresh: _refresh,
+                    child: const EmptyStateView(
+                      icon: Icons.manage_accounts_outlined,
+                      title: 'Sin resultados',
+                      message:
+                          'No hay usuarios que coincidan con la busqueda actual.',
+                    ),
                   )
                 : RefreshIndicator(
-                    onRefresh: () async => _reload(),
+                    onRefresh: _refresh,
                     child: ListView.separated(
+                      physics: const AlwaysScrollableScrollPhysics(),
                       padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
                       itemCount: users.length,
                       separatorBuilder: (_, _) => const SizedBox(height: 10),

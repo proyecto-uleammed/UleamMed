@@ -30,26 +30,26 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
   late final Future<AppSession> _session = widget.api.loadAppSession();
   late Future<List<CaregiverLink>> _links = widget.api.listCaregivingLinks();
 
-  void _reloadLinks() {
+  Future<void> _refreshAll() async {
     setState(() {
       _links = widget.api.listCaregivingLinks();
+      _session = widget.api.loadAppSession();
     });
+    await Future.wait([_links, _session]);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: CustomScrollView(
-        slivers: [
+      body: RefreshIndicator(
+        onRefresh: _refreshAll,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
           SliverAppBar(
             expandedHeight: 200,
             pinned: true,
             actions: [
-              IconButton(
-                tooltip: 'Actualizar',
-                onPressed: _reloadLinks,
-                icon: const Icon(Icons.refresh),
-              ),
               IconButton(
                 tooltip: 'Ajustes',
                 onPressed: () => Navigator.push(
@@ -171,6 +171,7 @@ class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
             ),
           ),
         ],
+        ),
       ),
     );
   }

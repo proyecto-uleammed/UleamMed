@@ -61,6 +61,32 @@ Future<DateTime?> showBirthDatePicker({
   );
 }
 
+/// Fecha aproximada opcional para condiciones o alergias (sin fechas futuras).
+Future<DateTime?> showApproxHealthDatePicker({
+  required BuildContext context,
+  DateTime? initialDate,
+}) {
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  var selected = initialDate ?? today;
+  if (selected.isAfter(today)) {
+    selected = today;
+  }
+  if (selected.year < 1900) {
+    selected = DateTime(1900, selected.month, selected.day);
+  }
+  return showDatePicker(
+    context: context,
+    locale: _locale,
+    initialDate: selected,
+    firstDate: DateTime(1900),
+    lastDate: today,
+    helpText: 'Fecha aproximada',
+    cancelText: 'Cancelar',
+    confirmText: 'Aceptar',
+  );
+}
+
 String formatBirthDate(DateTime date) {
   final day = date.day.toString().padLeft(2, '0');
   final month = date.month.toString().padLeft(2, '0');

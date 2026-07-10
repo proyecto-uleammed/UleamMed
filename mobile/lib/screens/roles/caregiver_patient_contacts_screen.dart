@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/api_service.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/phone_launch_utils.dart';
 import '../../widgets/app_states.dart';
 
 class CaregiverPatientContactsScreen extends StatefulWidget {
@@ -68,7 +69,10 @@ class _CaregiverPatientContactsScreenState
             return const LoadingView();
           }
           if (snapshot.hasError) {
-            return ErrorStateView(onRetry: _reload);
+            return RefreshableScrollView(
+              onRefresh: _refresh,
+              child: const ErrorStateView(),
+            );
           }
 
           final data = snapshot.data ?? const _ContactsData();
@@ -226,9 +230,22 @@ class _ContactCard extends StatelessWidget {
         ),
         title: Text(name.isEmpty ? 'Sin nombre' : name),
         subtitle: Text('$relationship · ${phone.isEmpty ? 'Sin telefono' : phone}'),
-        trailing: isPrimary
-            ? const Chip(label: Text('Principal'))
-            : null,
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (isPrimary) const Chip(label: Text('Principal')),
+            IconButton(
+              tooltip: 'Llamar',
+              onPressed: () => confirmAndCallPhone(
+                context,
+                rawPhone: phone,
+                contactName: name,
+              ),
+              icon: const Icon(Icons.phone, color: AppColors.primary, size: 28),
+              style: IconButton.styleFrom(backgroundColor: AppColors.surface),
+            ),
+          ],
+        ),
       ),
     );
   }

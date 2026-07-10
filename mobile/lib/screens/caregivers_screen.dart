@@ -18,10 +18,11 @@ class _CaregiversScreenState extends State<CaregiversScreen> {
   late Future<List<CaregiverLink>> _links = widget.api.listCaregivingLinks();
   bool _generatingCode = false;
 
-  void _reload() {
+  Future<void> _refresh() async {
     setState(() {
       _links = widget.api.listCaregivingLinks();
     });
+    await _links;
   }
 
   Future<void> _generateCode() async {
@@ -159,7 +160,7 @@ class _CaregiversScreenState extends State<CaregiversScreen> {
       if (!mounted) {
         return;
       }
-      _reload();
+      await _refresh();
       showAppSnackBar(context, successMessage);
     } on ApiException catch (error) {
       if (mounted) {
@@ -173,13 +174,6 @@ class _CaregiversScreenState extends State<CaregiversScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Cuidadores'),
-        actions: [
-          IconButton(
-            tooltip: 'Actualizar',
-            onPressed: _reload,
-            icon: const Icon(Icons.refresh),
-          ),
-        ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'generate-caregiver-code',
@@ -200,7 +194,10 @@ class _CaregiversScreenState extends State<CaregiversScreen> {
             return const LoadingView();
           }
           if (snapshot.hasError) {
-            return ErrorStateView(onRetry: _reload);
+            return RefreshableScrollView(
+              onRefresh: _refresh,
+              child: const ErrorStateView(),
+            );
           }
           final visibleLinks = (snapshot.data ?? const [])
               .where(
@@ -210,16 +207,20 @@ class _CaregiversScreenState extends State<CaregiversScreen> {
               )
               .toList();
           if (visibleLinks.isEmpty) {
-            return const EmptyStateView(
-              icon: Icons.family_restroom,
-              title: 'Aún no tienes cuidadores',
-              message:
-                  'Genera un código y compártelo con la persona que te ayudará.',
+            return RefreshableScrollView(
+              onRefresh: _refresh,
+              child: const EmptyStateView(
+                icon: Icons.family_restroom,
+                title: 'Aún no tienes cuidadores',
+                message:
+                    'Genera un código y compártelo con la persona que te ayudará.',
+              ),
             );
           }
           return RefreshIndicator(
-            onRefresh: () async => _reload(),
+            onRefresh: _refresh,
             child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
               children: [
                 Text(

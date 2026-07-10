@@ -95,7 +95,7 @@ class ErrorStateView extends StatelessWidget {
   const ErrorStateView({
     super.key,
     this.title = 'Algo salio mal',
-    this.message = 'Vuelve a intentar en un momento.',
+    this.message = 'Desliza hacia abajo para reintentar.',
     this.onRetry,
   });
 

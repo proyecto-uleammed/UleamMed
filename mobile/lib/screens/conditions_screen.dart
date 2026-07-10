@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/form_inputs.dart';
+import '../utils/phone_launch_utils.dart';
+import '../utils/time_picker_utils.dart';
 import '../widgets/app_states.dart';
 
 /// Enfermedades, condiciones y alergias con nivel de severidad
@@ -116,7 +118,10 @@ class _ConditionsScreenState extends State<ConditionsScreen> {
             return const LoadingView();
           }
           if (snapshot.hasError) {
-            return ErrorStateView(onRetry: _reload);
+            return RefreshableScrollView(
+              onRefresh: _refresh,
+              child: const ErrorStateView(),
+            );
           }
 
           if (_notShared) {
@@ -502,6 +507,18 @@ class _HealthEntryFormState extends State<_HealthEntryForm> {
     super.dispose();
   }
 
+  Future<void> _pickApproxDate() async {
+    final picked = await showApproxHealthDatePicker(
+      context: context,
+      initialDate: parseBirthDate(_dateController.text),
+    );
+    if (picked != null && mounted) {
+      setState(() {
+        _dateController.text = formatBirthDate(picked);
+      });
+    }
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) {
       return;
@@ -648,14 +665,22 @@ class _HealthEntryFormState extends State<_HealthEntryForm> {
             const SizedBox(height: 12),
             TextFormField(
               controller: _dateController,
-              maxLength: 30,
-              decoration: const InputDecoration(
+              readOnly: true,
+              onTap: _pickApproxDate,
+              decoration: InputDecoration(
                 labelText: 'Fecha aproximada (opcional)',
-                hintText: 'Ej. 2020 o Marzo 2021',
-                prefixIcon: Icon(Icons.event),
-                border: OutlineInputBorder(),
+                hintText: 'DD/MM/AAAA',
+                prefixIcon: const Icon(Icons.event),
+                border: const OutlineInputBorder(),
+                suffixIcon: _dateController.text.isEmpty
+                    ? null
+                    : IconButton(
+                        tooltip: 'Quitar fecha',
+                        onPressed: () => setState(() => _dateController.clear()),
+                        icon: const Icon(Icons.clear),
+                      ),
               ),
-              validator: FormInputs.approxDateValidator,
+              validator: FormInputs.optionalBirthDateValidator,
             ),
             if (!_isAllergy)
               SwitchListTile(

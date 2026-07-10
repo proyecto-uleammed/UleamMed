@@ -14,7 +14,7 @@ class AdminReportsScreen extends StatefulWidget {
 class _AdminReportsScreenState extends State<AdminReportsScreen> {
   late AdminDashboardStats _stats = AdminPanelData.dashboardStats();
 
-  void _reload() {
+  Future<void> _refresh() async {
     setState(() {
       _stats = AdminPanelData.dashboardStats();
     });
@@ -25,17 +25,11 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Reportes'),
-        actions: [
-          IconButton(
-            tooltip: 'Actualizar',
-            onPressed: _reload,
-            icon: const Icon(Icons.refresh),
-          ),
-        ],
       ),
       body: RefreshIndicator(
-        onRefresh: () async => _reload(),
+        onRefresh: _refresh,
         child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
           children: [
             Text(

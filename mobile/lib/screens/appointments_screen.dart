@@ -212,9 +212,11 @@ class _AppointmentsScreenState extends State<AppointmentsScreen>
             return const LoadingView(message: 'Cargando consultas...');
           }
           if (snapshot.hasError) {
-            return ErrorStateView(
-              title: 'No se pudieron cargar las consultas',
-              onRetry: _reload,
+            return RefreshableScrollView(
+              onRefresh: _refresh,
+              child: const ErrorStateView(
+                title: 'No se pudieron cargar las consultas',
+              ),
             );
           }
 

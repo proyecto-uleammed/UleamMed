@@ -30,12 +30,13 @@ class _CaregiverPatientMedicationsScreenState
       .listCaregiverPatientMedications(widget.patient.id);
   final Set<String> _busyIds = {};
 
-  void _reload() {
+  Future<void> _refresh() async {
     setState(() {
       _medications = widget.api.listCaregiverPatientMedications(
         widget.patient.id,
       );
     });
+    await _medications;
   }
 
   Future<void> _openMedicationForm([MedicationItem? medication]) async {
@@ -55,7 +56,7 @@ class _CaregiverPatientMedicationsScreenState
     );
 
     if (saved == true && mounted) {
-      _reload();
+      await _refresh();
       showAppSnackBar(
         context,
         medication == null
@@ -90,7 +91,7 @@ class _CaregiverPatientMedicationsScreenState
       if (!mounted) {
         return;
       }
-      _reload();
+      await _refresh();
       showAppSnackBar(
         context,
         medication.taken
@@ -148,7 +149,7 @@ class _CaregiverPatientMedicationsScreenState
       if (!mounted) {
         return;
       }
-      _reload();
+      await _refresh();
       showAppSnackBar(context, '${medication.name} eliminado');
     } on ApiException catch (error) {
       if (mounted) {
@@ -197,11 +198,6 @@ class _CaregiverPatientMedicationsScreenState
             },
             icon: const Icon(Icons.history),
           ),
-          IconButton(
-            tooltip: 'Actualizar',
-            onPressed: _reload,
-            icon: const Icon(Icons.refresh),
-          ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
@@ -217,20 +213,27 @@ class _CaregiverPatientMedicationsScreenState
             return const LoadingView();
           }
           if (snapshot.hasError) {
-            return ErrorStateView(onRetry: _reload);
+            return RefreshableScrollView(
+              onRefresh: _refresh,
+              child: const ErrorStateView(),
+            );
           }
           final medications = snapshot.data ?? const [];
           if (medications.isEmpty) {
-            return const EmptyStateView(
-              icon: Icons.medication_outlined,
-              title: 'Sin medicamentos',
-              message:
-                  'Agrega el primer medicamento para que el paciente lo vea en su panel.',
+            return RefreshableScrollView(
+              onRefresh: _refresh,
+              child: const EmptyStateView(
+                icon: Icons.medication_outlined,
+                title: 'Sin medicamentos',
+                message:
+                    'Agrega el primer medicamento para que el paciente lo vea en su panel.',
+              ),
             );
           }
           return RefreshIndicator(
-            onRefresh: () async => _reload(),
+            onRefresh: _refresh,
             child: ListView.separated(
+              physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
               itemCount: medications.length,
               separatorBuilder: (_, _) => const SizedBox(height: 10),
