@@ -304,6 +304,14 @@ class _FakeApi implements UleamMedApi {
   }
 
   @override
+  Future<List<MedicationItem>> listDeletedMedications() async => const [];
+
+  @override
+  Future<MedicationItem> restoreMedication(String medicationId) async {
+    return medications.firstWhere((item) => item.id == medicationId);
+  }
+
+  @override
   Future<MedicationMarkResult> markMedicationTaken(String medicationId) async {
     return recordMedicationStatus(medicationId, DoseStatus.taken);
   }
@@ -553,6 +561,50 @@ class _FakeApi implements UleamMedApi {
     int patientId,
   ) async {
     return confirmations;
+  }
+
+  @override
+  Future<void> recordCaregiverPatientDoseEvent({
+    required int patientId,
+    required String medicationId,
+    required DoseStatus status,
+    required DateTime scheduledAt,
+    required int sequenceNumber,
+    DateTime? snoozedUntil,
+  }) async {}
+
+  @override
+  Future<List<MedicationItem>> listCaregiverPatientDeletedMedications(
+    int patientId,
+  ) async => const [];
+
+  @override
+  Future<MedicationItem> restoreCaregiverPatientMedication(
+    int patientId,
+    String medicationId,
+  ) async {
+    return medications.firstWhere((item) => item.id == medicationId);
+  }
+
+  @override
+  Future<List<Appointment>> listCaregiverPatientAppointments(int patientId) async {
+    return appointments;
+  }
+
+  @override
+  Future<Appointment> saveCaregiverPatientAppointment(
+    int patientId,
+    Appointment appointment,
+  ) async {
+    return saveAppointment(appointment);
+  }
+
+  @override
+  Future<void> deleteCaregiverPatientAppointment(
+    int patientId,
+    String appointmentId,
+  ) async {
+    return deleteAppointment(appointmentId);
   }
 
   @override

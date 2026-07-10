@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../medication_trash_screen.dart';
 import '../services/api_service.dart';
 import '../services/notification_scheduler.dart';
 import '../theme/app_theme.dart';
@@ -239,6 +240,17 @@ class _MedicationsScreenState extends State<MedicationsScreen> {
       appBar: AppBar(
         title: const Text('Medicamentos'),
         actions: [
+          IconButton(
+            tooltip: 'Papelera',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (context) => MedicationTrashScreen(api: _api),
+                ),
+              );
+            },
+            icon: const Icon(Icons.delete_outline),
+          ),
           IconButton(
             tooltip: 'Actualizar',
             onPressed: _reload,

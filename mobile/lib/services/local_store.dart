@@ -43,6 +43,8 @@ class LocalStore {
   static const _medicationsKey = 'uleammed_medications';
   static const _confirmationsKey = 'uleammed_dose_confirmations';
   static const _appointmentsKey = 'uleammed_appointments';
+  static const _caregiverPatientAppointmentsPrefix =
+      'uleammed_caregiver_patient_appointments_';
   static const _emergencyContactsKey = 'uleammed_emergency_contacts';
   static const _legacyCaregiverPermissionsKey =
       'uleammed_caregiver_permissions';
@@ -199,6 +201,54 @@ class LocalStore {
     await saveAppointments(
       appointments.where((item) => item.id != id).toList(),
     );
+  }
+
+  Future<List<Appointment>> readCaregiverPatientAppointments(int patientId) {
+    return _readList(
+      _caregiverPatientAppointmentsKey(patientId),
+      (json) => Appointment.fromJson(json),
+    );
+  }
+
+  Future<void> saveCaregiverPatientAppointments(
+    int patientId,
+    List<Appointment> appointments,
+  ) {
+    return _writeList(
+      _caregiverPatientAppointmentsKey(patientId),
+      appointments.map((appointment) => appointment.toJson()).toList(),
+    );
+  }
+
+  Future<Appointment> upsertCaregiverPatientAppointment(
+    int patientId,
+    Appointment appointment,
+  ) async {
+    final normalized = appointment.copyWith(syncStatus: SyncStatus.pending);
+    final appointments = await readCaregiverPatientAppointments(patientId);
+    final index = appointments.indexWhere((item) => item.id == normalized.id);
+    if (index >= 0) {
+      appointments[index] = normalized;
+    } else {
+      appointments.add(normalized);
+    }
+    await saveCaregiverPatientAppointments(patientId, appointments);
+    return normalized;
+  }
+
+  Future<void> deleteCaregiverPatientAppointment(
+    int patientId,
+    String id,
+  ) async {
+    final appointments = await readCaregiverPatientAppointments(patientId);
+    await saveCaregiverPatientAppointments(
+      patientId,
+      appointments.where((item) => item.id != id).toList(),
+    );
+  }
+
+  String _caregiverPatientAppointmentsKey(int patientId) {
+    return _key('$_caregiverPatientAppointmentsPrefix$patientId');
   }
 
   Future<List<EmergencyContact>> readEmergencyContacts() {

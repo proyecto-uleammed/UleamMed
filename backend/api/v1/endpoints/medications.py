@@ -20,11 +20,13 @@ from backend.services.medication_service import (
     create_user_medication,
     delete_user_medication,
     get_user_medication_model,
+    list_deleted_user_medications,
     list_dose_events,
     list_user_medications,
     mark_user_medication_taken,
     medication_to_read,
     record_dose_event,
+    restore_user_medication,
     update_user_medication,
 )
 from backend.services.medication_photo_service import (
@@ -71,6 +73,33 @@ def list_my_dose_events(
 ) -> list[MedicationDoseEventRead]:
     """Lista eventos de toma del paciente autenticado."""
     return list_dose_events(db, current_user.id, start=start, end=end)
+
+
+@router.get("/trash", response_model=MedicationListResponse)
+def list_my_deleted_medications(
+    current_user: User = Depends(get_current_patient),
+    db: Session = Depends(get_db),
+) -> MedicationListResponse:
+    """Lista medicamentos eliminados logicamente del paciente autenticado."""
+    return MedicationListResponse(
+        items=list_deleted_user_medications(db, current_user.id)
+    )
+
+
+@router.post("/{medication_id}/restore", response_model=MedicationRead)
+def restore_my_medication(
+    medication_id: int,
+    current_user: User = Depends(get_current_patient),
+    db: Session = Depends(get_db),
+) -> MedicationRead:
+    """Restaura un medicamento eliminado logicamente."""
+    medication = restore_user_medication(db, current_user.id, medication_id)
+    if medication is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Medicamento no encontrado en la papelera",
+        )
+    return medication
 
 
 @router.patch("/{medication_id}", response_model=MedicationRead)

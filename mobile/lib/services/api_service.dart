@@ -39,6 +39,8 @@ abstract class UleamMedApi {
   Future<List<MedicationItem>> listMedications();
   Future<MedicationItem> saveMedication(MedicationItem medication);
   Future<void> deleteMedication(String medicationId);
+  Future<List<MedicationItem>> listDeletedMedications();
+  Future<MedicationItem> restoreMedication(String medicationId);
   Future<MedicationMarkResult> markMedicationTaken(String medicationId);
   Future<MedicationMarkResult> recordMedicationStatus(
     String medicationId,
@@ -81,7 +83,31 @@ abstract class UleamMedApi {
     int patientId,
     String medicationId,
   );
+  Future<void> recordCaregiverPatientDoseEvent({
+    required int patientId,
+    required String medicationId,
+    required DoseStatus status,
+    required DateTime scheduledAt,
+    required int sequenceNumber,
+    DateTime? snoozedUntil,
+  });
+  Future<List<MedicationItem>> listCaregiverPatientDeletedMedications(
+    int patientId,
+  );
+  Future<MedicationItem> restoreCaregiverPatientMedication(
+    int patientId,
+    String medicationId,
+  );
   Future<List<DoseConfirmation>> listCaregiverPatientDoseEvents(int patientId);
+  Future<List<Appointment>> listCaregiverPatientAppointments(int patientId);
+  Future<Appointment> saveCaregiverPatientAppointment(
+    int patientId,
+    Appointment appointment,
+  );
+  Future<void> deleteCaregiverPatientAppointment(
+    int patientId,
+    String appointmentId,
+  );
   Future<int> pendingSyncCount();
   Future<SyncSummary> synchronizePendingChanges();
 }
@@ -288,6 +314,32 @@ class ApiService implements UleamMedApi {
   }
 
   @override
+  Future<List<MedicationItem>> listDeletedMedications() async {
+    try {
+      final data = await _getAuthorizedJson(
+        Uri.parse('$_baseUrl/api/v1/medications/trash'),
+        fallback: 'No se pudo cargar la papelera',
+      );
+      return _decodeList(data, MedicationItem.fromJson);
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  @override
+  Future<MedicationItem> restoreMedication(String medicationId) async {
+    final data = await _postAuthorizedJson(
+      Uri.parse('$_baseUrl/api/v1/medications/$medicationId/restore'),
+      fallback: 'No se pudo restaurar el medicamento',
+    );
+    final restored = MedicationItem.fromJson(
+      data,
+    ).copyWith(syncStatus: SyncStatus.synced);
+    await _localStore.upsertMedication(restored);
+    return restored;
+  }
+
+  @override
   Future<MedicationMarkResult> markMedicationTaken(String medicationId) async {
     return recordMedicationStatus(medicationId, DoseStatus.taken);
   }
@@ -408,7 +460,6 @@ class ApiService implements UleamMedApi {
   @override
   Future<void> deleteMedication(String medicationId) async {
     await _localStore.deleteMedication(medicationId);
-    await _localStore.deleteDoseConfirmationsForMedication(medicationId);
     final isBackendId = _isPersistedBackendId(medicationId);
     if (!isBackendId) {
       return;
@@ -421,6 +472,32 @@ class ApiService implements UleamMedApi {
     } catch (_) {
       // La eliminacion local se conserva para no bloquear el flujo offline.
     }
+  }
+
+  @override
+  Future<List<MedicationItem>> listDeletedMedications() async {
+    try {
+      final data = await _getAuthorizedJson(
+        Uri.parse('$_baseUrl/api/v1/medications/trash'),
+        fallback: 'No se pudo cargar la papelera',
+      );
+      return _decodeList(data, MedicationItem.fromJson);
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  @override
+  Future<MedicationItem> restoreMedication(String medicationId) async {
+    final data = await _postAuthorizedJson(
+      Uri.parse('$_baseUrl/api/v1/medications/$medicationId/restore'),
+      fallback: 'No se pudo restaurar el medicamento',
+    );
+    final restored = MedicationItem.fromJson(
+      data,
+    ).copyWith(syncStatus: SyncStatus.synced);
+    await _localStore.upsertMedication(restored);
+    return restored;
   }
 
   @override
@@ -721,6 +798,88 @@ class ApiService implements UleamMedApi {
         '$_baseUrl/api/v1/caregiving/patients/$patientId/medications/$medicationId',
       ),
       fallback: 'No se pudo eliminar el medicamento',
+    );
+  }
+
+  @override
+  Future<void> recordCaregiverPatientDoseEvent({
+    required int patientId,
+    required String medicationId,
+    required DoseStatus status,
+    required DateTime scheduledAt,
+    required int sequenceNumber,
+    DateTime? snoozedUntil,
+  }) async {
+    final recordedAt = DateTime.now();
+    await _postAuthorizedJson(
+      Uri.parse(
+        '$_baseUrl/api/v1/caregiving/patients/$patientId/medications/$medicationId/dose-events',
+      ),
+      body: {
+        'client_event_id':
+            'caregiver-$medicationId-${scheduledAt.toUtc().millisecondsSinceEpoch}',
+        'scheduled_at': scheduledAt.toUtc().toIso8601String(),
+        'sequence_number': sequenceNumber,
+        'status': status.name,
+        'acted_at': recordedAt.toUtc().toIso8601String(),
+        'snoozed_until': snoozedUntil?.toUtc().toIso8601String(),
+      },
+      fallback: 'No se pudo registrar la toma',
+    );
+  }
+
+  @override
+  Future<List<MedicationItem>> listCaregiverPatientDeletedMedications(
+    int patientId,
+  ) async {
+    try {
+      final data = await _getAuthorizedJson(
+        Uri.parse(
+          '$_baseUrl/api/v1/caregiving/patients/$patientId/medications/trash',
+        ),
+        fallback: 'No se pudo cargar la papelera',
+      );
+      return _decodeList(data, MedicationItem.fromJson);
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  @override
+  Future<MedicationItem> restoreCaregiverPatientMedication(
+    int patientId,
+    String medicationId,
+  ) async {
+    final data = await _postAuthorizedJson(
+      Uri.parse(
+        '$_baseUrl/api/v1/caregiving/patients/$patientId/medications/$medicationId/restore',
+      ),
+      fallback: 'No se pudo restaurar el medicamento',
+    );
+    return MedicationItem.fromJson(data).copyWith(syncStatus: SyncStatus.synced);
+  }
+
+  @override
+  Future<List<Appointment>> listCaregiverPatientAppointments(int patientId) {
+    return _localStore.readCaregiverPatientAppointments(patientId);
+  }
+
+  @override
+  Future<Appointment> saveCaregiverPatientAppointment(
+    int patientId,
+    Appointment appointment,
+  ) {
+    return _localStore.upsertCaregiverPatientAppointment(patientId, appointment);
+  }
+
+  @override
+  Future<void> deleteCaregiverPatientAppointment(
+    int patientId,
+    String appointmentId,
+  ) {
+    return _localStore.deleteCaregiverPatientAppointment(
+      patientId,
+      appointmentId,
     );
   }
 

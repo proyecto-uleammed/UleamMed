@@ -6,6 +6,7 @@ import '../../services/api_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_states.dart';
 import '../history_screen.dart';
+import '../medication_trash_screen.dart';
 import '../medications_screen.dart';
 
 class CaregiverPatientMedicationsScreen extends StatefulWidget {
@@ -72,10 +73,20 @@ class _CaregiverPatientMedicationsScreenState
     setState(() => _busyIds.add(medication.id));
 
     try {
-      await widget.api.saveCaregiverPatientMedication(
-        widget.patient.id,
-        medication.copyWith(taken: !medication.taken),
-      );
+      if (!medication.taken) {
+        await widget.api.recordCaregiverPatientDoseEvent(
+          patientId: widget.patient.id,
+          medicationId: medication.id,
+          status: DoseStatus.taken,
+          scheduledAt: DateTime.now(),
+          sequenceNumber: 1,
+        );
+      } else {
+        await widget.api.saveCaregiverPatientMedication(
+          widget.patient.id,
+          medication.copyWith(taken: false),
+        );
+      }
       if (!mounted) {
         return;
       }
@@ -156,6 +167,21 @@ class _CaregiverPatientMedicationsScreenState
       appBar: AppBar(
         title: Text(widget.patient.fullName),
         actions: [
+          IconButton(
+            tooltip: 'Papelera',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (context) => MedicationTrashScreen(
+                    api: widget.api,
+                    patientId: widget.patient.id,
+                    title: 'Papelera de ${widget.patient.fullName}',
+                  ),
+                ),
+              );
+            },
+            icon: const Icon(Icons.delete_outline),
+          ),
           IconButton(
             tooltip: 'Historial de tomas',
             onPressed: () {

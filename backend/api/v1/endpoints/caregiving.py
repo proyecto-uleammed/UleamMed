@@ -19,6 +19,7 @@ from backend.schemas.caregiving import (
 )
 from backend.schemas.medication import (
     MedicationCreate,
+    MedicationDoseEventCreate,
     MedicationDoseEventRead,
     MedicationListResponse,
     MedicationRead,
@@ -36,11 +37,14 @@ from backend.services.caregiving_service import (
     delete_linked_patient_medication,
     get_linked_patient_medication,
     list_caregiver_patients,
+    list_linked_patient_deleted_medications,
     list_linked_patient_dose_events,
     list_linked_patient_medications,
     list_links,
+    record_linked_patient_dose_event,
     redeem_invitation,
     reject_link,
+    restore_linked_patient_medication,
     revoke_link,
     update_linked_patient_medication,
 )
@@ -240,6 +244,87 @@ def get_patient_medication_dose_events(
             detail="Paciente no encontrado",
         )
     return events
+
+
+@router.get(
+    "/patients/{patient_id}/medications/trash",
+    response_model=MedicationListResponse,
+)
+def get_patient_deleted_medications(
+    patient_id: int,
+    caregiver: User = Depends(get_current_caregiver),
+    db: Session = Depends(get_db),
+) -> MedicationListResponse:
+    """Lista medicamentos eliminados del paciente vinculado activo."""
+    medications = list_linked_patient_deleted_medications(
+        db,
+        caregiver.id,
+        patient_id,
+    )
+    if medications is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Paciente no encontrado",
+        )
+    return MedicationListResponse(items=medications)
+
+
+@router.post(
+    "/patients/{patient_id}/medications/{medication_id}/dose-events",
+    response_model=MedicationDoseEventRead,
+)
+def record_patient_medication_dose_event(
+    patient_id: int,
+    medication_id: int,
+    payload: MedicationDoseEventCreate,
+    caregiver: User = Depends(get_current_caregiver),
+    db: Session = Depends(get_db),
+) -> MedicationDoseEventRead:
+    """Registra una toma del paciente vinculado activo."""
+    try:
+        event = record_linked_patient_dose_event(
+            db,
+            caregiver.id,
+            patient_id,
+            medication_id,
+            payload,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    if event is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Medicamento no encontrado",
+        )
+    return event
+
+
+@router.post(
+    "/patients/{patient_id}/medications/{medication_id}/restore",
+    response_model=MedicationRead,
+)
+def restore_patient_medication(
+    patient_id: int,
+    medication_id: int,
+    caregiver: User = Depends(get_current_caregiver),
+    db: Session = Depends(get_db),
+) -> MedicationRead:
+    """Restaura un medicamento eliminado del paciente vinculado activo."""
+    medication = restore_linked_patient_medication(
+        db,
+        caregiver.id,
+        patient_id,
+        medication_id,
+    )
+    if medication is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Medicamento no encontrado en la papelera",
+        )
+    return medication
 
 
 @router.post(
