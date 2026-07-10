@@ -967,19 +967,19 @@ class _MedicationFormState extends State<_MedicationForm> {
                                 fit: BoxFit.cover,
                               ),
                             )
-                          : const Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.add_a_photo,
-                                  color: AppColors.primary,
-                                  size: 34,
-                                ),
-                                SizedBox(height: 6),
-                                Text('Foto del medicamento'),
-                              ],
+                          : const Icon(
+                              Icons.add_a_photo,
+                              color: AppColors.primary,
+                              size: 34,
                             ),
                     ),
+                    if (_photoPath.isEmpty) ...[
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Foto del medicamento',
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
                     const SizedBox(height: 6),
                     Text(
                       _photoPath.isNotEmpty ? 'Cambiar foto' : 'Agregar foto',
