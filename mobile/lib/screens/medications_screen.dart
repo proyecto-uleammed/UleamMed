@@ -256,11 +256,6 @@ class _MedicationsScreenState extends State<MedicationsScreen> {
             },
             icon: const Icon(Icons.delete_outline),
           ),
-          IconButton(
-            tooltip: 'Actualizar',
-            onPressed: _reload,
-            icon: const Icon(Icons.refresh),
-          ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(

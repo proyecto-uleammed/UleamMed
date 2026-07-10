@@ -128,10 +128,7 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Emergencia'),
-        actions: [ReloadIconButton(onPressed: _reload)],
-      ),
+      appBar: AppBar(title: const Text('Emergencia')),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'fab-emergency',
         onPressed: () => _openContactForm(),

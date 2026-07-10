@@ -6,6 +6,7 @@ import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/form_inputs.dart';
 import '../widgets/app_states.dart';
+import '../widgets/role_shell_scaffold.dart';
 
 const _months = [
   'Ene',
@@ -41,11 +42,13 @@ class AppointmentsScreen extends StatefulWidget {
     this.api,
     this.caregiverPatientId,
     this.title,
+    this.shellTabIndex,
   });
 
   final UleamMedApi? api;
   final int? caregiverPatientId;
   final String? title;
+  final int? shellTabIndex;
 
   @override
   State<AppointmentsScreen> createState() => _AppointmentsScreenState();
@@ -55,6 +58,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen>
     with SingleTickerProviderStateMixin {
   late final UleamMedApi _api = widget.api ?? ApiService();
   late Future<List<Appointment>> _appointments = _loadAppointments();
+  int? _lastShellTabIndex;
   late final TabController _tabController = TabController(
     length: 2,
     vsync: this,
@@ -68,6 +72,22 @@ class _AppointmentsScreenState extends State<AppointmentsScreen>
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final shellTabIndex = widget.shellTabIndex;
+    if (shellTabIndex == null) {
+      return;
+    }
+    final activeIndex = roleShellActiveTabIndex(context);
+    if (activeIndex == shellTabIndex &&
+        _lastShellTabIndex != null &&
+        _lastShellTabIndex != activeIndex) {
+      unawaited(_refresh());
+    }
+    _lastShellTabIndex = activeIndex;
   }
 
   Future<List<Appointment>> _loadAppointments() {
@@ -94,15 +114,15 @@ class _AppointmentsScreenState extends State<AppointmentsScreen>
     return _api.deleteAppointment(appointmentId);
   }
 
+  void _reload() {
+    unawaited(_refresh());
+  }
+
   Future<void> _refresh() async {
     setState(() {
       _appointments = _loadAppointments();
     });
     await _appointments;
-  }
-
-  void _reload() {
-    unawaited(_refresh());
   }
 
   Future<void> _openForm([Appointment? appointment]) async {
@@ -163,9 +183,6 @@ class _AppointmentsScreenState extends State<AppointmentsScreen>
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.title ?? 'Consultas'),
-        actions: [
-          ReloadIconButton(onPressed: _reload),
-        ],
         bottom: TabBar(
           controller: _tabController,
           labelColor: Colors.white,

@@ -61,13 +61,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.title ?? 'Historial'),
-        actions: [
-          IconButton(
-            tooltip: 'Actualizar',
-            onPressed: _reload,
-            icon: const Icon(Icons.refresh),
-          ),
-        ],
       ),
       body: FutureBuilder<List<DoseConfirmation>>(
         future: _confirmations,

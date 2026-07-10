@@ -546,6 +546,59 @@ void main() {
       expect(appointments, hasLength(1));
       expect(appointments.first.doctor, 'Dr. Perez');
     });
+
+    test('replaces stale local appointments with backend data', () async {
+      final localStore = LocalStore(jsonStore: _MemoryJsonStore());
+      await localStore.saveActiveUserId('1');
+      await localStore.upsertAppointment(
+        Appointment(
+          id: 'cita-local-vieja',
+          doctor: 'Dr. Viejo',
+          specialty: 'General',
+          date: '01 Ene 2020',
+          time: '08:00',
+          location: '',
+          scheduledAt: DateTime(2020, 1, 1, 8),
+          syncStatus: SyncStatus.synced,
+        ),
+      );
+      final api = ApiService(
+        baseUrl: 'http://localhost:8000',
+        tokenStore: _MemoryTokenStore(
+          const AuthTokens(
+            accessToken: 'access-ok',
+            refreshToken: 'refresh-ok',
+          ),
+        ),
+        localStore: localStore,
+        client: MockClient((request) async {
+          if (request.url.path == '/api/v1/appointments' &&
+              request.method == 'GET') {
+            return _jsonResponse({
+              'items': [
+                {
+                  'id': '21',
+                  'doctor': 'Dra. Lopez',
+                  'specialty': 'Dermatologia',
+                  'location': 'Clinica',
+                  'notes': '',
+                  'completed': false,
+                  'reminder': 'none',
+                  'scheduledAt': '2026-12-20T10:00:00.000Z',
+                },
+              ],
+            });
+          }
+          return _jsonResponse({'detail': 'No permitido'}, statusCode: 405);
+        }),
+      );
+
+      final appointments = await api.listAppointments();
+
+      expect(appointments, hasLength(1));
+      expect(appointments.first.id, '21');
+      expect(appointments.first.doctor, 'Dra. Lopez');
+    });
   });
 }
 

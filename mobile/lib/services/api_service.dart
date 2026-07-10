@@ -571,18 +571,26 @@ class ApiService implements UleamMedApi {
 
   @override
   Future<List<Appointment>> listAppointments() async {
-    final local = await _localStore.readAppointments();
     try {
       final data = await _getAuthorizedJson(
         Uri.parse('$_baseUrl/api/v1/appointments'),
         fallback: 'No se pudieron cargar las consultas',
       );
       final remote = _decodeList(data, Appointment.fromBackendJson);
-      final merged = _mergeAppointments(local, remote);
+      final local = await _localStore.readAppointments();
+      final pending = local.where(
+        (item) =>
+            item.syncStatus == SyncStatus.pending &&
+            !_isPersistedBackendId(item.id),
+      );
+      final merged = <String, Appointment>{
+        for (final item in remote) item.id: item,
+        for (final item in pending) item.id: item,
+      }.values.toList()..sort(_compareAppointmentsBySchedule);
       await _localStore.saveAppointments(merged);
       return merged;
     } catch (_) {
-      return local;
+      return _localStore.readAppointments();
     }
   }
 
@@ -921,18 +929,29 @@ class ApiService implements UleamMedApi {
             '$_baseUrl/api/v1/caregiving/patients/$patientId/appointments',
           );
     final body = _appointmentPayload(appointment);
-    final data = isBackendId
-        ? await _patchAuthorizedJson(
-            uri,
-            body: body,
-            fallback: 'No se pudo actualizar la consulta',
-          )
-        : await _postAuthorizedJson(
-            uri,
-            body: body,
-            fallback: 'No se pudo crear la consulta',
-          );
-    return Appointment.fromBackendJson(data);
+    try {
+      final data = isBackendId
+          ? await _patchAuthorizedJson(
+              uri,
+              body: body,
+              fallback: 'No se pudo actualizar la consulta',
+            )
+          : await _postAuthorizedJson(
+              uri,
+              body: body,
+              fallback: 'No se pudo crear la consulta',
+            );
+      return Appointment.fromBackendJson(data);
+    } on ApiException catch (error) {
+      if (error.statusCode == 405 || error.statusCode == 404) {
+        throw ApiException(
+          'El backend no tiene habilitadas las consultas para cuidadores. '
+          'Despliega la rama Frontend-backend en ECS o usa el backend local en modo debug.',
+          error.statusCode,
+        );
+      }
+      rethrow;
+    }
   }
 
   @override
@@ -1203,33 +1222,19 @@ class ApiService implements UleamMedApi {
       ..sort((a, b) => b.recordedAt.compareTo(a.recordedAt));
   }
 
-  List<Appointment> _mergeAppointments(
-    List<Appointment> local,
-    List<Appointment> remote,
-  ) {
-    final byId = <String, Appointment>{
-      for (final item in remote) item.id: item,
-    };
-    for (final item in local) {
-      if (item.syncStatus == SyncStatus.pending || !byId.containsKey(item.id)) {
-        byId[item.id] = item;
-      }
+  int _compareAppointmentsBySchedule(Appointment a, Appointment b) {
+    final aDate = a.scheduledAt;
+    final bDate = b.scheduledAt;
+    if (aDate == null && bDate == null) {
+      return 0;
     }
-    return byId.values.toList()
-      ..sort((a, b) {
-        final aDate = a.scheduledAt;
-        final bDate = b.scheduledAt;
-        if (aDate == null && bDate == null) {
-          return 0;
-        }
-        if (aDate == null) {
-          return 1;
-        }
-        if (bDate == null) {
-          return -1;
-        }
-        return aDate.compareTo(bDate);
-      });
+    if (aDate == null) {
+      return 1;
+    }
+    if (bDate == null) {
+      return -1;
+    }
+    return aDate.compareTo(bDate);
   }
 
   Map<String, dynamic> _appointmentPayload(Appointment appointment) {

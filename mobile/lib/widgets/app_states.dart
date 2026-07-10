@@ -186,19 +186,3 @@ class RefreshableScrollView extends StatelessWidget {
     );
   }
 }
-
-/// Boton estandar para recargar datos en la barra superior.
-class ReloadIconButton extends StatelessWidget {
-  const ReloadIconButton({super.key, required this.onPressed});
-
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return IconButton(
-      tooltip: 'Recargar',
-      icon: const Icon(Icons.refresh),
-      onPressed: onPressed,
-    );
-  }
-}
