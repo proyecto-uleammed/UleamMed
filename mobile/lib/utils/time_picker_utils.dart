@@ -10,23 +10,26 @@ Future<TimeOfDay?> showSpanishTimePicker({
 }) {
   return showTimePicker(
     context: context,
-    locale: _locale,
     initialTime: initialTime,
     helpText: helpText,
     cancelText: 'Cancelar',
     confirmText: 'Aceptar',
     builder: (context, child) {
       final mediaQuery = MediaQuery.of(context);
-      return MediaQuery(
-        data: mediaQuery.copyWith(
-          alwaysUse24HourFormat: true,
-          textScaler: TextScaler.linear(
-            mediaQuery.textScaler.scale(1).clamp(1.0, 1.3),
+      return Localizations.override(
+        context: context,
+        locale: _locale,
+        child: MediaQuery(
+          data: mediaQuery.copyWith(
+            alwaysUse24HourFormat: true,
+            textScaler: TextScaler.linear(
+              mediaQuery.textScaler.scale(1).clamp(1.0, 1.3),
+            ),
           ),
+          child: child == null
+              ? const SizedBox.shrink()
+              : SingleChildScrollView(child: child),
         ),
-        child: child == null
-            ? const SizedBox.shrink()
-            : SingleChildScrollView(child: child),
       );
     },
   );

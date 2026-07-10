@@ -99,8 +99,9 @@ class _CaregiverPatientContactsScreenState
               onRefresh: _refresh,
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                children: const [
+                children: [
                   EmptyStateView(
+                    icon: Icons.contact_phone_outlined,
                     title: 'Sin contactos registrados',
                     message:
                         'El paciente aun no comparte contactos de emergencia.',
