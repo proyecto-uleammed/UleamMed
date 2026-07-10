@@ -90,12 +90,14 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
       useSafeArea: true,
       builder: (context) => _AppointmentForm(
         appointment: appointment,
-        onSave: _saveAppointment,
+        onSave: (item) async {
+          await _saveAppointment(item);
+        },
       ),
     );
     if (saved == true && mounted) {
       _reload();
-      showAppSnackBar(context, 'Cita guardada');
+      showAppSnackBar(context, 'Consulta guardada');
     }
   }
 
@@ -506,13 +508,27 @@ class _AppointmentFormState extends State<_AppointmentForm> {
     super.dispose();
   }
 
+  static const _locale = Locale('es', 'ES');
+
   Future<void> _pickDate() async {
     final now = DateTime.now();
+    final firstDate = DateTime(1950);
+    final lastDate = DateTime(now.year + 5);
+    var initialDate = _date ?? now;
+    if (initialDate.isBefore(firstDate)) {
+      initialDate = firstDate;
+    } else if (initialDate.isAfter(lastDate)) {
+      initialDate = lastDate;
+    }
     final picked = await showDatePicker(
       context: context,
-      initialDate: _date ?? now,
-      firstDate: DateTime(now.year - 1),
-      lastDate: DateTime(now.year + 5),
+      locale: _locale,
+      initialDate: initialDate,
+      firstDate: firstDate,
+      lastDate: lastDate,
+      helpText: 'Seleccionar fecha',
+      cancelText: 'Cancelar',
+      confirmText: 'Aceptar',
     );
     if (picked != null) {
       setState(() => _date = picked);
@@ -522,7 +538,11 @@ class _AppointmentFormState extends State<_AppointmentForm> {
   Future<void> _pickTime() async {
     final picked = await showTimePicker(
       context: context,
+      locale: _locale,
       initialTime: _time ?? TimeOfDay.now(),
+      helpText: 'Seleccionar hora',
+      cancelText: 'Cancelar',
+      confirmText: 'Aceptar',
     );
     if (picked != null) {
       setState(() => _time = picked);
@@ -538,31 +558,45 @@ class _AppointmentFormState extends State<_AppointmentForm> {
       return;
     }
     setState(() => _isSaving = true);
-    final scheduled = DateTime(
-      _date!.year,
-      _date!.month,
-      _date!.day,
-      _time!.hour,
-      _time!.minute,
-    );
-    final id =
-        widget.appointment?.id ??
-        'cita-${DateTime.now().millisecondsSinceEpoch}';
-    final appointment = Appointment(
-      id: id,
-      doctor: _doctorController.text.trim(),
-      specialty: _specialtyController.text.trim(),
-      date: _formatDate(scheduled),
-      time: _formatTime(_time!),
-      location: _locationController.text.trim(),
-      notes: _notesController.text.trim(),
-      completed: widget.appointment?.completed ?? false,
-      reminder: _reminder,
-      scheduledAt: scheduled,
-    );
-    await widget.onSave(appointment);
-    if (mounted) {
+    try {
+      final scheduled = DateTime(
+        _date!.year,
+        _date!.month,
+        _date!.day,
+        _time!.hour,
+        _time!.minute,
+      );
+      final id =
+          widget.appointment?.id ??
+          'cita-${DateTime.now().millisecondsSinceEpoch}';
+      final appointment = Appointment(
+        id: id,
+        doctor: _doctorController.text.trim(),
+        specialty: _specialtyController.text.trim(),
+        date: _formatDate(scheduled),
+        time: _formatTime(_time!),
+        location: _locationController.text.trim(),
+        notes: _notesController.text.trim(),
+        completed: widget.appointment?.completed ?? false,
+        reminder: _reminder,
+        scheduledAt: scheduled,
+      );
+      await widget.onSave(appointment);
+      if (!mounted) {
+        return;
+      }
       Navigator.pop(context, true);
+    } catch (error) {
+      if (mounted) {
+        final message = error is ApiException
+            ? error.message
+            : 'No se pudo guardar la consulta';
+        showAppSnackBar(context, message, isError: true);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
     }
   }
 

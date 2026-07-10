@@ -449,6 +449,87 @@ void main() {
 
       expect(medications, isEmpty);
     });
+
+    test('merges backend dose events with local history', () async {
+      final localStore = LocalStore(jsonStore: _MemoryJsonStore());
+      await localStore.addDoseConfirmation(
+        DoseConfirmation(
+          id: 'local-1',
+          medicationId: '5',
+          medicationName: 'Omeprazol',
+          status: DoseStatus.taken,
+          recordedAt: DateTime(2026, 7, 9, 14),
+          syncStatus: SyncStatus.pending,
+          scheduledAt: DateTime(2026, 7, 9, 14),
+        ),
+      );
+      final api = ApiService(
+        baseUrl: 'http://localhost:8000',
+        tokenStore: _MemoryTokenStore(
+          const AuthTokens(
+            accessToken: 'access-ok',
+            refreshToken: 'refresh-ok',
+          ),
+        ),
+        localStore: localStore,
+        client: MockClient((request) async {
+          if (request.url.path == '/api/v1/medications/dose-events') {
+            return http.Response(
+              jsonEncode([
+                {
+                  'id': 99,
+                  'medication_id': 5,
+                  'medication_name': 'Omeprazol',
+                  'status': 'taken',
+                  'acted_at': '2026-07-08T12:00:00.000Z',
+                  'scheduled_at': '2026-07-08T12:00:00.000Z',
+                  'sequence_number': 1,
+                },
+              ]),
+              statusCode: 200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          return _jsonResponse({'detail': 'No permitido'}, statusCode: 405);
+        }),
+      );
+
+      final confirmations = await api.listDoseConfirmations();
+
+      expect(confirmations, hasLength(2));
+      expect(
+        confirmations.map((item) => item.id),
+        containsAll(['local-1', '99']),
+      );
+    });
+
+    test('persists appointments locally for patient and caregiver scope', () async {
+      final localStore = LocalStore(jsonStore: _MemoryJsonStore());
+      localStore.scopeToUser('caregiver-1');
+      final api = ApiService(
+        baseUrl: 'http://localhost:8000',
+        tokenStore: _MemoryTokenStore(),
+        localStore: localStore,
+        client: MockClient((request) async {
+          return _jsonResponse({'detail': 'No autorizado'}, statusCode: 401);
+        }),
+      );
+      final appointment = Appointment(
+        id: 'cita-1',
+        doctor: 'Dr. Perez',
+        specialty: 'Cardiologia',
+        date: '10 Jul 2026',
+        time: '09:00',
+        location: 'Hospital',
+        scheduledAt: DateTime(2026, 7, 10, 9),
+      );
+
+      await api.saveCaregiverPatientAppointment(7, appointment);
+      final saved = await api.listCaregiverPatientAppointments(7);
+
+      expect(saved, hasLength(1));
+      expect(saved.first.doctor, 'Dr. Perez');
+    });
   });
 }
 
