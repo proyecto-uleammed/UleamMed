@@ -24,6 +24,12 @@ from backend.schemas.appointment import (
     AppointmentRead,
     AppointmentUpdate,
 )
+from backend.schemas.health_entry import (
+    HealthEntryCreate,
+    HealthEntryRead,
+    HealthEntryUpdate,
+)
+from backend.schemas.user_medical_profile import UserMedicalProfileRead
 from backend.schemas.medication import (
     MedicationCreate,
     MedicationDoseEventCreate,
@@ -36,6 +42,16 @@ from backend.services.appointment_service import (
     delete_user_appointment,
     list_user_appointments,
     update_user_appointment,
+)
+from backend.services.health_entry_service import (
+    create_user_health_entry,
+    delete_user_health_entry,
+    list_user_health_entries,
+    update_user_health_entry,
+)
+from backend.services.user_medical_profile_service import (
+    get_user_medical_profile,
+    patient_shares_health_data,
 )
 from backend.services.medication_service import (
     create_user_medication,
@@ -592,6 +608,64 @@ def delete_linked_patient_appointment(
     if not _active_link_exists(db, caregiver_id, patient_id):
         return None
     return delete_user_appointment(db, patient_id, appointment_id)
+
+
+def list_linked_patient_health_entries(
+    db: Session,
+    caregiver_id: int,
+    patient_id: int,
+) -> list[HealthEntryRead] | None:
+    if not _active_link_exists(db, caregiver_id, patient_id):
+        return None
+    if not patient_shares_health_data(db, patient_id):
+        return []
+    return list_user_health_entries(db, patient_id)
+
+
+def create_linked_patient_health_entry(
+    db: Session,
+    caregiver_id: int,
+    patient_id: int,
+    payload: HealthEntryCreate,
+) -> HealthEntryRead | None:
+    if not _active_link_exists(db, caregiver_id, patient_id):
+        return None
+    return create_user_health_entry(db, patient_id, payload)
+
+
+def update_linked_patient_health_entry(
+    db: Session,
+    caregiver_id: int,
+    patient_id: int,
+    entry_id: int,
+    payload: HealthEntryUpdate,
+) -> HealthEntryRead | None:
+    if not _active_link_exists(db, caregiver_id, patient_id):
+        return None
+    return update_user_health_entry(db, patient_id, entry_id, payload)
+
+
+def delete_linked_patient_health_entry(
+    db: Session,
+    caregiver_id: int,
+    patient_id: int,
+    entry_id: int,
+) -> bool | None:
+    if not _active_link_exists(db, caregiver_id, patient_id):
+        return None
+    return delete_user_health_entry(db, patient_id, entry_id)
+
+
+def get_linked_patient_medical_profile(
+    db: Session,
+    caregiver_id: int,
+    patient_id: int,
+) -> UserMedicalProfileRead | None:
+    if not _active_link_exists(db, caregiver_id, patient_id):
+        return None
+    if not patient_shares_health_data(db, patient_id):
+        return None
+    return get_user_medical_profile(db, patient_id)
 
 
 def _mask_email(email: str) -> str:
