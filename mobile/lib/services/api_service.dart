@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
@@ -108,7 +109,22 @@ class ApiService implements UleamMedApi {
     if (configuredUrl.isNotEmpty) {
       return configuredUrl;
     }
+    if (kDebugMode) {
+      return _localDevBaseUrl;
+    }
     return _productionBaseUrl;
+  }
+
+  static String get _localDevBaseUrl {
+    if (kIsWeb) {
+      return 'http://127.0.0.1:8000';
+    }
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+        return 'http://10.0.2.2:8000';
+      default:
+        return 'http://127.0.0.1:8000';
+    }
   }
 
   @override
@@ -658,10 +674,10 @@ class ApiService implements UleamMedApi {
       }
       return saved;
     } on ApiException catch (error) {
-      if (error.statusCode == 405) {
+      if (error.statusCode == 405 || error.statusCode == 404) {
         throw ApiException(
-          'El backend no acepta crear medicamentos del paciente. '
-          'Reinicia el servidor con la rama Frontend-backend actualizada.',
+          'El backend no tiene habilitado el CRUD de medicamentos para cuidadores. '
+          'Despliega la rama Frontend-backend en ECS o usa el backend local en modo debug.',
           error.statusCode,
         );
       }
