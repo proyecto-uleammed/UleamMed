@@ -87,7 +87,10 @@ class _MedicationTrashScreenState extends State<MedicationTrashScreen> {
             return const LoadingView(message: 'Cargando papelera...');
           }
           if (snapshot.hasError) {
-            return ErrorStateView(onRetry: _reload);
+            return RefreshableScrollView(
+              onRefresh: _refresh,
+              child: const ErrorStateView(),
+            );
           }
           final medications = snapshot.data ?? const [];
           if (medications.isEmpty) {

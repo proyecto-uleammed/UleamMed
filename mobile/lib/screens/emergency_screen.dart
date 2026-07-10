@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/form_inputs.dart';
+import '../utils/phone_launch_utils.dart';
 import '../widgets/app_states.dart';
 
 /// Pantalla de emergencia con datos clave, contactos y llamada rapida.
@@ -50,60 +50,12 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
     await _data;
   }
 
-  Future<void> _call(String rawPhone) async {
-    final phone = rawPhone.trim();
-    if (phone.isEmpty) {
-      showAppSnackBar(
+  Future<void> _call(String rawPhone, {String? contactName}) =>
+      confirmAndCallPhone(
         context,
-        'Este contacto no tiene numero. Agrega uno para poder llamar.',
-        isError: true,
+        rawPhone: rawPhone,
+        contactName: contactName,
       );
-      return;
-    }
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Llamar ahora'),
-        content: Text('Se iniciara una llamada a $phone. Deseas continuar?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton.icon(
-            onPressed: () => Navigator.pop(context, true),
-            icon: const Icon(Icons.phone),
-            label: const Text('Llamar'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true || !mounted) {
-      return;
-    }
-
-    try {
-      final uri = Uri(scheme: 'tel', path: phone);
-      final launched = await launchUrl(uri);
-      if (!launched && mounted) {
-        showAppSnackBar(
-          context,
-          'No se pudo iniciar la llamada',
-          isError: true,
-        );
-      }
-    } catch (_) {
-      if (mounted) {
-        showAppSnackBar(
-          context,
-          'No se pudo iniciar la llamada',
-          isError: true,
-        );
-      }
-    }
-  }
 
   Future<void> _openContactForm([EmergencyContact? contact]) async {
     final saved = await showModalBottomSheet<bool>(
@@ -144,9 +96,11 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
             );
           }
           if (snapshot.hasError) {
-            return ErrorStateView(
-              title: 'No se pudieron cargar los datos',
-              onRetry: _reload,
+            return RefreshableScrollView(
+              onRefresh: _refresh,
+              child: const ErrorStateView(
+                title: 'No se pudieron cargar los datos',
+              ),
             );
           }
 
@@ -163,7 +117,10 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
                 onCall911: () => _call('911'),
                 onCallPrimary: primary == null
                     ? null
-                    : () => _call(primary.phone),
+                    : () => _call(
+                        primary.phone,
+                        contactName: primary.name,
+                      ),
               ),
               const SizedBox(height: 20),
               _MedicalKeyData(data: data),
@@ -189,7 +146,10 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
                 ...data.contacts.map(
                   (contact) => _ContactCard(
                     contact: contact,
-                    onCall: () => _call(contact.phone),
+                    onCall: () => _call(
+                      contact.phone,
+                      contactName: contact.name,
+                    ),
                     onEdit: () => _openContactForm(contact),
                   ),
                 ),

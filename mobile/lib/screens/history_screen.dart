@@ -128,9 +128,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
             return const LoadingView(message: 'Cargando historial...');
           }
           if (snapshot.hasError) {
-            return ErrorStateView(
-              title: 'No se pudo cargar el historial',
-              onRetry: _reload,
+            return RefreshableScrollView(
+              onRefresh: _refresh,
+              child: const ErrorStateView(
+                title: 'No se pudo cargar el historial',
+              ),
             );
           }
 

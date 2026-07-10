@@ -8,6 +8,7 @@ import '../services/permission_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/form_inputs.dart';
 import '../utils/time_picker_utils.dart';
+import '../widgets/app_states.dart';
 import 'settings_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -61,6 +62,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final session = await widget.api.loadAppSession();
     final medicalProfile = await widget.api.loadMedicalProfile();
     return _ProfileData(session: session, medicalProfile: medicalProfile);
+  }
+
+  Future<void> _refreshProfile() async {
+    setState(() {
+      _didHydrateForm = false;
+      _profileData = _loadProfileData();
+    });
+    await _profileData;
   }
 
   void _hydrateForm(_ProfileData data) {
@@ -193,22 +202,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
             }
 
             if (snapshot.hasError || snapshot.data == null) {
-              return _ProfileError(
-                onRetry: () {
-                  setState(() {
-                    _profileData = _loadProfileData();
-                    _didHydrateForm = false;
-                  });
-                },
+              return RefreshableScrollView(
+                onRefresh: _refreshProfile,
+                child: const ErrorStateView(
+                  title: 'No se pudo cargar el perfil',
+                ),
               );
             }
 
             final data = snapshot.data!;
             _hydrateForm(data);
 
-            return Form(
+            return RefreshIndicator(
+              onRefresh: _refreshProfile,
+              child: Form(
               key: _formKey,
               child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(20),
                 children: [
                   _ProfileHeader(data: data),
@@ -379,6 +389,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ],
               ),
+            ),
             );
           },
         ),
@@ -532,39 +543,6 @@ class _ErrorBox extends StatelessWidget {
         style: const TextStyle(
           color: Color(0xFFC62828),
           fontWeight: FontWeight.w600,
-        ),
-      ),
-    );
-  }
-}
-
-class _ProfileError extends StatelessWidget {
-  const _ProfileError({required this.onRetry});
-
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.cloud_off, size: 54, color: AppColors.primaryDark),
-            const SizedBox(height: 12),
-            Text(
-              'No se pudo cargar el perfil',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 16),
-            OutlinedButton.icon(
-              onPressed: onRetry,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Reintentar'),
-            ),
-          ],
         ),
       ),
     );

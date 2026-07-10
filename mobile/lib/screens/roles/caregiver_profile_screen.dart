@@ -40,6 +40,13 @@ class _CaregiverProfileScreenState extends State<CaregiverProfileScreen> {
     super.dispose();
   }
 
+  Future<void> _refresh() async {
+    setState(() {
+      _session = _load();
+    });
+    await _session;
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) {
       return;
@@ -96,14 +103,20 @@ class _CaregiverProfileScreenState extends State<CaregiverProfileScreen> {
             return const LoadingView();
           }
           if (snapshot.hasError || !snapshot.hasData) {
-            return ErrorStateView(
-              onRetry: () => setState(() => _session = _load()),
+            return RefreshableScrollView(
+              onRefresh: _refresh,
+              child: const ErrorStateView(
+                title: 'No se pudo cargar el perfil',
+              ),
             );
           }
           final user = snapshot.data!.user;
-          return Form(
+          return RefreshIndicator(
+            onRefresh: _refresh,
+            child: Form(
             key: _formKey,
             child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.all(16),
               children: [
                 const CircleAvatar(
@@ -147,6 +160,7 @@ class _CaregiverProfileScreenState extends State<CaregiverProfileScreen> {
                 label: const Text('Guardar'),
               ),
             ],
+            ),
             ),
           );
         },

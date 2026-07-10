@@ -462,14 +462,16 @@ class ApiService implements UleamMedApi {
     } catch (_) {
       // El medicamento queda guardado localmente y pendiente de sincronizar.
     }
-    final current = await _findLocalMedication(
-      id: localPending.id,
-      clientMedicationId: clientMedicationId,
-    );
-    if (current != null && _isPersistedBackendId(current.id)) {
-      unawaited(_syncMedicationPhoto(current, localPending, existing));
+    var result =
+        await _findLocalMedication(
+          id: localPending.id,
+          clientMedicationId: clientMedicationId,
+        ) ??
+        localPending;
+    if (_isPersistedBackendId(result.id)) {
+      result = await _syncMedicationPhoto(result, localPending, existing);
     }
-    return current ?? localPending;
+    return result;
   }
 
   PendingSyncAction _syncActionForMedication({
@@ -1051,24 +1053,23 @@ class ApiService implements UleamMedApi {
     } catch (_) {
       // Conserva el cambio local del cuidador hasta recuperar conexion.
     }
-    final current =
+    var result =
         await _findLocalCaregiverMedication(
           patientId,
           id: localPending.id,
           clientMedicationId: clientMedicationId,
         ) ??
         localPending;
-    if (_isPersistedBackendId(current.id)) {
-      unawaited(
-        _syncCaregiverPatientMedicationPhoto(
-          patientId: patientId,
-          saved: current,
-          medication: localPending,
-          existing: existing,
-        ),
+    if (_isPersistedBackendId(result.id)) {
+      result = await _syncCaregiverPatientMedicationPhoto(
+        patientId: patientId,
+        saved: result,
+        medication: localPending,
+        existing: existing,
       );
+      await _localStore.upsertCaregiverPatientMedication(patientId, result);
     }
-    return current;
+    return result;
   }
 
   @override
@@ -1374,7 +1375,9 @@ class ApiService implements UleamMedApi {
       if (removedPhoto) {
         await _deleteCaregiverPatientMedicationPhoto(patientId, saved.id);
         await _purgeMedicationPhotoCache(scope, saved.id);
-        return saved.copyWith(photoAvailable: false, photoPath: '');
+        final cleared = saved.copyWith(photoAvailable: false, photoPath: '');
+        await _localStore.upsertCaregiverPatientMedication(patientId, cleared);
+        return cleared;
       }
 
       final shouldUpload =
@@ -1385,6 +1388,7 @@ class ApiService implements UleamMedApi {
             hadPhotoAvailable: existing?.photoAvailable ?? saved.photoAvailable,
           );
       if (!shouldUpload) {
+        await _localStore.upsertCaregiverPatientMedication(patientId, saved);
         return saved;
       }
 
@@ -1398,13 +1402,20 @@ class ApiService implements UleamMedApi {
         medicationId: saved.id,
         bytes: await File(medication.photoPath).readAsBytes(),
       );
-      return MedicationItem.fromJson(photoData).copyWith(
+      final synced = MedicationItem.fromJson(photoData).copyWith(
         syncStatus: SyncStatus.synced,
         photoPath: cachedFile.path,
         photoAvailable: true,
       );
+      await _localStore.upsertCaregiverPatientMedication(patientId, synced);
+      return synced;
     } catch (_) {
-      return saved;
+      final pending = saved.copyWith(
+        syncStatus: SyncStatus.pending,
+        photoPath: medication.photoPath,
+      );
+      await _localStore.upsertCaregiverPatientMedication(patientId, pending);
+      return pending;
     }
   }
 
@@ -1648,12 +1659,22 @@ class ApiService implements UleamMedApi {
             clientMedicationId: action.clientMedicationId,
           );
     final withLocalPhoto = saved.copyWith(photoPath: current?.photoPath ?? '');
+    final existingBeforeSync = current;
 
     if (caregiverPatientId == null) {
       if (current != null && current.id != saved.id) {
         await _localStore.deleteMedication(current.id);
       }
       await _localStore.upsertMedication(withLocalPhoto);
+      if (_isPersistedBackendId(withLocalPhoto.id) &&
+          (withLocalPhoto.photoPath.isNotEmpty ||
+              existingBeforeSync?.photoAvailable == true)) {
+        await _syncMedicationPhoto(
+          withLocalPhoto,
+          withLocalPhoto,
+          existingBeforeSync,
+        );
+      }
     } else {
       if (current != null && current.id != saved.id) {
         await _localStore.deleteCaregiverPatientMedication(
@@ -1665,6 +1686,20 @@ class ApiService implements UleamMedApi {
         caregiverPatientId,
         withLocalPhoto,
       );
+      if (_isPersistedBackendId(withLocalPhoto.id) &&
+          (withLocalPhoto.photoPath.isNotEmpty ||
+              existingBeforeSync?.photoAvailable == true)) {
+        final synced = await _syncCaregiverPatientMedicationPhoto(
+          patientId: caregiverPatientId,
+          saved: withLocalPhoto,
+          medication: withLocalPhoto,
+          existing: existingBeforeSync,
+        );
+        await _localStore.upsertCaregiverPatientMedication(
+          caregiverPatientId,
+          synced,
+        );
+      }
     }
   }
 
@@ -1800,10 +1835,12 @@ class ApiService implements UleamMedApi {
       final backend = byId[local.id];
       if (backend != null) {
         final cachedPhoto = local.photoPath;
+        final photoExists =
+            cachedPhoto.isNotEmpty && File(cachedPhoto).existsSync();
         final keepPhoto =
-            backend.photoAvailable &&
-            cachedPhoto.isNotEmpty &&
-            File(cachedPhoto).existsSync();
+            photoExists &&
+            (backend.photoAvailable ||
+                !_isManagedMedicationPhotoPath(cachedPhoto));
         byId[local.id] = backend.copyWith(
           taken: backend.taken,
           photoPath: keepPhoto ? cachedPhoto : '',
@@ -1912,6 +1949,12 @@ class ApiService implements UleamMedApi {
     final scope = await _localStore.readActiveUserId() ?? 'unknown';
     final result = <MedicationItem>[];
     for (final medication in medications) {
+      if (medication.photoPath.isNotEmpty &&
+          File(medication.photoPath).existsSync() &&
+          !_isManagedMedicationPhotoPath(medication.photoPath)) {
+        result.add(medication);
+        continue;
+      }
       if (!medication.photoAvailable) {
         await _purgeMedicationPhotoCache(scope, medication.id);
         result.add(medication.copyWith(photoPath: ''));
@@ -1943,6 +1986,12 @@ class ApiService implements UleamMedApi {
     final scope = 'caregiver/$patientId';
     final result = <MedicationItem>[];
     for (final medication in medications) {
+      if (medication.photoPath.isNotEmpty &&
+          File(medication.photoPath).existsSync() &&
+          !_isManagedMedicationPhotoPath(medication.photoPath)) {
+        result.add(medication);
+        continue;
+      }
       if (!medication.photoAvailable) {
         await _purgeMedicationPhotoCache(scope, medication.id);
         result.add(medication.copyWith(photoPath: ''));

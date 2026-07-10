@@ -12,6 +12,7 @@ import '../services/notification_scheduler.dart';
 import '../theme/app_theme.dart';
 import '../utils/form_inputs.dart';
 import '../utils/time_picker_utils.dart';
+import '../widgets/app_states.dart';
 import '../widgets/role_shell_scaffold.dart';
 
 class MedicationsScreen extends StatefulWidget {
@@ -317,7 +318,13 @@ class _MedicationsScreenState extends State<MedicationsScreen> {
           }
 
           if (snapshot.hasError) {
-            return _MedicationError(onRetry: _reload);
+            return RefreshableScrollView(
+              onRefresh: _refresh,
+              child: const ErrorStateView(
+                title: 'No se pudieron cargar los medicamentos',
+                message: 'Desliza hacia abajo para reintentar.',
+              ),
+            );
           }
 
           final data = snapshot.data ?? const _MedicationData();
@@ -863,10 +870,14 @@ class _MedicationFormState extends State<_MedicationForm> {
       if (picked == null) {
         return;
       }
-      final directory = await getTemporaryDirectory();
+      final directory = await getApplicationDocumentsDirectory();
+      final pendingDir = Directory('${directory.path}/medication_photo_pending');
+      if (!await pendingDir.exists()) {
+        await pendingDir.create(recursive: true);
+      }
       final fileName =
           'med_${DateTime.now().millisecondsSinceEpoch}${_extension(picked.name)}';
-      final saved = await File(picked.path).copy('${directory.path}/$fileName');
+      final saved = await File(picked.path).copy('${pendingDir.path}/$fileName');
       if (mounted) {
         setState(() => _photoPath = saved.path);
       }
@@ -1460,45 +1471,6 @@ class _FormField extends StatelessWidget {
           border: const OutlineInputBorder(),
         ),
         validator: validator,
-      ),
-    );
-  }
-}
-
-class _MedicationError extends StatelessWidget {
-  const _MedicationError({required this.onRetry});
-
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.cloud_off, color: AppColors.primary, size: 48),
-            const SizedBox(height: 12),
-            Text(
-              'No se pudieron cargar los medicamentos',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Revisa los datos locales y vuelve a intentar.',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: onRetry,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Reintentar'),
-            ),
-          ],
-        ),
       ),
     );
   }
