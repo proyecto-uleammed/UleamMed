@@ -25,6 +25,7 @@ env:
   SUPABASE_DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
   SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
   SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+  SECRET_KEY: ${{ secrets.SECRET_KEY }}
 
 jobs:
   desplegar_ecs:
@@ -45,6 +46,7 @@ jobs:
           test -n "${ECS_CLUSTER}" || (echo "Falta variable AWS_ECS_CLUSTER." && exit 1)
           test -n "${ECS_SERVICE}" || (echo "Falta variable AWS_ECS_SERVICE." && exit 1)
           test -n "${SUPABASE_DATABASE_URL}" || (echo "Falta secreto SUPABASE_DATABASE_URL." && exit 1)
+          test -n "${SECRET_KEY}" || (echo "Falta secreto SECRET_KEY." && exit 1)
 
       - name: Configurar credenciales AWS por OIDC
         uses: aws-actions/configure-aws-credentials@v4
@@ -62,12 +64,11 @@ jobs:
           aws ecs describe-task-definition --task-definition "${TASKDEF_ARN_ACTUAL}" --query 'taskDefinition' > taskdef_base.json
 
           COMANDO_BACKEND='alembic -c backend/alembic.ini upgrade head && uvicorn backend.app.main:app --host 0.0.0.0 --port 8000'
-          SECRET_KEY_DEMO='UleamMedDemoSecret-2026-07-09'
 
           jq \
             --arg imagen "${IMAGEN}" \
             --arg database_url "${SUPABASE_DATABASE_URL}" \
-            --arg secret_key "${SECRET_KEY_DEMO}" \
+            --arg secret_key "${SECRET_KEY}" \
             --arg supabase_url "${SUPABASE_URL}" \
             --arg supabase_service_role_key "${SUPABASE_SERVICE_ROLE_KEY}" \
             --arg aws_region "${AWS_REGION}" \
