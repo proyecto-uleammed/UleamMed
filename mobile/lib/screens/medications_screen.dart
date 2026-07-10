@@ -1289,10 +1289,6 @@ class _MedicationFormState extends State<_MedicationForm> {
       ),
     );
   }
-
-  String? _required(String? value) {
-    return FormInputs.requiredText(value);
-  }
 }
 
 class _FormField extends StatelessWidget {
