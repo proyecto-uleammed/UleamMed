@@ -122,6 +122,14 @@ abstract class UleamMedApi {
     String entryId,
   );
   Future<MedicalProfile> loadCaregiverPatientMedicalProfile(int patientId);
+  Future<List<EmergencyContact>> listCaregiverPatientEmergencyContacts(
+    int patientId,
+  );
+  Future<int> clearDoseHistory({DateTime? before});
+  Future<int> clearCaregiverPatientDoseHistory(
+    int patientId, {
+    DateTime? before,
+  });
   Future<int> pendingSyncCount();
   Future<SyncSummary> synchronizePendingChanges();
 }
@@ -776,18 +784,72 @@ class ApiService implements UleamMedApi {
   }
 
   @override
-  Future<List<EmergencyContact>> listEmergencyContacts() {
-    return _localStore.readEmergencyContacts();
+  Future<List<EmergencyContact>> listEmergencyContacts() async {
+    try {
+      final data = await _getAuthorizedJson(
+        Uri.parse('$_baseUrl/api/v1/emergency-contacts'),
+        fallback: 'No se pudieron cargar los contactos',
+      );
+      final remote = _decodeList(data, EmergencyContact.fromBackendJson);
+      final local = await _localStore.readEmergencyContacts();
+      final pending = local.where(
+        (item) =>
+            item.syncStatus == SyncStatus.pending &&
+            !_isPersistedBackendId(item.id),
+      );
+      final merged = <String, EmergencyContact>{
+        for (final item in remote) item.id: item,
+        for (final item in pending) item.id: item,
+      }.values.toList();
+      await _localStore.saveEmergencyContacts(merged);
+      return merged;
+    } catch (_) {
+      return _localStore.readEmergencyContacts();
+    }
   }
 
   @override
-  Future<EmergencyContact> saveEmergencyContact(EmergencyContact contact) {
-    return _localStore.upsertEmergencyContact(contact);
+  Future<EmergencyContact> saveEmergencyContact(EmergencyContact contact) async {
+    final localPending = await _localStore.upsertEmergencyContact(
+      contact.copyWith(syncStatus: SyncStatus.pending),
+    );
+    final isBackendId = _isPersistedBackendId(contact.id);
+    final uri = isBackendId
+        ? Uri.parse('$_baseUrl/api/v1/emergency-contacts/${contact.id}')
+        : Uri.parse('$_baseUrl/api/v1/emergency-contacts');
+    final body = _emergencyContactPayload(contact);
+    try {
+      final data = isBackendId
+          ? await _patchAuthorizedJson(
+              uri,
+              body: body,
+              fallback: 'No se pudo actualizar el contacto',
+            )
+          : await _postAuthorizedJson(
+              uri,
+              body: body,
+              fallback: 'No se pudo crear el contacto',
+            );
+      final saved = EmergencyContact.fromBackendJson(data);
+      if (!isBackendId) {
+        await _localStore.deleteEmergencyContact(contact.id);
+      }
+      await _localStore.upsertEmergencyContact(saved);
+      return saved;
+    } catch (_) {
+      return localPending;
+    }
   }
 
   @override
-  Future<void> deleteEmergencyContact(String contactId) {
-    return _localStore.deleteEmergencyContact(contactId);
+  Future<void> deleteEmergencyContact(String contactId) async {
+    if (_isPersistedBackendId(contactId)) {
+      await _deleteAuthorized(
+        Uri.parse('$_baseUrl/api/v1/emergency-contacts/$contactId'),
+        fallback: 'No se pudo eliminar el contacto',
+      );
+    }
+    await _localStore.deleteEmergencyContact(contactId);
   }
 
   @override
@@ -1252,6 +1314,52 @@ class ApiService implements UleamMedApi {
     return MedicalProfile.fromBackendJson(data);
   }
 
+  @override
+  Future<List<EmergencyContact>> listCaregiverPatientEmergencyContacts(
+    int patientId,
+  ) async {
+    final data = await _getAuthorizedJson(
+      Uri.parse(
+        '$_baseUrl/api/v1/caregiving/patients/$patientId/emergency-contacts',
+      ),
+      fallback: 'No se pudieron cargar los contactos',
+    );
+    return _decodeList(data, EmergencyContact.fromBackendJson);
+  }
+
+  @override
+  Future<int> clearDoseHistory({DateTime? before}) async {
+    final uri = before == null
+        ? Uri.parse('$_baseUrl/api/v1/medications/dose-events')
+        : Uri.parse(
+            '$_baseUrl/api/v1/medications/dose-events?before=${Uri.encodeComponent(before.toUtc().toIso8601String())}',
+          );
+    final data = await _deleteAuthorizedJson(
+      uri,
+      fallback: 'No se pudo limpiar el historial',
+    );
+    return data['deleted'] as int? ?? 0;
+  }
+
+  @override
+  Future<int> clearCaregiverPatientDoseHistory(
+    int patientId, {
+    DateTime? before,
+  }) async {
+    final uri = before == null
+        ? Uri.parse(
+            '$_baseUrl/api/v1/caregiving/patients/$patientId/medications/dose-events',
+          )
+        : Uri.parse(
+            '$_baseUrl/api/v1/caregiving/patients/$patientId/medications/dose-events?before=${Uri.encodeComponent(before.toUtc().toIso8601String())}',
+          );
+    final data = await _deleteAuthorizedJson(
+      uri,
+      fallback: 'No se pudo limpiar el historial',
+    );
+    return data['deleted'] as int? ?? 0;
+  }
+
   Future<MedicationItem> _syncCaregiverPatientMedicationPhoto({
     required int patientId,
     required MedicationItem saved,
@@ -1691,7 +1799,15 @@ class ApiService implements UleamMedApi {
 
       final backend = byId[local.id];
       if (backend != null) {
-        byId[local.id] = backend.copyWith(taken: backend.taken, photoPath: '');
+        final cachedPhoto = local.photoPath;
+        final keepPhoto =
+            backend.photoAvailable &&
+            cachedPhoto.isNotEmpty &&
+            File(cachedPhoto).existsSync();
+        byId[local.id] = backend.copyWith(
+          taken: backend.taken,
+          photoPath: keepPhoto ? cachedPhoto : '',
+        );
       }
     }
     return byId.values.toList()..sort((a, b) => a.time.compareTo(b.time));
@@ -1768,6 +1884,28 @@ class ApiService implements UleamMedApi {
     };
   }
 
+  Map<String, dynamic> _emergencyContactPayload(EmergencyContact contact) {
+    return {
+      'name': contact.name,
+      'phone': contact.phone,
+      'relationship': contact.relationship,
+      'isPrimary': contact.isPrimary,
+    };
+  }
+
+  Future<Map<String, dynamic>> _deleteAuthorizedJson(
+    Uri uri, {
+    required String fallback,
+  }) {
+    return _authorizedJson(
+      request: (token) => _client.delete(
+        uri,
+        headers: _authorizedHeaders(token),
+      ),
+      fallback: fallback,
+    );
+  }
+
   Future<List<MedicationItem>> _cacheMedicationPhotos(
     List<MedicationItem> medications,
   ) async {
@@ -1790,7 +1928,9 @@ class ApiService implements UleamMedApi {
         );
         result.add(medication.copyWith(photoPath: file.path));
       } catch (_) {
-        result.add(medication.copyWith(photoPath: ''));
+        result.add(
+          medication.copyWith(photoPath: '', photoAvailable: false),
+        );
       }
     }
     return result;
@@ -1821,7 +1961,9 @@ class ApiService implements UleamMedApi {
         );
         result.add(medication.copyWith(photoPath: file.path));
       } catch (_) {
-        result.add(medication.copyWith(photoPath: ''));
+        result.add(
+          medication.copyWith(photoPath: '', photoAvailable: false),
+        );
       }
     }
     return result;
@@ -1944,6 +2086,9 @@ class ApiService implements UleamMedApi {
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw ApiException('No se pudo descargar la foto', response.statusCode);
+    }
+    if (response.statusCode == 204 || response.bodyBytes.isEmpty) {
+      throw ApiException('Sin foto disponible', 204);
     }
     return response.bodyBytes;
   }

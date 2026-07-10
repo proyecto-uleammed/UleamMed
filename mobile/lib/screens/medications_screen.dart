@@ -11,6 +11,7 @@ import '../services/api_service.dart';
 import '../services/notification_scheduler.dart';
 import '../theme/app_theme.dart';
 import '../utils/form_inputs.dart';
+import '../utils/time_picker_utils.dart';
 import '../widgets/role_shell_scaffold.dart';
 
 class MedicationsScreen extends StatefulWidget {
@@ -1048,7 +1049,7 @@ class _MedicationFormState extends State<_MedicationForm> {
   Future<void> _pickTime({int? index}) async {
     final current = index == null ? _times.first : _times[index];
     final parts = current.split(':');
-    final selected = await showTimePicker(
+    final selected = await showSpanishTimePicker(
       context: context,
       initialTime: TimeOfDay(
         hour: int.tryParse(parts.first) ?? 8,

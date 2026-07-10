@@ -6,6 +6,7 @@ from sqlalchemy import pool
 from alembic import context
 from backend.core.config import settings
 from backend.core.database import Base
+from backend.models import emergency_contact as emergency_contact_model
 from backend.models import health_entry as health_entry_model
 from backend.models import user_medical_profile as user_medical_profile_model
 from backend.models import appointment as appointment_model
@@ -38,6 +39,7 @@ from backend.models import user as user_model
 
 _MODEL_MODULES = (
     appointment_model,
+    emergency_contact_model,
     health_entry_model,
     user_medical_profile_model,
     caregiver_model,

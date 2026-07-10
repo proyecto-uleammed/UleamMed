@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/form_inputs.dart';
+import '../utils/time_picker_utils.dart';
 import '../widgets/app_states.dart';
 import '../widgets/role_shell_scaffold.dart';
 
@@ -615,12 +616,10 @@ class _AppointmentFormState extends State<_AppointmentForm> {
     if (widget.readonlySchedule) {
       return;
     }
-    final picked = await showTimePicker(
+    final picked = await showSpanishTimePicker(
       context: context,
       initialTime: _time ?? TimeOfDay.now(),
       helpText: 'Seleccionar hora',
-      cancelText: 'Cancelar',
-      confirmText: 'Aceptar',
     );
     if (picked == null) {
       return;

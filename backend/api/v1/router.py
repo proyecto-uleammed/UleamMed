@@ -5,6 +5,7 @@ from backend.api.v1.endpoints import (
     auth,
     caregiving,
     devices,
+    emergency_contacts,
     health_entries,
     medical_profiles,
     medications,
@@ -20,6 +21,7 @@ api_router = APIRouter()
 api_router.include_router(auth.router)
 api_router.include_router(appointments.router)
 api_router.include_router(health_entries.router)
+api_router.include_router(emergency_contacts.router)
 api_router.include_router(medical_profiles.router)
 api_router.include_router(caregiving.router)
 api_router.include_router(devices.router)

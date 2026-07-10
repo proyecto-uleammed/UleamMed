@@ -7,6 +7,7 @@ import '../services/notification_scheduler.dart';
 import '../services/permission_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/form_inputs.dart';
+import '../utils/time_picker_utils.dart';
 import 'settings_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -31,7 +32,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _birthDateController = TextEditingController();
-  final _bloodTypeController = TextEditingController();
+  String? _bloodType;
   final _conditionsController = TextEditingController();
   final _allergiesController = TextEditingController();
   final _notesController = TextEditingController();
@@ -48,7 +49,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void dispose() {
     _nameController.dispose();
     _birthDateController.dispose();
-    _bloodTypeController.dispose();
     _conditionsController.dispose();
     _allergiesController.dispose();
     _notesController.dispose();
@@ -70,7 +70,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final profile = data.medicalProfile;
     _nameController.text = data.session.user.fullName;
     _birthDateController.text = profile.birthDate;
-    _bloodTypeController.text = profile.bloodType;
+    _bloodType = profile.bloodType.isEmpty ? null : profile.bloodType;
     _conditionsController.text = profile.conditions;
     _allergiesController.text = profile.allergies;
     _notesController.text = profile.importantNotes;
@@ -97,7 +97,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final updatedProfile = await widget.api.saveMedicalProfile(
         MedicalProfile(
           birthDate: _birthDateController.text.trim(),
-          bloodType: _bloodTypeController.text.trim(),
+          bloodType: _bloodType ?? '',
           conditions: _conditionsController.text.trim(),
           allergies: _allergiesController.text.trim(),
           importantNotes: _notesController.text.trim(),
@@ -138,6 +138,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _isSaving = false;
         });
       }
+    }
+  }
+
+  Future<void> _pickBirthDate() async {
+    final picked = await showBirthDatePicker(
+      context: context,
+      initialDate: parseBirthDate(_birthDateController.text),
+    );
+    if (picked != null && mounted) {
+      setState(() {
+        _birthDateController.text = formatBirthDate(picked);
+      });
     }
   }
 
@@ -224,18 +236,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     label: 'Fecha de nacimiento',
                     icon: Icons.cake,
                     hint: 'DD/MM/AAAA',
-                    keyboardType: TextInputType.datetime,
-                    inputFormatters: FormInputs.birthDate,
+                    readOnly: true,
+                    onTap: _pickBirthDate,
                     validator: FormInputs.birthDateValidator,
                   ),
-                  _TextField(
-                    controller: _bloodTypeController,
-                    label: 'Tipo de sangre',
-                    icon: Icons.bloodtype,
-                    hint: 'Ej. O+',
-                    textCapitalization: TextCapitalization.characters,
-                    inputFormatters: FormInputs.bloodType,
-                    validator: FormInputs.bloodTypeValidator,
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 14),
+                    child: DropdownButtonFormField<String>(
+                      value: _bloodType,
+                      decoration: const InputDecoration(
+                        labelText: 'Tipo de sangre',
+                        prefixIcon: Icon(Icons.bloodtype),
+                        border: OutlineInputBorder(),
+                      ),
+                      hint: const Text('Selecciona un tipo'),
+                      items: bloodTypeOptions
+                          .map(
+                            (type) => DropdownMenuItem(
+                              value: type,
+                              child: Text(type),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) {
+                        setState(() => _bloodType = value);
+                      },
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return null;
+                        }
+                        return FormInputs.bloodTypeValidator(value);
+                      },
+                    ),
                   ),
                   const SizedBox(height: 16),
                   _SectionTitle(
@@ -319,7 +351,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       style: Theme.of(context).textTheme.bodyLarge,
                     ),
                     subtitle: const Text(
-                      'Autorizas a tus cuidadores a ver la informacion que elijas compartir.',
+                      'Autorizas a tus cuidadores a ver perfil, condiciones, alergias y contactos. Guarda para aplicar.',
                     ),
                     value: _shareWithCaregivers,
                     onChanged: (value) {
@@ -411,7 +443,14 @@ class _SectionTitle extends StatelessWidget {
       children: [
         Icon(icon, color: AppColors.primary, size: 28),
         const SizedBox(width: 8),
-        Text(title, style: Theme.of(context).textTheme.headlineMedium),
+        Expanded(
+          child: Text(
+            title,
+            style: Theme.of(context).textTheme.headlineMedium,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
       ],
     );
   }
@@ -430,6 +469,8 @@ class _TextField extends StatelessWidget {
     this.validator,
     this.inputFormatters,
     this.textCapitalization = TextCapitalization.none,
+    this.readOnly = false,
+    this.onTap,
   });
 
   final TextEditingController? controller;
@@ -443,6 +484,8 @@ class _TextField extends StatelessWidget {
   final FormFieldValidator<String>? validator;
   final List<TextInputFormatter>? inputFormatters;
   final TextCapitalization textCapitalization;
+  final bool readOnly;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -452,6 +495,8 @@ class _TextField extends StatelessWidget {
         controller: controller,
         initialValue: controller == null ? initialValue : null,
         enabled: enabled,
+        readOnly: readOnly,
+        onTap: onTap,
         maxLines: maxLines,
         keyboardType: keyboardType,
         inputFormatters: inputFormatters,

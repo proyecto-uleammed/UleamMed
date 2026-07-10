@@ -28,6 +28,7 @@ from backend.services.medication_service import (
     list_dose_events,
     list_user_medications,
     list_user_medication_sync_conflicts,
+    clear_user_dose_events,
     mark_user_medication_taken,
     medication_to_read,
     record_dose_event,
@@ -80,6 +81,17 @@ def list_my_dose_events(
 ) -> list[MedicationDoseEventRead]:
     """Lista eventos de toma del paciente autenticado."""
     return list_dose_events(db, current_user.id, start=start, end=end)
+
+
+@router.delete("/dose-events")
+def clear_my_dose_events(
+    before: datetime | None = None,
+    current_user: User = Depends(get_current_patient),
+    db: Session = Depends(get_db),
+) -> dict[str, int]:
+    """Elimina eventos de toma antiguos del paciente autenticado."""
+    deleted = clear_user_dose_events(db, current_user.id, before=before)
+    return {"deleted": deleted}
 
 
 @router.post("/sync", response_model=MedicationSyncResponse)

@@ -254,6 +254,25 @@ def list_dose_events(
     return [_event_to_read(event, name) for event, name in db.execute(statement)]
 
 
+def clear_user_dose_events(
+    db: Session,
+    user_id: int,
+    *,
+    before: datetime | None = None,
+) -> int:
+    medication_ids = select(Medication.id).where(Medication.user_id == user_id)
+    statement = select(MedicationDoseEvent).where(
+        MedicationDoseEvent.medication_id.in_(medication_ids),
+    )
+    if before is not None:
+        statement = statement.where(MedicationDoseEvent.scheduled_at < before)
+    events = list(db.scalars(statement))
+    for event in events:
+        db.delete(event)
+    db.commit()
+    return len(events)
+
+
 def count_taken_medications(db: Session, user_id: int) -> tuple[int, int]:
     medications = list_user_medications(db, user_id)
     return sum(1 for medication in medications if medication.taken), len(medications)
