@@ -528,6 +528,7 @@ class _MedicationAvatar extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         child: Image.file(
           File(medication.photoPath),
+          key: ValueKey(medication.photoPath),
           width: 52,
           height: 52,
           fit: BoxFit.cover,

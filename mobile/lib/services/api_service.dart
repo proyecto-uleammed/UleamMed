@@ -81,6 +81,7 @@ abstract class UleamMedApi {
     int patientId,
     String medicationId,
   );
+  Future<List<DoseConfirmation>> listCaregiverPatientDoseEvents(int patientId);
   Future<int> pendingSyncCount();
   Future<SyncSummary> synchronizePendingChanges();
 }
@@ -344,50 +345,63 @@ class ApiService implements UleamMedApi {
       await _localStore.deleteMedication(medication.id);
     }
     await _localStore.upsertMedication(saved);
-    unawaited(_syncMedicationPhoto(saved, medication, existing));
-    return saved;
+    return _syncMedicationPhoto(saved, medication, existing);
   }
 
-  Future<void> _syncMedicationPhoto(
+  Future<MedicationItem> _syncMedicationPhoto(
     MedicationItem saved,
     MedicationItem medication,
     MedicationItem? existing,
   ) async {
+    final userId = await _localStore.readActiveUserId() ?? 'unknown';
     try {
-      final photoChanged = existing?.photoPath != medication.photoPath;
-      final needsPhotoUpload =
-          medication.photoPath.isNotEmpty &&
-          File(medication.photoPath).existsSync() &&
-          (photoChanged || !saved.photoAvailable);
-      if (needsPhotoUpload) {
-        final photoData = await _uploadMedicationPhoto(
-          saved.id,
-          medication.photoPath,
-        );
-        final cachedPath = await _storePhotoCopy(
-          medication.photoPath,
-          saved.id,
-        );
-        saved = MedicationItem.fromJson(
-          photoData,
-        ).copyWith(syncStatus: SyncStatus.synced, photoPath: cachedPath);
-      } else if (photoChanged &&
-          existing?.photoAvailable == true &&
-          medication.photoPath.isEmpty) {
+      final removedPhoto =
+          medication.photoPath.isEmpty &&
+          (existing?.photoAvailable == true || saved.photoAvailable);
+      if (removedPhoto) {
         await _deleteAuthorized(
           Uri.parse('$_baseUrl/api/v1/medications/${saved.id}/photo'),
           fallback: 'No se pudo eliminar la foto',
         );
-        saved = saved.copyWith(photoAvailable: false, photoPath: '');
+        await _purgeMedicationPhotoCache(userId, saved.id);
+        final cleared = saved.copyWith(photoAvailable: false, photoPath: '');
+        await _localStore.upsertMedication(cleared);
+        return cleared;
       }
-      await _localStore.upsertMedication(saved);
-    } catch (_) {
-      await _localStore.upsertMedication(
-        saved.copyWith(
-          syncStatus: SyncStatus.pending,
-          photoPath: medication.photoPath,
-        ),
+
+      final shouldUpload =
+          medication.photoPath.isNotEmpty &&
+          File(medication.photoPath).existsSync() &&
+          _shouldUploadMedicationPhoto(
+            localPhotoPath: medication.photoPath,
+            hadPhotoAvailable: existing?.photoAvailable ?? saved.photoAvailable,
+          );
+      if (!shouldUpload) {
+        await _localStore.upsertMedication(saved);
+        return saved;
+      }
+
+      final photoData = await _uploadMedicationPhoto(
+        saved.id,
+        medication.photoPath,
       );
+      final cachedFile = await _writeMedicationPhotoFile(
+        scope: userId,
+        medicationId: saved.id,
+        bytes: await File(medication.photoPath).readAsBytes(),
+      );
+      saved = MedicationItem.fromJson(
+        photoData,
+      ).copyWith(syncStatus: SyncStatus.synced, photoPath: cachedFile.path);
+      await _localStore.upsertMedication(saved);
+      return saved;
+    } catch (_) {
+      final pending = saved.copyWith(
+        syncStatus: SyncStatus.pending,
+        photoPath: medication.photoPath,
+      );
+      await _localStore.upsertMedication(pending);
+      return pending;
     }
   }
 
@@ -716,22 +730,35 @@ class ApiService implements UleamMedApi {
     required MedicationItem medication,
     MedicationItem? existing,
   }) async {
+    final scope = 'caregiver/$patientId';
     try {
-      final photoChanged = existing?.photoPath != medication.photoPath;
-      final needsPhotoUpload =
+      final removedPhoto =
+          medication.photoPath.isEmpty &&
+          (existing?.photoAvailable == true || saved.photoAvailable);
+      if (removedPhoto) {
+        await _deleteCaregiverPatientMedicationPhoto(patientId, saved.id);
+        await _purgeMedicationPhotoCache(scope, saved.id);
+        return saved.copyWith(photoAvailable: false, photoPath: '');
+      }
+
+      final shouldUpload =
           medication.photoPath.isNotEmpty &&
           File(medication.photoPath).existsSync() &&
-          (photoChanged || !saved.photoAvailable);
-      if (!needsPhotoUpload) {
+          _shouldUploadMedicationPhoto(
+            localPhotoPath: medication.photoPath,
+            hadPhotoAvailable: existing?.photoAvailable ?? saved.photoAvailable,
+          );
+      if (!shouldUpload) {
         return saved;
       }
+
       final photoData = await _uploadCaregiverPatientMedicationPhoto(
         patientId,
         saved.id,
         medication.photoPath,
       );
       final cachedFile = await _writeMedicationPhotoFile(
-        scope: 'caregiver/$patientId',
+        scope: scope,
         medicationId: saved.id,
         bytes: await File(medication.photoPath).readAsBytes(),
       );
@@ -743,6 +770,38 @@ class ApiService implements UleamMedApi {
     } catch (_) {
       return saved;
     }
+  }
+
+  Future<void> _deleteCaregiverPatientMedicationPhoto(
+    int patientId,
+    String medicationId,
+  ) async {
+    await _deleteAuthorized(
+      Uri.parse(
+        '$_baseUrl/api/v1/caregiving/patients/$patientId/medications/$medicationId/photo',
+      ),
+      fallback: 'No se pudo eliminar la foto',
+    );
+  }
+
+  @override
+  Future<List<DoseConfirmation>> listCaregiverPatientDoseEvents(
+    int patientId,
+  ) async {
+    final data = await _getAuthorizedList(
+      Uri.parse(
+        '$_baseUrl/api/v1/caregiving/patients/$patientId/medications/dose-events',
+      ),
+      fallback: 'No se pudo cargar el historial del paciente',
+    );
+    return data
+        .whereType<Map>()
+        .map(
+          (json) => DoseConfirmation.fromBackendEvent(
+            Map<String, dynamic>.from(json),
+          ),
+        )
+        .toList();
   }
 
   Future<Map<String, dynamic>> _uploadCaregiverPatientMedicationPhoto(
@@ -904,10 +963,12 @@ class ApiService implements UleamMedApi {
   Future<List<MedicationItem>> _cacheMedicationPhotos(
     List<MedicationItem> medications,
   ) async {
+    final scope = await _localStore.readActiveUserId() ?? 'unknown';
     final result = <MedicationItem>[];
     for (final medication in medications) {
       if (!medication.photoAvailable) {
-        result.add(medication);
+        await _purgeMedicationPhotoCache(scope, medication.id);
+        result.add(medication.copyWith(photoPath: ''));
         continue;
       }
       try {
@@ -915,13 +976,13 @@ class ApiService implements UleamMedApi {
           Uri.parse('$_baseUrl/api/v1/medications/${medication.id}/photo'),
         );
         final file = await _writeMedicationPhotoFile(
-          scope: await _localStore.readActiveUserId() ?? 'unknown',
+          scope: scope,
           medicationId: medication.id,
           bytes: bytes,
         );
         result.add(medication.copyWith(photoPath: file.path));
       } catch (_) {
-        result.add(medication);
+        result.add(medication.copyWith(photoPath: ''));
       }
     }
     return result;
@@ -931,10 +992,12 @@ class ApiService implements UleamMedApi {
     int patientId,
     List<MedicationItem> medications,
   ) async {
+    final scope = 'caregiver/$patientId';
     final result = <MedicationItem>[];
     for (final medication in medications) {
       if (!medication.photoAvailable) {
-        result.add(medication);
+        await _purgeMedicationPhotoCache(scope, medication.id);
+        result.add(medication.copyWith(photoPath: ''));
         continue;
       }
       try {
@@ -944,16 +1007,51 @@ class ApiService implements UleamMedApi {
           ),
         );
         final file = await _writeMedicationPhotoFile(
-          scope: 'caregiver/$patientId',
+          scope: scope,
           medicationId: medication.id,
           bytes: bytes,
         );
         result.add(medication.copyWith(photoPath: file.path));
       } catch (_) {
-        result.add(medication);
+        result.add(medication.copyWith(photoPath: ''));
       }
     }
     return result;
+  }
+
+  bool _shouldUploadMedicationPhoto({
+    required String localPhotoPath,
+    required bool hadPhotoAvailable,
+  }) {
+    if (!_isManagedMedicationPhotoPath(localPhotoPath)) {
+      return true;
+    }
+    return !hadPhotoAvailable;
+  }
+
+  bool _isManagedMedicationPhotoPath(String path) {
+    return path.replaceAll('\\', '/').contains('/medication_photos/');
+  }
+
+  Future<void> _purgeMedicationPhotoCache(
+    String scope,
+    String medicationId,
+  ) async {
+    final root = await getApplicationDocumentsDirectory();
+    final directory = Directory('${root.path}/medication_photos/$scope');
+    if (!await directory.exists()) {
+      return;
+    }
+    for (final entity in directory.listSync()) {
+      if (entity is! File) {
+        continue;
+      }
+      final name = entity.uri.pathSegments.last;
+      if (name.startsWith('$medicationId-') ||
+          name.startsWith('$medicationId.')) {
+        await entity.delete();
+      }
+    }
   }
 
   Future<File> _writeMedicationPhotoFile({
@@ -961,26 +1059,15 @@ class ApiService implements UleamMedApi {
     required String medicationId,
     required List<int> bytes,
   }) async {
+    await _purgeMedicationPhotoCache(scope, medicationId);
     final root = await getApplicationDocumentsDirectory();
     final directory = Directory('${root.path}/medication_photos/$scope');
     await directory.create(recursive: true);
-    final file = File('${directory.path}/$medicationId.jpg');
+    final file = File(
+      '${directory.path}/$medicationId-${DateTime.now().millisecondsSinceEpoch}.jpg',
+    );
     await file.writeAsBytes(bytes, flush: true);
     return file;
-  }
-
-  Future<String> _storePhotoCopy(String sourcePath, String medicationId) async {
-    final root = await getApplicationDocumentsDirectory();
-    final userId = await _localStore.readActiveUserId() ?? 'unknown';
-    final directory = Directory('${root.path}/medication_photos/$userId');
-    await directory.create(recursive: true);
-    final extension = sourcePath.toLowerCase().split('.').last;
-    final safeExtension = {'jpg', 'jpeg', 'png', 'webp'}.contains(extension)
-        ? extension
-        : 'jpg';
-    final destination = '${directory.path}/$medicationId.$safeExtension';
-    await File(sourcePath).copy(destination);
-    return destination;
   }
 
   Future<void> _clearPhotoCache(String userId) async {
@@ -1161,6 +1248,42 @@ class ApiService implements UleamMedApi {
       request: (token) => _client.get(uri, headers: _authorizedHeaders(token)),
       fallback: fallback,
     );
+  }
+
+  Future<List<dynamic>> _getAuthorizedList(
+    Uri uri, {
+    required String fallback,
+  }) async {
+    final token = await _ensureAccessToken();
+    var response = await _client.get(uri, headers: _authorizedHeaders(token));
+
+    if (response.statusCode == 401 && await _refreshAccessToken()) {
+      response = await _client.get(
+        uri,
+        headers: _authorizedHeaders(await _ensureAccessToken()),
+      );
+    }
+
+    if (response.statusCode == 401) {
+      await logout();
+      throw const ApiException(
+        'Sesion expirada, inicia sesion nuevamente',
+        401,
+      );
+    }
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw ApiException(
+        _errorMessageFromResponse(response, fallback),
+        response.statusCode,
+      );
+    }
+
+    final decoded = jsonDecode(response.body);
+    if (decoded is! List) {
+      throw const ApiException('Respuesta inesperada del historial');
+    }
+    return decoded;
   }
 
   Future<Map<String, dynamic>> _postAuthorizedJson(
