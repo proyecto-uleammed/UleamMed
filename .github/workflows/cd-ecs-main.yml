@@ -19,8 +19,12 @@ concurrency:
 env:
   AWS_REGION: ${{ vars.AWS_REGION }}
   ROL_IAM_OIDC: ${{ secrets.AWS_ROLE_ARN }}
+  REPOSITORIO_ECR: ${{ vars.AWS_ECR_REPOSITORY }}
   ECS_CLUSTER: ${{ vars.AWS_ECS_CLUSTER }}
   ECS_SERVICE: ${{ vars.AWS_ECS_SERVICE }}
+  SUPABASE_DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+  SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+  SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
 
 jobs:
   desplegar_ecs:
@@ -36,8 +40,10 @@ jobs:
         run: |
           test -n "${AWS_REGION}" || (echo "Falta variable AWS_REGION." && exit 1)
           test -n "${ROL_IAM_OIDC}" || (echo "Falta secreto AWS_ROLE_ARN." && exit 1)
+          test -n "${REPOSITORIO_ECR}" || (echo "Falta variable AWS_ECR_REPOSITORY." && exit 1)
           test -n "${ECS_CLUSTER}" || (echo "Falta variable AWS_ECS_CLUSTER." && exit 1)
           test -n "${ECS_SERVICE}" || (echo "Falta variable AWS_ECS_SERVICE." && exit 1)
+          test -n "${SUPABASE_DATABASE_URL}" || (echo "Falta secreto SUPABASE_DATABASE_URL." && exit 1)
 
       - name: Configurar credenciales AWS por OIDC
         uses: aws-actions/configure-aws-credentials@v4
@@ -45,11 +51,68 @@ jobs:
           role-to-assume: ${{ env.ROL_IAM_OIDC }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Forzar nueva implementacion del servicio ECS
+      - name: Registrar task definition ECS para Supabase
+        id: registrar_taskdef
+        run: |
+          ACCOUNT_ID="$(aws sts get-caller-identity --query 'Account' --output text)"
+          IMAGEN="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${REPOSITORIO_ECR}:latest"
+
+          TASKDEF_ARN_ACTUAL="$(aws ecs describe-services --cluster "${ECS_CLUSTER}" --services "${ECS_SERVICE}" --query 'services[0].taskDefinition' --output text)"
+          aws ecs describe-task-definition --task-definition "${TASKDEF_ARN_ACTUAL}" --query 'taskDefinition' > taskdef_base.json
+
+          COMANDO_BACKEND='alembic -c backend/alembic.ini upgrade head && uvicorn backend.app.main:app --host 0.0.0.0 --port 8000'
+          SECRET_KEY_DEMO='UleamMedDemoSecret-2026-07-09'
+
+          jq \
+            --arg imagen "${IMAGEN}" \
+            --arg database_url "${SUPABASE_DATABASE_URL}" \
+            --arg secret_key "${SECRET_KEY_DEMO}" \
+            --arg supabase_url "${SUPABASE_URL}" \
+            --arg supabase_service_role_key "${SUPABASE_SERVICE_ROLE_KEY}" \
+            --arg aws_region "${AWS_REGION}" \
+            --arg comando_backend "${COMANDO_BACKEND}" \
+            '
+            del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)
+            | .containerDefinitions = [
+                {
+                  name: "backend",
+                  image: $imagen,
+                  essential: true,
+                  portMappings: [
+                    { containerPort: 8000, protocol: "tcp" }
+                  ],
+                  environment: (
+                    [
+                      { name: "DATABASE_URL", value: $database_url },
+                      { name: "SECRET_KEY", value: $secret_key },
+                      { name: "CORS_ORIGINS", value: "*" },
+                      { name: "ENVIRONMENT", value: "production" }
+                    ]
+                    + (if ($supabase_url | length) > 0 then [{ name: "SUPABASE_URL", value: $supabase_url }] else [] end)
+                    + (if ($supabase_service_role_key | length) > 0 then [{ name: "SUPABASE_SERVICE_ROLE_KEY", value: $supabase_service_role_key }] else [] end)
+                  ),
+                  command: ["sh", "-c", $comando_backend],
+                  logConfiguration: {
+                    logDriver: "awslogs",
+                    options: {
+                      "awslogs-group": "/ecs/uleammed-backend-demo",
+                      "awslogs-region": $aws_region,
+                      "awslogs-stream-prefix": "backend"
+                    }
+                  }
+                }
+              ]
+            ' taskdef_base.json > taskdef_supabase.json
+
+          TASKDEF_NUEVA="$(aws ecs register-task-definition --cli-input-json file://taskdef_supabase.json --query 'taskDefinition.taskDefinitionArn' --output text)"
+          echo "taskdef_nueva=${TASKDEF_NUEVA}" >> "$GITHUB_OUTPUT"
+
+      - name: Desplegar nueva task definition en ECS
         run: |
           aws ecs update-service \
             --cluster "${ECS_CLUSTER}" \
             --service "${ECS_SERVICE}" \
+            --task-definition "${{ steps.registrar_taskdef.outputs.taskdef_nueva }}" \
             --force-new-deployment
 
       - name: Esperar estabilidad del servicio
@@ -63,3 +126,4 @@ jobs:
           echo "Despliegue completado en ECS." >> "$GITHUB_STEP_SUMMARY"
           echo "Cluster: ${ECS_CLUSTER}" >> "$GITHUB_STEP_SUMMARY"
           echo "Servicio: ${ECS_SERVICE}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Task definition: ${{ steps.registrar_taskdef.outputs.taskdef_nueva }}" >> "$GITHUB_STEP_SUMMARY"
