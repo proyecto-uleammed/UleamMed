@@ -55,10 +55,7 @@ class _ConditionsScreenState extends State<ConditionsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Condiciones y alergias'),
-        actions: [ReloadIconButton(onPressed: _reload)],
-      ),
+      appBar: AppBar(title: const Text('Condiciones y alergias')),
       body: FutureBuilder<List<HealthEntry>>(
         future: _entries,
         builder: (context, snapshot) {

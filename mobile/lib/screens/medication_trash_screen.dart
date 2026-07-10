@@ -79,13 +79,6 @@ class _MedicationTrashScreenState extends State<MedicationTrashScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.title),
-        actions: [
-          IconButton(
-            tooltip: 'Actualizar',
-            onPressed: _reload,
-            icon: const Icon(Icons.refresh),
-          ),
-        ],
       ),
       body: FutureBuilder<List<MedicationItem>>(
         future: _medications,
