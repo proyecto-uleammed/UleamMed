@@ -608,6 +608,38 @@ class _FakeApi implements UleamMedApi {
   }
 
   @override
+  Future<List<HealthEntry>> listCaregiverPatientHealthEntries(int patientId) async {
+    return healthEntries;
+  }
+
+  @override
+  Future<HealthEntry> saveCaregiverPatientHealthEntry(
+    int patientId,
+    HealthEntry entry,
+  ) async {
+    return saveHealthEntry(entry);
+  }
+
+  @override
+  Future<void> deleteCaregiverPatientHealthEntry(
+    int patientId,
+    String entryId,
+  ) async {
+    return deleteHealthEntry(entryId);
+  }
+
+  @override
+  Future<MedicalProfile> loadCaregiverPatientMedicalProfile(int patientId) async {
+    if (!medicalProfile.shareWithCaregivers) {
+      throw const ApiException(
+        'El paciente no comparte informacion medica',
+        403,
+      );
+    }
+    return medicalProfile;
+  }
+
+  @override
   Future<int> pendingSyncCount() async {
     return medicalProfile.syncStatus == SyncStatus.pending ? 1 : 0;
   }

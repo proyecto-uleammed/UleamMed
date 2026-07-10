@@ -142,6 +142,63 @@ abstract final class FormInputs {
     return null;
   }
 
+  static String? optionalMultiline(String? value, {int maxLength = 1000}) {
+    final typed = (value ?? '').trim();
+    if (typed.isEmpty) {
+      return null;
+    }
+    if (typed.length > maxLength) {
+      return 'Máximo $maxLength caracteres';
+    }
+    return null;
+  }
+
+  static String? healthEntryNameValidator(String? value) {
+    final trimmed = (value ?? '').trim();
+    if (trimmed.isEmpty) {
+      return 'Este campo es obligatorio';
+    }
+    if (trimmed.length < 3) {
+      return 'Mínimo 3 caracteres';
+    }
+    if (!RegExp(r"^[\p{L}\s'.-]+$", unicode: true).hasMatch(trimmed)) {
+      return 'Solo letras y espacios';
+    }
+    return null;
+  }
+
+  static String? approxDateValidator(String? value) {
+    final typed = (value ?? '').trim();
+    if (typed.isEmpty) {
+      return null;
+    }
+    if (typed.length > 30) {
+      return 'Máximo 30 caracteres';
+    }
+    if (!RegExp(r'^[0-9A-Za-záéíóúÁÉÍÓÚñÑüÜ\s./-]+$').hasMatch(typed)) {
+      return 'Fecha aproximada inválida';
+    }
+    return null;
+  }
+
+  static String? pairedEmergencyContactValidator({
+    required String? name,
+    required String? phone,
+  }) {
+    final contactName = (name ?? '').trim();
+    final contactPhone = (phone ?? '').trim();
+    if (contactName.isEmpty && contactPhone.isEmpty) {
+      return null;
+    }
+    if (contactName.isNotEmpty && contactPhone.isEmpty) {
+      return 'Ingresa el teléfono del contacto';
+    }
+    if (contactPhone.isNotEmpty && contactName.isEmpty) {
+      return 'Ingresa el nombre del contacto';
+    }
+    return null;
+  }
+
   static String? caregiverCodeValidator(String? value) {
     final normalized = (value ?? '')
         .replaceAll('-', '')
