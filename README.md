@@ -20,7 +20,8 @@ Ya esta integrado en `main`:
   - El paciente genera un codigo temporal de 8 caracteres y un solo uso.
   - El cuidador usa el codigo para enviar una solicitud.
   - El paciente debe aprobar antes de compartir medicamentos.
-  - El cuidador solo consulta; no puede editar ni confirmar tomas.
+  - El cuidador puede gestionar medicamentos del paciente vinculado; no puede
+    confirmar tomas en su nombre.
   - El paciente puede revocar el acceso inmediatamente.
 - Perfil basico editable desde Flutter usando `/api/v1/users/me`.
 - Perfil medico local-first con enfermedades, alergias, indicaciones,
@@ -124,8 +125,16 @@ El backend esta construido con FastAPI y expone:
 - `POST /api/v1/caregiving/links/{link_id}/reject`: rechazar solicitud.
 - `DELETE /api/v1/caregiving/links/{link_id}`: revocar acceso.
 - `GET /api/v1/caregiving/patients`: listar pacientes aprobados.
-- `GET /api/v1/caregiving/patients/{patient_id}/medications`: consulta de
-  medicamentos en modo lectura.
+- `GET /api/v1/caregiving/patients/{patient_id}/medications`: listar
+  medicamentos del paciente vinculado.
+- `POST /api/v1/caregiving/patients/{patient_id}/medications`: crear
+  medicamento del paciente (cuidador con vinculo activo).
+- `PATCH /api/v1/caregiving/patients/{patient_id}/medications/{medication_id}`:
+  actualizar medicamento del paciente.
+- `DELETE /api/v1/caregiving/patients/{patient_id}/medications/{medication_id}`:
+  eliminar medicamento del paciente.
+- `POST /api/v1/caregiving/patients/{patient_id}/medications/{medication_id}/photo`:
+  subir foto del medicamento del paciente.
 - `POST /api/v1/devices`: registrar token FCM del dispositivo.
 - `GET /api/v1/devices`: listar tokens FCM del usuario.
 - `DELETE /api/v1/devices/{token}`: eliminar token FCM.
