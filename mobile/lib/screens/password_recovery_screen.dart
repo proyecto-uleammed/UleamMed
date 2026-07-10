@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/form_inputs.dart';
 
 class PasswordRecoveryScreen extends StatefulWidget {
   const PasswordRecoveryScreen({super.key, required this.api});
@@ -136,18 +137,13 @@ class _PasswordRecoveryScreenState extends State<PasswordRecoveryScreen> {
                 enabled: !_isLoading && !_codeRequested,
                 keyboardType: TextInputType.emailAddress,
                 textInputAction: TextInputAction.done,
+                inputFormatters: FormInputs.email,
                 decoration: const InputDecoration(
                   labelText: 'Correo electronico',
                   prefixIcon: Icon(Icons.email),
                   border: OutlineInputBorder(),
                 ),
-                validator: (value) {
-                  final email = (value ?? '').trim();
-                  if (!email.contains('@') || !email.contains('.')) {
-                    return 'Ingresa un correo valido';
-                  }
-                  return null;
-                },
+                validator: FormInputs.emailValidator,
                 onFieldSubmitted: (_) => _isLoading ? null : _requestCode(),
               ),
             ),
@@ -162,18 +158,14 @@ class _PasswordRecoveryScreenState extends State<PasswordRecoveryScreen> {
                       enabled: !_isLoading,
                       keyboardType: TextInputType.number,
                       textInputAction: TextInputAction.next,
+                      inputFormatters: FormInputs.digitsOnly,
+                      maxLength: 6,
                       decoration: const InputDecoration(
                         labelText: 'Codigo de 6 digitos',
                         prefixIcon: Icon(Icons.pin),
                         border: OutlineInputBorder(),
                       ),
-                      validator: (value) {
-                        final code = (value ?? '').trim();
-                        if (code.length != 6 || int.tryParse(code) == null) {
-                          return 'Ingresa el codigo de 6 digitos';
-                        }
-                        return null;
-                      },
+                      validator: FormInputs.recoveryCodeValidator,
                     ),
                     const SizedBox(height: 14),
                     TextFormField(
@@ -201,12 +193,7 @@ class _PasswordRecoveryScreenState extends State<PasswordRecoveryScreen> {
                         ),
                         border: const OutlineInputBorder(),
                       ),
-                      validator: (value) {
-                        if ((value ?? '').length < 8) {
-                          return 'Minimo 8 caracteres';
-                        }
-                        return null;
-                      },
+                      validator: FormInputs.passwordValidator,
                       onFieldSubmitted: (_) =>
                           _isLoading ? null : _resetPassword(),
                     ),

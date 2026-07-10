@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/app_settings.dart';
 import '../services/lock_service.dart';
+import '../utils/form_inputs.dart';
 
 /// Configuracion del PIN de bloqueo local (PB-053).
 class LockSetupScreen extends StatefulWidget {
@@ -65,18 +66,13 @@ class _LockSetupScreenState extends State<LockSetupScreen> {
               obscureText: true,
               keyboardType: TextInputType.number,
               maxLength: 6,
+              inputFormatters: FormInputs.digitsOnly,
               decoration: const InputDecoration(
                 labelText: 'Nuevo PIN',
                 prefixIcon: Icon(Icons.pin),
                 border: OutlineInputBorder(),
               ),
-              validator: (value) {
-                final pin = (value ?? '').trim();
-                if (pin.length < 4 || int.tryParse(pin) == null) {
-                  return 'Ingresa un PIN de 4 a 6 digitos';
-                }
-                return null;
-              },
+              validator: FormInputs.pinValidator,
             ),
             const SizedBox(height: 8),
             TextFormField(
@@ -84,6 +80,7 @@ class _LockSetupScreenState extends State<LockSetupScreen> {
               obscureText: true,
               keyboardType: TextInputType.number,
               maxLength: 6,
+              inputFormatters: FormInputs.digitsOnly,
               decoration: const InputDecoration(
                 labelText: 'Confirmar PIN',
                 prefixIcon: Icon(Icons.pin),
