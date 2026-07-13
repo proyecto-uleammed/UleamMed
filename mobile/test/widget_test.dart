@@ -730,7 +730,7 @@ void main() {
     expect(find.text('Crear cuenta de cuidador'), findsOneWidget);
   });
 
-  testWidgets('authenticates and loads home screen', (
+  testWidgets('authenticates and loads patient medications panel', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(_testApp(api: _FakeApi()));
@@ -738,8 +738,8 @@ void main() {
 
     await _loginWithForm(tester);
 
-    expect(find.text('Hola, Roberto 👋'), findsOneWidget);
-    expect(find.text('Medicamentos'), findsWidgets);
+    expect(find.text('Mis medicamentos'), findsOneWidget);
+    expect(find.text('Medicinas'), findsOneWidget);
   });
 
   testWidgets('patient completes required reminder permissions', (
@@ -760,7 +760,7 @@ void main() {
     await _loginWithForm(tester);
 
     expect(find.text('Activa tus recordatorios'), findsOneWidget);
-    expect(find.text('Hola, Roberto 👋'), findsNothing);
+    expect(find.text('Mis medicamentos'), findsNothing);
 
     for (var index = 0; index < 3; index++) {
       final allow = find.widgetWithText(OutlinedButton, 'Permitir').first;
@@ -773,7 +773,7 @@ void main() {
     await tester.tap(continueButton);
     await tester.pumpAndSettle();
 
-    expect(find.text('Hola, Roberto 👋'), findsOneWidget);
+    expect(find.text('Mis medicamentos'), findsOneWidget);
   });
 
   testWidgets('permanently denied permission opens Android settings', (
@@ -820,7 +820,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Hola, Roberto 👋'), findsOneWidget);
+    expect(find.text('Mis medicamentos'), findsOneWidget);
     expect(find.text('Iniciar sesión'), findsNothing);
   });
 
@@ -986,7 +986,7 @@ void main() {
     expect(find.text('Proximas tomas'), findsOneWidget);
     expect(find.text('Omeprazol - 20 mg'), findsOneWidget);
 
-    final takenButton = find.widgetWithText(FilledButton, 'Tomado');
+    final takenButton = find.widgetWithText(FilledButton, 'Tomado').first;
     await tester.ensureVisible(takenButton);
     await tester.pumpAndSettle();
     await tester.tap(takenButton);
@@ -1010,6 +1010,8 @@ void main() {
     await tester.pumpAndSettle();
     await _loginWithForm(tester);
 
+    await tester.ensureVisible(find.text('Omeprazol'));
+    await tester.pumpAndSettle();
     expect(find.text('Omeprazol'), findsOneWidget);
     expect(find.byTooltip('Eliminar'), findsNothing);
     expect(api.medications.any((item) => item.id == 'omeprazol'), isTrue);
