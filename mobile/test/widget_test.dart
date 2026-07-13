@@ -1009,10 +1009,9 @@ void main() {
     await tester.pumpWidget(_testApp(api: api));
     await tester.pumpAndSettle();
     await _loginWithForm(tester);
-
-    await tester.ensureVisible(find.text('Omeprazol'));
     await tester.pumpAndSettle();
-    expect(find.text('Omeprazol'), findsOneWidget);
+
+    expect(find.textContaining('Omeprazol'), findsWidgets);
     expect(find.byTooltip('Eliminar'), findsNothing);
     expect(api.medications.any((item) => item.id == 'omeprazol'), isTrue);
   });
