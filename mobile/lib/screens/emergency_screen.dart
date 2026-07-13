@@ -55,6 +55,7 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
         context,
         rawPhone: rawPhone,
         contactName: contactName,
+        allowShortCode: rawPhone.trim() == '911',
       );
 
   Future<void> _openContactForm([EmergencyContact? contact]) async {
@@ -112,48 +113,43 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
               children: [
-              _EmergencyHeader(
-                primaryContact: primary,
-                onCall911: () => _call('911'),
-                onCallPrimary: primary == null
-                    ? null
-                    : () => _call(
-                        primary.phone,
-                        contactName: primary.name,
-                      ),
-              ),
-              const SizedBox(height: 20),
-              _MedicalKeyData(data: data),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Contactos',
-                      style: Theme.of(context).textTheme.headlineMedium,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              if (data.contacts.isEmpty)
-                const EmptyStateView(
-                  icon: Icons.contact_phone,
-                  title: 'Sin contactos guardados',
-                  message: 'Agrega contactos para llamarlos con un toque.',
-                )
-              else
-                ...data.contacts.map(
-                  (contact) => _ContactCard(
-                    contact: contact,
-                    onCall: () => _call(
-                      contact.phone,
-                      contactName: contact.name,
-                    ),
-                    onEdit: () => _openContactForm(contact),
-                  ),
+                _EmergencyHeader(
+                  primaryContact: primary,
+                  onCall911: () => _call('911'),
+                  onCallPrimary: primary == null
+                      ? null
+                      : () => _call(primary.phone, contactName: primary.name),
                 ),
-            ],
+                const SizedBox(height: 20),
+                _MedicalKeyData(data: data),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Contactos',
+                        style: Theme.of(context).textTheme.headlineMedium,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                if (data.contacts.isEmpty)
+                  const EmptyStateView(
+                    icon: Icons.contact_phone,
+                    title: 'Sin contactos guardados',
+                    message: 'Agrega contactos para llamarlos con un toque.',
+                  )
+                else
+                  ...data.contacts.map(
+                    (contact) => _ContactCard(
+                      contact: contact,
+                      onCall: () =>
+                          _call(contact.phone, contactName: contact.name),
+                      onEdit: () => _openContactForm(contact),
+                    ),
+                  ),
+              ],
             ),
           );
         },
@@ -440,9 +436,11 @@ class _ContactCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final phone = normalizeEcuadorPhoneForDialer(contact.phone);
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       child: ListTile(
+        onTap: onCall,
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         leading: CircleAvatar(
           backgroundColor: contact.isPrimary
@@ -461,7 +459,10 @@ class _ContactCard extends StatelessWidget {
               : '${contact.name} (${contact.relationship})',
           style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
         ),
-        subtitle: Text(contact.phone, style: const TextStyle(fontSize: 16)),
+        subtitle: Text(
+          phone ?? contact.phone,
+          style: const TextStyle(fontSize: 16),
+        ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [

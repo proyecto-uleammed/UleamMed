@@ -43,6 +43,9 @@ class _CaregiverPatientsScreenState extends State<CaregiverPatientsScreen> {
     );
     if (linked == true && mounted) {
       await _refresh();
+      if (!mounted) {
+        return;
+      }
       showAppSnackBar(context, 'Solicitud enviada al paciente');
     }
   }
@@ -50,9 +53,7 @@ class _CaregiverPatientsScreenState extends State<CaregiverPatientsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Personas a cargo'),
-      ),
+      appBar: AppBar(title: const Text('Personas a cargo')),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'link-patient',
         onPressed: _linkPatient,

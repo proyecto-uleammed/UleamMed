@@ -35,7 +35,9 @@ class _ConditionsScreenState extends State<ConditionsScreen> {
     final patientId = widget.caregiverPatientId;
     if (patientId != null) {
       try {
-        final profile = await _api.loadCaregiverPatientMedicalProfile(patientId);
+        final profile = await _api.loadCaregiverPatientMedicalProfile(
+          patientId,
+        );
         final entries = await _api.listCaregiverPatientHealthEntries(patientId);
         if (mounted) {
           setState(() => _notShared = false);
@@ -107,9 +109,7 @@ class _ConditionsScreenState extends State<ConditionsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.title ?? 'Condiciones y alergias'),
-      ),
+      appBar: AppBar(title: Text(widget.title ?? 'Condiciones y alergias')),
       body: FutureBuilder<_ConditionsData>(
         future: _data,
         builder: (context, snapshot) {
@@ -129,9 +129,7 @@ class _ConditionsScreenState extends State<ConditionsScreen> {
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(24),
-                children: const [
-                  _NotSharedBanner(),
-                ],
+                children: const [_NotSharedBanner()],
               ),
             );
           }
@@ -258,8 +256,7 @@ class _SharedProfileSummary extends StatelessWidget {
       if (profile.bloodType.isNotEmpty) 'Tipo de sangre: ${profile.bloodType}',
       if (profile.conditions.isNotEmpty) 'Condiciones: ${profile.conditions}',
       if (profile.allergies.isNotEmpty) 'Alergias: ${profile.allergies}',
-      if (profile.importantNotes.isNotEmpty)
-        'Notas: ${profile.importantNotes}',
+      if (profile.importantNotes.isNotEmpty) 'Notas: ${profile.importantNotes}',
       if (profile.emergencyContactName.isNotEmpty)
         'Contacto: ${profile.emergencyContactName} (${profile.emergencyContactPhone})',
     ];
@@ -453,7 +450,10 @@ class _HealthCard extends StatelessWidget {
               ],
               if (entry.detail.isNotEmpty) ...[
                 const SizedBox(height: 8),
-                Text(entry.detail, style: Theme.of(context).textTheme.bodyLarge),
+                Text(
+                  entry.detail,
+                  style: Theme.of(context).textTheme.bodyLarge,
+                ),
               ],
             ],
           ),
@@ -656,10 +656,8 @@ class _HealthEntryFormState extends State<_HealthEntryForm> {
                 prefixIcon: const Icon(Icons.notes),
                 border: const OutlineInputBorder(),
               ),
-              validator: (value) => FormInputs.optionalMultiline(
-                value,
-                maxLength: 500,
-              ),
+              validator: (value) =>
+                  FormInputs.optionalMultiline(value, maxLength: 500),
             ),
             const SizedBox(height: 12),
             TextFormField(
@@ -675,7 +673,8 @@ class _HealthEntryFormState extends State<_HealthEntryForm> {
                     ? null
                     : IconButton(
                         tooltip: 'Quitar fecha',
-                        onPressed: () => setState(() => _dateController.clear()),
+                        onPressed: () =>
+                            setState(() => _dateController.clear()),
                         icon: const Icon(Icons.clear),
                       ),
               ),

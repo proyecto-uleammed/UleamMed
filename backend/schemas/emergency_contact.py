@@ -2,8 +2,9 @@ import re
 
 from pydantic import BaseModel, Field, field_validator
 
+from backend.utils.phone_numbers import normalize_ecuador_phone
+
 _NAME_PATTERN = re.compile(r"^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s'.-]+$")
-_PHONE_DIGITS = re.compile(r"\D")
 
 
 class EmergencyContactRead(BaseModel):
@@ -31,10 +32,7 @@ class EmergencyContactCreate(BaseModel):
     @field_validator("phone")
     @classmethod
     def validate_phone(cls, value: str) -> str:
-        digits = _PHONE_DIGITS.sub("", value.strip())
-        if len(digits) < 7 or len(digits) > 15:
-            raise ValueError("Telefono invalido")
-        return value.strip()
+        return normalize_ecuador_phone(value)
 
 
 class EmergencyContactUpdate(BaseModel):
@@ -58,10 +56,7 @@ class EmergencyContactUpdate(BaseModel):
     def validate_phone(cls, value: str | None) -> str | None:
         if value is None:
             return None
-        digits = _PHONE_DIGITS.sub("", value.strip())
-        if len(digits) < 7 or len(digits) > 15:
-            raise ValueError("Telefono invalido")
-        return value.strip()
+        return normalize_ecuador_phone(value)
 
 
 class EmergencyContactListResponse(BaseModel):

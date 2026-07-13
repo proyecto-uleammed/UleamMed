@@ -43,10 +43,8 @@ class _CaregiverPatientMedicationsScreenState
     final saved = await showMedicationEditorSheet(
       context,
       medication: medication,
-      onSave: (item) => widget.api.saveCaregiverPatientMedication(
-        widget.patient.id,
-        item,
-      ),
+      onSave: (item) =>
+          widget.api.saveCaregiverPatientMedication(widget.patient.id, item),
       onDelete: medication == null
           ? null
           : () => widget.api.deleteCaregiverPatientMedication(
@@ -57,6 +55,9 @@ class _CaregiverPatientMedicationsScreenState
 
     if (saved == true && mounted) {
       await _refresh();
+      if (!mounted) {
+        return;
+      }
       showAppSnackBar(
         context,
         medication == null
@@ -92,6 +93,9 @@ class _CaregiverPatientMedicationsScreenState
         return;
       }
       await _refresh();
+      if (!mounted) {
+        return;
+      }
       showAppSnackBar(
         context,
         medication.taken
@@ -150,6 +154,9 @@ class _CaregiverPatientMedicationsScreenState
         return;
       }
       await _refresh();
+      if (!mounted) {
+        return;
+      }
       showAppSnackBar(context, '${medication.name} eliminado');
     } on ApiException catch (error) {
       if (mounted) {

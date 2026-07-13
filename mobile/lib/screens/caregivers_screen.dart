@@ -161,6 +161,9 @@ class _CaregiversScreenState extends State<CaregiversScreen> {
         return;
       }
       await _refresh();
+      if (!mounted) {
+        return;
+      }
       showAppSnackBar(context, successMessage);
     } on ApiException catch (error) {
       if (mounted) {
@@ -172,9 +175,7 @@ class _CaregiversScreenState extends State<CaregiversScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Cuidadores'),
-      ),
+      appBar: AppBar(title: const Text('Cuidadores')),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'generate-caregiver-code',
         onPressed: _generatingCode ? null : _generateCode,

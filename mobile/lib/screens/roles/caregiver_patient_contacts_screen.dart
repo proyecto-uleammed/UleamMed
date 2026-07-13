@@ -53,9 +53,7 @@ class _CaregiverPatientContactsScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text('Contactos de ${widget.patientName}'),
-      ),
+      appBar: AppBar(title: Text('Contactos de ${widget.patientName}')),
       body: FutureBuilder<_ContactsData>(
         future: _data,
         builder: (context, snapshot) {
@@ -76,9 +74,7 @@ class _CaregiverPatientContactsScreenState
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(24),
-                children: const [
-                  _NotSharedBanner(),
-                ],
+                children: const [_NotSharedBanner()],
               ),
             );
           }
@@ -215,15 +211,20 @@ class _ContactCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final normalizedPhone = normalizeEcuadorPhoneForDialer(phone);
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       child: ListTile(
+        onTap: () =>
+            confirmAndCallPhone(context, rawPhone: phone, contactName: name),
         leading: CircleAvatar(
           backgroundColor: AppColors.primary.withValues(alpha: 0.15),
           child: Icon(Icons.contact_phone, color: AppColors.primary),
         ),
         title: Text(name.isEmpty ? 'Sin nombre' : name),
-        subtitle: Text('$relationship · ${phone.isEmpty ? 'Sin telefono' : phone}'),
+        subtitle: Text(
+          '$relationship · ${normalizedPhone ?? (phone.isEmpty ? 'Sin telefono' : phone)}',
+        ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
