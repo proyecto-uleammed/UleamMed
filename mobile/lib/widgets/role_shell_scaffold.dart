@@ -87,7 +87,7 @@ class _RoleShellScaffoldState extends State<RoleShellScaffold> {
         height: widget.patientMode ? 76 : null,
         labelBehavior: widget.patientMode
             ? NavigationDestinationLabelBehavior.alwaysShow
-            : NavigationDestinationLabelBehavior.auto,
+            : NavigationDestinationLabelBehavior.onlyShowSelected,
         selectedIndex: _index,
         onDestinationSelected: _goTo,
         destinations: widget.destinations,
