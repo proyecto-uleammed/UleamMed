@@ -44,12 +44,14 @@ class AppointmentsScreen extends StatefulWidget {
     this.caregiverPatientId,
     this.title,
     this.shellTabIndex,
+    this.readOnly = false,
   });
 
   final UleamMedApi? api;
   final int? caregiverPatientId;
   final String? title;
   final int? shellTabIndex;
+  final bool readOnly;
 
   @override
   State<AppointmentsScreen> createState() => _AppointmentsScreenState();
@@ -113,10 +115,6 @@ class _AppointmentsScreenState extends State<AppointmentsScreen>
     return _api.deleteAppointment(appointmentId);
   }
 
-  void _reload() {
-    unawaited(_refresh());
-  }
-
   Future<void> _refresh() async {
     setState(() {
       _appointments = _loadAppointments();
@@ -147,30 +145,38 @@ class _AppointmentsScreenState extends State<AppointmentsScreen>
   }
 
   Future<void> _openDetail(Appointment appointment) async {
+    final readOnly = widget.readOnly;
     final changed = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       builder: (context) => _AppointmentDetail(
         appointment: appointment,
-        onEdit: () async {
-          Navigator.pop(context, false);
-          await _openForm(appointment);
-        },
-        onToggleCompleted: () async {
-          await _saveAppointment(
-            appointment.copyWith(completed: !appointment.completed),
-          );
-          if (context.mounted) {
-            Navigator.pop(context, true);
-          }
-        },
-        onDelete: () async {
-          await _deleteAppointment(appointment.id);
-          if (context.mounted) {
-            Navigator.pop(context, true);
-          }
-        },
+        readOnly: readOnly,
+        onEdit: readOnly
+            ? null
+            : () async {
+                Navigator.pop(context, false);
+                await _openForm(appointment);
+              },
+        onToggleCompleted: readOnly
+            ? null
+            : () async {
+                await _saveAppointment(
+                  appointment.copyWith(completed: !appointment.completed),
+                );
+                if (context.mounted) {
+                  Navigator.pop(context, true);
+                }
+              },
+        onDelete: readOnly
+            ? null
+            : () async {
+                await _deleteAppointment(appointment.id);
+                if (context.mounted) {
+                  Navigator.pop(context, true);
+                }
+              },
       ),
     );
     if (changed == true && mounted) {
@@ -180,11 +186,12 @@ class _AppointmentsScreenState extends State<AppointmentsScreen>
 
   @override
   Widget build(BuildContext context) {
-    final showAddButton = _tabController.index == 0;
+    final readOnly = widget.readOnly;
+    final showAddButton = !readOnly && _tabController.index == 0;
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.title ?? 'Consultas'),
+        title: Text(widget.title ?? (readOnly ? 'Mis consultas' : 'Consultas')),
         bottom: TabBar(
           controller: _tabController,
           labelColor: Colors.white,
@@ -231,18 +238,23 @@ class _AppointmentsScreenState extends State<AppointmentsScreen>
             children: [
               _AppointmentList(
                 appointments: upcoming,
-                emptyTitle: 'Sin consultas proximas',
-                emptyMessage: 'Agrega una consulta con el boton +.',
+                emptyTitle: readOnly
+                    ? 'Sin consultas proximas'
+                    : 'Sin consultas proximas',
+                emptyMessage: readOnly
+                    ? 'Tu cuidador agregara tus consultas medicas.'
+                    : 'Agrega una consulta con el boton +.',
                 onTap: _openDetail,
                 onRefresh: _refresh,
-                showAddAction: true,
+                showAddAction: showAddButton,
                 onAdd: () => _openForm(),
               ),
               _AppointmentList(
                 appointments: past,
                 emptyTitle: 'Sin historial de consultas',
-                emptyMessage:
-                    'Las consultas realizadas o vencidas apareceran aqui.',
+                emptyMessage: readOnly
+                    ? 'Las consultas pasadas apareceran aqui cuando tu cuidador las registre.'
+                    : 'Las consultas realizadas o vencidas apareceran aqui.',
                 onTap: _openDetail,
                 onRefresh: _refresh,
                 showAddAction: false,
@@ -432,15 +444,17 @@ class _InfoRow extends StatelessWidget {
 class _AppointmentDetail extends StatelessWidget {
   const _AppointmentDetail({
     required this.appointment,
-    required this.onEdit,
-    required this.onToggleCompleted,
-    required this.onDelete,
+    required this.readOnly,
+    this.onEdit,
+    this.onToggleCompleted,
+    this.onDelete,
   });
 
   final Appointment appointment;
-  final VoidCallback onEdit;
-  final VoidCallback onToggleCompleted;
-  final VoidCallback onDelete;
+  final bool readOnly;
+  final VoidCallback? onEdit;
+  final VoidCallback? onToggleCompleted;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -484,42 +498,46 @@ class _AppointmentDetail extends StatelessWidget {
               style: Theme.of(context).textTheme.bodyLarge,
             ),
           ],
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: onToggleCompleted,
-                  icon: Icon(appointment.completed ? Icons.undo : Icons.check),
-                  label: Text(
-                    appointment.completed
-                        ? 'Marcar pendiente'
-                        : 'Marcar realizada',
+          if (!readOnly) ...[
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: onToggleCompleted,
+                    icon: Icon(
+                      appointment.completed ? Icons.undo : Icons.check,
+                    ),
+                    label: Text(
+                      appointment.completed
+                          ? 'Marcar pendiente'
+                          : 'Marcar realizada',
+                    ),
                   ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: onEdit,
-                  icon: const Icon(Icons.edit),
-                  label: const Text('Editar'),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onEdit,
+                    icon: const Icon(Icons.edit),
+                    label: const Text('Editar'),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: onDelete,
-                  icon: const Icon(Icons.delete),
-                  label: const Text('Eliminar'),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onDelete,
+                    icon: const Icon(Icons.delete),
+                    label: const Text('Eliminar'),
+                  ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
+          ],
         ],
       ),
     );

@@ -6,12 +6,11 @@ import '../../services/notification_scheduler.dart';
 import '../../services/permission_service.dart';
 import '../../widgets/role_shell_scaffold.dart';
 import '../appointments_screen.dart';
-import '../history_screen.dart';
-import '../home_screen.dart';
 import '../medications_screen.dart';
-import '../profile_screen.dart';
+import '../patient_health_history_screen.dart';
 
-/// Panel del paciente: medicamentos, historial y consultas propias.
+/// Panel del paciente simplificado para adultos mayores:
+/// medicamentos, consultas e historial de salud (solo lectura).
 class PatientShell extends StatelessWidget {
   const PatientShell({
     super.key,
@@ -36,21 +35,12 @@ class PatientShell extends StatelessWidget {
       api: api,
       settings: settings,
       initialIndex: initialTab,
+      patientMode: true,
       destinations: const [
-        NavigationDestination(
-          icon: Icon(Icons.home_outlined),
-          selectedIcon: Icon(Icons.home),
-          label: 'Inicio',
-        ),
         NavigationDestination(
           icon: Icon(Icons.medication_outlined),
           selectedIcon: Icon(Icons.medication),
           label: 'Medicinas',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.history),
-          selectedIcon: Icon(Icons.history_toggle_off),
-          label: 'Historial',
         ),
         NavigationDestination(
           icon: Icon(Icons.event_outlined),
@@ -58,61 +48,28 @@ class PatientShell extends StatelessWidget {
           label: 'Consultas',
         ),
         NavigationDestination(
-          icon: Icon(Icons.person_outline),
-          selectedIcon: Icon(Icons.person),
-          label: 'Perfil',
+          icon: Icon(Icons.monitor_heart_outlined),
+          selectedIcon: Icon(Icons.monitor_heart),
+          label: 'Mi salud',
         ),
       ],
       tabs: [
-        _PatientHomeTab(
-          api: api,
-          onLogout: onLogout,
-          settings: settings,
-          permissionService: permissionService,
-          notificationScheduler: notificationScheduler,
-        ),
         MedicationsScreen(
           api: api,
           notificationScheduler: notificationScheduler,
-          shellTabIndex: 1,
-        ),
-        HistoryScreen(api: api),
-        AppointmentsScreen(api: api, shellTabIndex: 3),
-        ProfileScreen(
-          api: api,
+          shellTabIndex: 0,
+          readOnly: true,
           settings: settings,
           permissionService: permissionService,
-          notificationScheduler: notificationScheduler,
+          onLogout: onLogout,
         ),
+        AppointmentsScreen(
+          api: api,
+          shellTabIndex: 1,
+          readOnly: true,
+        ),
+        PatientHealthHistoryScreen(api: api),
       ],
-    );
-  }
-}
-
-class _PatientHomeTab extends StatelessWidget {
-  const _PatientHomeTab({
-    required this.api,
-    required this.onLogout,
-    required this.settings,
-    required this.permissionService,
-    required this.notificationScheduler,
-  });
-
-  final UleamMedApi api;
-  final Future<void> Function() onLogout;
-  final AppSettingsController settings;
-  final PermissionService permissionService;
-  final NotificationScheduler notificationScheduler;
-
-  @override
-  Widget build(BuildContext context) {
-    return HomeScreen(
-      api: api,
-      onLogout: onLogout,
-      settings: settings,
-      permissionService: permissionService,
-      notificationScheduler: notificationScheduler,
-      onOpenTab: (index) => openRoleTab(context, index),
     );
   }
 }

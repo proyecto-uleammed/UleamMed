@@ -43,12 +43,6 @@ class _CaregiverPatientContactsScreenState
     }
   }
 
-  void _reload() {
-    setState(() {
-      _data = _load();
-    });
-  }
-
   Future<void> _refresh() async {
     setState(() {
       _data = _load();

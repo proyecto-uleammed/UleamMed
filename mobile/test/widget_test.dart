@@ -956,31 +956,25 @@ void main() {
     expect(find.text('Iniciar sesión'), findsOneWidget);
   });
 
-  testWidgets('profile screen shows and updates user name', (
+  testWidgets('patient panel is simplified and read-only', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(_testApp(api: _FakeApi()));
     await tester.pumpAndSettle();
     await _loginWithForm(tester);
 
-    await tester.tap(find.byIcon(Icons.account_circle));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Mi perfil'), findsOneWidget);
-    expect(find.text('roberto@uleammed.test'), findsWidgets);
-
-    await tester.enterText(
-      find.widgetWithText(TextFormField, 'Nombre completo'),
-      'Roberto Nuevo',
-    );
-    await tester.tap(find.byTooltip('Guardar perfil medico'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Perfil medico guardado'), findsOneWidget);
-    expect(find.text('Roberto Nuevo'), findsWidgets);
+    expect(find.text('Medicinas'), findsOneWidget);
+    expect(find.text('Consultas'), findsOneWidget);
+    expect(find.text('Mi salud'), findsOneWidget);
+    expect(find.text('Inicio'), findsNothing);
+    expect(find.text('Perfil'), findsNothing);
+    expect(find.text('Mis medicamentos'), findsOneWidget);
+    expect(find.byTooltip('Eliminar'), findsNothing);
+    expect(find.byTooltip('Editar'), findsNothing);
+    expect(find.text('Agregar'), findsNothing);
   });
 
-  testWidgets('home shows upcoming doses and marks one as taken', (
+  testWidgets('medications tab shows upcoming doses and marks one as taken', (
     WidgetTester tester,
   ) async {
     final api = _FakeApi();
@@ -1007,7 +1001,7 @@ void main() {
     );
   });
 
-  testWidgets('medications screen deletes a medication from its card', (
+  testWidgets('patient cannot delete medications from the card', (
     WidgetTester tester,
   ) async {
     final api = _FakeApi();
@@ -1015,27 +1009,10 @@ void main() {
     await tester.pumpWidget(_testApp(api: api));
     await tester.pumpAndSettle();
     await _loginWithForm(tester);
-    await tester.tap(find.text('Medicinas'));
-    await tester.pumpAndSettle();
 
     expect(find.text('Omeprazol'), findsOneWidget);
-
-    final medicationCard = find
-        .ancestor(of: find.text('Omeprazol'), matching: find.byType(Card))
-        .first;
-    final deleteButton = find.descendant(
-      of: medicationCard,
-      matching: find.byTooltip('Eliminar'),
-    );
-    await tester.ensureVisible(deleteButton);
-    await tester.pumpAndSettle();
-    await tester.tap(deleteButton);
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Eliminar'));
-    await tester.pumpAndSettle();
-
-    expect(api.medications.any((item) => item.id == 'omeprazol'), isFalse);
-    expect(find.text('Omeprazol'), findsNothing);
+    expect(find.byTooltip('Eliminar'), findsNothing);
+    expect(api.medications.any((item) => item.id == 'omeprazol'), isTrue);
   });
 
   testWidgets('password recovery requests code and resets password', (

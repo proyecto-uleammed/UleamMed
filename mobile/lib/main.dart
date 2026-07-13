@@ -84,7 +84,7 @@ class _UleamMedAppState extends State<UleamMedApp> with WidgetsBindingObserver {
       onAlarmRinging: _showMedicationAlarm,
     );
     if (openedFromReminder) {
-      _patientInitialTab = 1;
+      _patientInitialTab = 0;
     }
     await _restoreSession();
     await _preparePatientPermissions();
@@ -153,6 +153,7 @@ class _UleamMedAppState extends State<UleamMedApp> with WidgetsBindingObserver {
         _session = session;
         _isRestoringSession = false;
       });
+      await _applyPatientAccessibilityDefaults();
       _openPendingAlarm();
     } catch (_) {
       if (!mounted) {
@@ -172,8 +173,29 @@ class _UleamMedAppState extends State<UleamMedApp> with WidgetsBindingObserver {
       _permissionsChecked = session.user.role != AppRole.patient;
       _permissionsReady = session.user.role != AppRole.patient;
     });
+    unawaited(_applyPatientAccessibilityDefaults());
     _preparePatientPermissions();
     _openPendingAlarm();
+  }
+
+  Future<void> _applyPatientAccessibilityDefaults() async {
+    if (_session?.user.role != AppRole.patient) {
+      return;
+    }
+    if (_settings.value.fontScale == FontScaleOption.normal) {
+      await _settings.setFontScale(FontScaleOption.large);
+    }
+  }
+
+  double _textScaleFactor() {
+    final base = _settings.value.textScaleFactor;
+    if (_session?.user.role == AppRole.patient) {
+      return base.clamp(
+        FontScaleOption.large.factor,
+        FontScaleOption.extraLarge.factor,
+      );
+    }
+    return base;
   }
 
   Future<void> _handleLogout() async {
@@ -218,11 +240,11 @@ class _UleamMedAppState extends State<UleamMedApp> with WidgetsBindingObserver {
 
   void _openMedications() {
     if (!mounted) {
-      _patientInitialTab = 1;
+      _patientInitialTab = 0;
       return;
     }
     setState(() {
-      _patientInitialTab = 1;
+      _patientInitialTab = 0;
       _shellGeneration++;
     });
   }
@@ -292,7 +314,7 @@ class _UleamMedAppState extends State<UleamMedApp> with WidgetsBindingObserver {
             final mediaQuery = MediaQuery.of(context);
             return MediaQuery(
               data: mediaQuery.copyWith(
-                textScaler: TextScaler.linear(_settings.value.textScaleFactor),
+                textScaler: TextScaler.linear(_textScaleFactor()),
               ),
               child: child ?? const SizedBox.shrink(),
             );

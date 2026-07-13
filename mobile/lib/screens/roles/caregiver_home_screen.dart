@@ -27,7 +27,7 @@ class CaregiverHomeScreen extends StatefulWidget {
 }
 
 class _CaregiverHomeScreenState extends State<CaregiverHomeScreen> {
-  late final Future<AppSession> _session = widget.api.loadAppSession();
+  late Future<AppSession> _session = widget.api.loadAppSession();
   late Future<List<CaregiverLink>> _links = widget.api.listCaregivingLinks();
 
   Future<void> _refreshAll() async {

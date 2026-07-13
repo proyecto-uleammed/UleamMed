@@ -28,7 +28,7 @@ class AdminHomeScreen extends StatefulWidget {
 }
 
 class _AdminHomeScreenState extends State<AdminHomeScreen> {
-  late final Future<AppSession> _session = widget.api.loadAppSession();
+  late Future<AppSession> _session = widget.api.loadAppSession();
   late AdminDashboardStats _stats = AdminPanelData.dashboardStats();
 
   Future<void> _refreshAll() async {
