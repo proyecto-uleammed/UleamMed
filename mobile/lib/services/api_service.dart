@@ -2,19 +2,21 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../core/http_client.dart';
 import '../models/app_role.dart';
 import '../models/caregiving_models.dart';
 import '../models/local_models.dart';
+import 'auth_api.dart';
 import 'local_store.dart';
 
+export '../core/http_client.dart';
 export '../models/local_models.dart';
 export '../models/caregiving_models.dart';
+export 'auth_api.dart';
 
 abstract class UleamMedApi {
   Future<AppSession?> restoreSession();
@@ -144,73 +146,31 @@ class ApiService implements UleamMedApi {
     String? baseUrl,
     TokenStore? tokenStore,
     LocalStore? localStore,
-  }) : _client = client ?? http.Client(),
-       _baseUrl = baseUrl ?? _defaultBaseUrl,
-       _tokenStore = tokenStore ?? SecureTokenStore(),
-       _localStore = localStore ?? LocalStore();
+  }) : _httpClient = ApiHttpClient(
+         client: client,
+         baseUrl: baseUrl,
+         tokenStore: tokenStore,
+       ),
+       _localStore = localStore ?? LocalStore() {
+    _authApi = AuthApi(
+      httpClient: _httpClient,
+      localStore: _localStore,
+      clearPhotoCache: _clearPhotoCache,
+    );
+  }
 
-  final http.Client _client;
-  final String _baseUrl;
-  final TokenStore _tokenStore;
+  final ApiHttpClient _httpClient;
   final LocalStore _localStore;
-  String? _accessToken;
-  String? _refreshToken;
-  Future<bool>? _refreshInFlight;
-  static const _productionBaseUrl = 'https://d18ajxqltdcc9k.cloudfront.net';
-
-  static String get _defaultBaseUrl {
-    const configuredUrl = String.fromEnvironment('ULEAMMED_API_URL');
-    if (configuredUrl.isNotEmpty) {
-      return configuredUrl;
-    }
-    if (kDebugMode) {
-      return _localDevBaseUrl;
-    }
-    return _productionBaseUrl;
-  }
-
-  static String get _localDevBaseUrl {
-    if (kIsWeb) {
-      return 'http://127.0.0.1:8000';
-    }
-    switch (defaultTargetPlatform) {
-      case TargetPlatform.android:
-        return 'http://10.0.2.2:8000';
-      default:
-        return 'http://127.0.0.1:8000';
-    }
-  }
+  late final AuthApi _authApi;
 
   @override
-  Future<AppSession?> restoreSession() async {
-    final tokens = await _tokenStore.read();
-    if (tokens == null) {
-      return null;
-    }
-
-    _setTokensInMemory(tokens);
-    try {
-      final session = await loadAppSession();
-      return _finalizeSession(session);
-    } on ApiException catch (error) {
-      if (error.statusCode == 401) {
-        await logout();
-        return null;
-      }
-      rethrow;
-    }
-  }
+  Future<AppSession?> restoreSession() => _authApi.restoreSession();
 
   @override
   Future<AppSession> login({
     required String email,
     required String password,
-  }) async {
-    final tokens = await _loginUser(email: email, password: password);
-    await _persistTokens(tokens);
-    final session = await loadAppSession();
-    return _finalizeSession(session);
-  }
+  }) => _authApi.login(email: email, password: password);
 
   @override
   Future<AppSession> register({
@@ -218,112 +178,48 @@ class ApiService implements UleamMedApi {
     required String password,
     required String fullName,
     AppRole accountType = AppRole.patient,
-  }) async {
-    if (accountType != AppRole.patient && accountType != AppRole.caregiver) {
-      throw const ApiException('Tipo de cuenta no permitido');
-    }
-    final response = await _client.post(
-      Uri.parse('$_baseUrl/api/v1/auth/register'),
-      headers: _jsonHeaders,
-      body: jsonEncode({
-        'email': email,
-        'password': password,
-        'full_name': fullName,
-        'account_type': accountType.name,
-      }),
-    );
-
-    if (response.statusCode != 201) {
-      throw ApiException(
-        _errorMessageFromResponse(response, 'No se pudo crear la cuenta'),
-        response.statusCode,
-      );
-    }
-
-    await _localStore.clearUserData();
-    return login(email: email, password: password);
-  }
+  }) => _authApi.register(
+    email: email,
+    password: password,
+    fullName: fullName,
+    accountType: accountType,
+  );
 
   @override
-  Future<AppSession> loadAppSession() async {
-    final health = await _getJson(Uri.parse('$_baseUrl/health'));
-    final user = await _getAuthorizedJson(
-      Uri.parse('$_baseUrl/api/v1/users/me'),
-      fallback: 'No se pudo cargar el perfil',
-    );
-
-    return AppSession(
-      apiUrl: _baseUrl,
-      environment: health['environment']?.toString() ?? 'development',
-      user: AppUser.fromJson(user),
-    );
-  }
+  Future<AppSession> loadAppSession() => _authApi.loadAppSession();
 
   @override
-  Future<AppSession> updateProfile({required String fullName}) async {
-    await _patchAuthorizedJson(
-      Uri.parse('$_baseUrl/api/v1/users/me'),
-      body: {'full_name': fullName.trim()},
-      fallback: 'No se pudo actualizar el perfil',
-    );
-
-    return loadAppSession();
-  }
+  Future<AppSession> updateProfile({required String fullName}) =>
+      _authApi.updateProfile(fullName: fullName);
 
   @override
-  Future<String> requestPasswordReset({required String email}) async {
-    final data = await _postPublicJson(
-      Uri.parse('$_baseUrl/api/v1/auth/forgot-password'),
-      body: {'email': email.trim()},
-      fallback: 'No se pudo solicitar la recuperacion',
-    );
-    return data['message']?.toString() ??
-        'Si el correo existe, enviaremos instrucciones para restablecer la contrasena.';
-  }
+  Future<String> requestPasswordReset({required String email}) =>
+      _authApi.requestPasswordReset(email: email);
 
   @override
   Future<String> resetPassword({
     required String email,
     required String code,
     required String newPassword,
-  }) async {
-    final data = await _postPublicJson(
-      Uri.parse('$_baseUrl/api/v1/auth/reset-password'),
-      body: {
-        'email': email.trim(),
-        'code': code.trim(),
-        'new_password': newPassword,
-      },
-      fallback: 'No se pudo restablecer la contrasena',
-    );
-    return data['message']?.toString() ??
-        'Contrasena actualizada correctamente.';
-  }
+  }) => _authApi.resetPassword(
+    email: email,
+    code: code,
+    newPassword: newPassword,
+  );
 
   @override
   void dispose() {
-    _client.close();
+    _httpClient.close();
   }
 
   @override
-  Future<void> logout() async {
-    final activeUserId = await _localStore.readActiveUserId();
-    _accessToken = null;
-    _refreshToken = null;
-    _refreshInFlight = null;
-    await _tokenStore.clear();
-    await _localStore.clearUserData();
-    await _localStore.clearActiveUserId();
-    if (activeUserId != null) {
-      await _clearPhotoCache(activeUserId);
-    }
-  }
+  Future<void> logout() => _authApi.logout();
 
   @override
   Future<MedicalProfile> loadMedicalProfile() async {
     try {
-      final data = await _getAuthorizedJson(
-        Uri.parse('$_baseUrl/api/v1/medical-profile'),
+      final data = await _httpClient.getAuthorizedJson(
+        Uri.parse('${_httpClient.baseUrl}/api/v1/medical-profile'),
         fallback: 'No se pudo cargar el perfil medico',
       );
       final remote = MedicalProfile.fromBackendJson(data);
@@ -339,8 +235,8 @@ class ApiService implements UleamMedApi {
     final localPending = profile.copyWith(syncStatus: SyncStatus.pending);
     await _localStore.saveMedicalProfile(localPending);
     try {
-      final data = await _putAuthorizedJson(
-        Uri.parse('$_baseUrl/api/v1/medical-profile'),
+      final data = await _httpClient.putAuthorizedJson(
+        Uri.parse('${_httpClient.baseUrl}/api/v1/medical-profile'),
         body: _medicalProfilePayload(profile),
         fallback: 'No se pudo guardar el perfil medico',
       );
@@ -391,11 +287,11 @@ class ApiService implements UleamMedApi {
   @override
   Future<List<MedicationItem>> listDeletedMedications() async {
     try {
-      final data = await _getAuthorizedJson(
-        Uri.parse('$_baseUrl/api/v1/medications/trash'),
+      final data = await _httpClient.getAuthorizedJson(
+        Uri.parse('${_httpClient.baseUrl}/api/v1/medications/trash'),
         fallback: 'No se pudo cargar la papelera',
       );
-      return _decodeList(data, MedicationItem.fromJson);
+      return _httpClient.decodeList(data, MedicationItem.fromJson);
     } catch (_) {
       return const [];
     }
@@ -403,8 +299,8 @@ class ApiService implements UleamMedApi {
 
   @override
   Future<MedicationItem> restoreMedication(String medicationId) async {
-    final data = await _postAuthorizedJson(
-      Uri.parse('$_baseUrl/api/v1/medications/$medicationId/restore'),
+    final data = await _httpClient.postAuthorizedJson(
+      Uri.parse('${_httpClient.baseUrl}/api/v1/medications/$medicationId/restore'),
       fallback: 'No se pudo restaurar el medicamento',
     );
     final restored = MedicationItem.fromJson(
@@ -419,9 +315,9 @@ class ApiService implements UleamMedApi {
     int conflictId,
     String resolution,
   ) async {
-    final data = await _postAuthorizedJson(
+    final data = await _httpClient.postAuthorizedJson(
       Uri.parse(
-        '$_baseUrl/api/v1/medications/sync-conflicts/$conflictId/resolve',
+        '${_httpClient.baseUrl}/api/v1/medications/sync-conflicts/$conflictId/resolve',
       ),
       body: {'resolution': resolution},
       fallback: 'No se pudo resolver el duplicado',
@@ -462,7 +358,7 @@ class ApiService implements UleamMedApi {
     );
     await _localStore.upsertSyncAction(
       _syncActionForMedication(
-        operationType: _isPersistedBackendId(medication.id)
+        operationType: isPersistedBackendId(medication.id)
             ? SyncActionType.updateMedication
             : SyncActionType.createMedication,
         medication: localPending,
@@ -479,7 +375,7 @@ class ApiService implements UleamMedApi {
           clientMedicationId: clientMedicationId,
         ) ??
         localPending;
-    if (_isPersistedBackendId(result.id)) {
+    if (isPersistedBackendId(result.id)) {
       result = await _syncMedicationPhoto(result, localPending, existing);
     }
     return result;
@@ -499,7 +395,7 @@ class ApiService implements UleamMedApi {
           ? const {}
           : _medicationPayload(medication),
       clientMedicationId: medication.clientMedicationId ?? medication.id,
-      serverMedicationId: _isPersistedBackendId(medication.id)
+      serverMedicationId: isPersistedBackendId(medication.id)
           ? medication.id
           : null,
       patientId: patientId,
@@ -520,7 +416,7 @@ class ApiService implements UleamMedApi {
       'isImportant': medication.isImportant,
       'schedule': medication.effectiveSchedule.toJson(),
       'clientMedicationId': medication.clientMedicationId ?? medication.id,
-      if (_isPersistedBackendId(medication.id)) 'taken': medication.taken,
+      if (isPersistedBackendId(medication.id)) 'taken': medication.taken,
     };
   }
 
@@ -570,8 +466,8 @@ class ApiService implements UleamMedApi {
           medication.photoPath.isEmpty &&
           (existing?.photoAvailable == true || saved.photoAvailable);
       if (removedPhoto) {
-        await _deleteAuthorized(
-          Uri.parse('$_baseUrl/api/v1/medications/${saved.id}/photo'),
+        await _httpClient.deleteAuthorized(
+          Uri.parse('${_httpClient.baseUrl}/api/v1/medications/${saved.id}/photo'),
           fallback: 'No se pudo eliminar la foto',
         );
         await _purgeMedicationPhotoCache(userId, saved.id);
@@ -689,7 +585,7 @@ class ApiService implements UleamMedApi {
           'snoozed_until': snoozedUntil?.toUtc().toIso8601String(),
         },
         clientMedicationId: medication.clientMedicationId ?? medication.id,
-        serverMedicationId: _isPersistedBackendId(medication.id)
+        serverMedicationId: isPersistedBackendId(medication.id)
             ? medication.id
             : null,
         actorRole: 'patient',
@@ -709,8 +605,8 @@ class ApiService implements UleamMedApi {
   Future<List<DoseConfirmation>> listDoseConfirmations() async {
     final local = await _localStore.readDoseConfirmations();
     try {
-      final data = await _getAuthorizedList(
-        Uri.parse('$_baseUrl/api/v1/medications/dose-events'),
+      final data = await _httpClient.getAuthorizedList(
+        Uri.parse('${_httpClient.baseUrl}/api/v1/medications/dose-events'),
         fallback: 'No se pudo cargar el historial',
       );
       final remote = data
@@ -730,16 +626,16 @@ class ApiService implements UleamMedApi {
   @override
   Future<List<Appointment>> listAppointments() async {
     try {
-      final data = await _getAuthorizedJson(
-        Uri.parse('$_baseUrl/api/v1/appointments'),
+      final data = await _httpClient.getAuthorizedJson(
+        Uri.parse('${_httpClient.baseUrl}/api/v1/appointments'),
         fallback: 'No se pudieron cargar las consultas',
       );
-      final remote = _decodeList(data, Appointment.fromBackendJson);
+      final remote = _httpClient.decodeList(data, Appointment.fromBackendJson);
       final local = await _localStore.readAppointments();
       final pending = local.where(
         (item) =>
             item.syncStatus == SyncStatus.pending &&
-            !_isPersistedBackendId(item.id),
+            !isPersistedBackendId(item.id),
       );
       final merged = <String, Appointment>{
         for (final item in remote) item.id: item,
@@ -757,19 +653,19 @@ class ApiService implements UleamMedApi {
     final localPending = await _localStore.upsertAppointment(
       appointment.copyWith(syncStatus: SyncStatus.pending),
     );
-    final isBackendId = _isPersistedBackendId(appointment.id);
+    final isBackendId = isPersistedBackendId(appointment.id);
     final uri = isBackendId
-        ? Uri.parse('$_baseUrl/api/v1/appointments/${appointment.id}')
-        : Uri.parse('$_baseUrl/api/v1/appointments');
+        ? Uri.parse('${_httpClient.baseUrl}/api/v1/appointments/${appointment.id}')
+        : Uri.parse('${_httpClient.baseUrl}/api/v1/appointments');
     final body = _appointmentPayload(appointment);
     try {
       final data = isBackendId
-          ? await _patchAuthorizedJson(
+          ? await _httpClient.patchAuthorizedJson(
               uri,
               body: body,
               fallback: 'No se pudo actualizar la consulta',
             )
-          : await _postAuthorizedJson(
+          : await _httpClient.postAuthorizedJson(
               uri,
               body: body,
               fallback: 'No se pudo crear la consulta',
@@ -787,9 +683,9 @@ class ApiService implements UleamMedApi {
 
   @override
   Future<void> deleteAppointment(String appointmentId) async {
-    if (_isPersistedBackendId(appointmentId)) {
-      await _deleteAuthorized(
-        Uri.parse('$_baseUrl/api/v1/appointments/$appointmentId'),
+    if (isPersistedBackendId(appointmentId)) {
+      await _httpClient.deleteAuthorized(
+        Uri.parse('${_httpClient.baseUrl}/api/v1/appointments/$appointmentId'),
         fallback: 'No se pudo eliminar la consulta',
       );
     }
@@ -799,16 +695,16 @@ class ApiService implements UleamMedApi {
   @override
   Future<List<EmergencyContact>> listEmergencyContacts() async {
     try {
-      final data = await _getAuthorizedJson(
-        Uri.parse('$_baseUrl/api/v1/emergency-contacts'),
+      final data = await _httpClient.getAuthorizedJson(
+        Uri.parse('${_httpClient.baseUrl}/api/v1/emergency-contacts'),
         fallback: 'No se pudieron cargar los contactos',
       );
-      final remote = _decodeList(data, EmergencyContact.fromBackendJson);
+      final remote = _httpClient.decodeList(data, EmergencyContact.fromBackendJson);
       final local = await _localStore.readEmergencyContacts();
       final pending = local.where(
         (item) =>
             item.syncStatus == SyncStatus.pending &&
-            !_isPersistedBackendId(item.id),
+            !isPersistedBackendId(item.id),
       );
       final merged = <String, EmergencyContact>{
         for (final item in remote) item.id: item,
@@ -826,19 +722,19 @@ class ApiService implements UleamMedApi {
     final localPending = await _localStore.upsertEmergencyContact(
       contact.copyWith(syncStatus: SyncStatus.pending),
     );
-    final isBackendId = _isPersistedBackendId(contact.id);
+    final isBackendId = isPersistedBackendId(contact.id);
     final uri = isBackendId
-        ? Uri.parse('$_baseUrl/api/v1/emergency-contacts/${contact.id}')
-        : Uri.parse('$_baseUrl/api/v1/emergency-contacts');
+        ? Uri.parse('${_httpClient.baseUrl}/api/v1/emergency-contacts/${contact.id}')
+        : Uri.parse('${_httpClient.baseUrl}/api/v1/emergency-contacts');
     final body = _emergencyContactPayload(contact);
     try {
       final data = isBackendId
-          ? await _patchAuthorizedJson(
+          ? await _httpClient.patchAuthorizedJson(
               uri,
               body: body,
               fallback: 'No se pudo actualizar el contacto',
             )
-          : await _postAuthorizedJson(
+          : await _httpClient.postAuthorizedJson(
               uri,
               body: body,
               fallback: 'No se pudo crear el contacto',
@@ -856,9 +752,9 @@ class ApiService implements UleamMedApi {
 
   @override
   Future<void> deleteEmergencyContact(String contactId) async {
-    if (_isPersistedBackendId(contactId)) {
-      await _deleteAuthorized(
-        Uri.parse('$_baseUrl/api/v1/emergency-contacts/$contactId'),
+    if (isPersistedBackendId(contactId)) {
+      await _httpClient.deleteAuthorized(
+        Uri.parse('${_httpClient.baseUrl}/api/v1/emergency-contacts/$contactId'),
         fallback: 'No se pudo eliminar el contacto',
       );
     }
@@ -868,16 +764,16 @@ class ApiService implements UleamMedApi {
   @override
   Future<List<HealthEntry>> listHealthEntries() async {
     try {
-      final data = await _getAuthorizedJson(
-        Uri.parse('$_baseUrl/api/v1/health-entries'),
+      final data = await _httpClient.getAuthorizedJson(
+        Uri.parse('${_httpClient.baseUrl}/api/v1/health-entries'),
         fallback: 'No se pudieron cargar las condiciones',
       );
-      final remote = _decodeList(data, HealthEntry.fromBackendJson);
+      final remote = _httpClient.decodeList(data, HealthEntry.fromBackendJson);
       final local = await _localStore.readHealthEntries();
       final pending = local.where(
         (item) =>
             item.syncStatus == SyncStatus.pending &&
-            !_isPersistedBackendId(item.id),
+            !isPersistedBackendId(item.id),
       );
       final merged = <String, HealthEntry>{
         for (final item in remote) item.id: item,
@@ -895,19 +791,19 @@ class ApiService implements UleamMedApi {
     final localPending = await _localStore.upsertHealthEntry(
       entry.copyWith(syncStatus: SyncStatus.pending),
     );
-    final isBackendId = _isPersistedBackendId(entry.id);
+    final isBackendId = isPersistedBackendId(entry.id);
     final uri = isBackendId
-        ? Uri.parse('$_baseUrl/api/v1/health-entries/${entry.id}')
-        : Uri.parse('$_baseUrl/api/v1/health-entries');
+        ? Uri.parse('${_httpClient.baseUrl}/api/v1/health-entries/${entry.id}')
+        : Uri.parse('${_httpClient.baseUrl}/api/v1/health-entries');
     final body = _healthEntryPayload(entry);
     try {
       final data = isBackendId
-          ? await _patchAuthorizedJson(
+          ? await _httpClient.patchAuthorizedJson(
               uri,
               body: body,
               fallback: 'No se pudo actualizar el registro',
             )
-          : await _postAuthorizedJson(
+          : await _httpClient.postAuthorizedJson(
               uri,
               body: body,
               fallback: 'No se pudo crear el registro',
@@ -925,9 +821,9 @@ class ApiService implements UleamMedApi {
 
   @override
   Future<void> deleteHealthEntry(String entryId) async {
-    if (_isPersistedBackendId(entryId)) {
-      await _deleteAuthorized(
-        Uri.parse('$_baseUrl/api/v1/health-entries/$entryId'),
+    if (isPersistedBackendId(entryId)) {
+      await _httpClient.deleteAuthorized(
+        Uri.parse('${_httpClient.baseUrl}/api/v1/health-entries/$entryId'),
         fallback: 'No se pudo eliminar el registro',
       );
     }
@@ -936,8 +832,8 @@ class ApiService implements UleamMedApi {
 
   @override
   Future<CaregiverInvitation> createCaregiverInvitation() async {
-    final data = await _postAuthorizedJson(
-      Uri.parse('$_baseUrl/api/v1/caregiving/invitations'),
+    final data = await _httpClient.postAuthorizedJson(
+      Uri.parse('${_httpClient.baseUrl}/api/v1/caregiving/invitations'),
       fallback: 'No se pudo generar el codigo',
     );
     return CaregiverInvitation.fromJson(data);
@@ -945,16 +841,16 @@ class ApiService implements UleamMedApi {
 
   @override
   Future<void> cancelCaregiverInvitation(int invitationId) {
-    return _deleteAuthorized(
-      Uri.parse('$_baseUrl/api/v1/caregiving/invitations/$invitationId'),
+    return _httpClient.deleteAuthorized(
+      Uri.parse('${_httpClient.baseUrl}/api/v1/caregiving/invitations/$invitationId'),
       fallback: 'No se pudo cancelar el codigo',
     );
   }
 
   @override
   Future<CaregiverLink> redeemCaregiverInvitation(String code) async {
-    final data = await _postAuthorizedJson(
-      Uri.parse('$_baseUrl/api/v1/caregiving/invitations/redeem'),
+    final data = await _httpClient.postAuthorizedJson(
+      Uri.parse('${_httpClient.baseUrl}/api/v1/caregiving/invitations/redeem'),
       body: {'code': code.trim()},
       fallback: 'No se pudo enviar la solicitud',
     );
@@ -963,17 +859,17 @@ class ApiService implements UleamMedApi {
 
   @override
   Future<List<CaregiverLink>> listCaregivingLinks() async {
-    final data = await _getAuthorizedJson(
-      Uri.parse('$_baseUrl/api/v1/caregiving/links'),
+    final data = await _httpClient.getAuthorizedJson(
+      Uri.parse('${_httpClient.baseUrl}/api/v1/caregiving/links'),
       fallback: 'No se pudieron cargar los vinculos',
     );
-    return _decodeList(data, CaregiverLink.fromJson);
+    return _httpClient.decodeList(data, CaregiverLink.fromJson);
   }
 
   @override
   Future<CaregiverLink> approveCaregiverLink(int linkId) async {
-    final data = await _postAuthorizedJson(
-      Uri.parse('$_baseUrl/api/v1/caregiving/links/$linkId/approve'),
+    final data = await _httpClient.postAuthorizedJson(
+      Uri.parse('${_httpClient.baseUrl}/api/v1/caregiving/links/$linkId/approve'),
       fallback: 'No se pudo aprobar al cuidador',
     );
     return CaregiverLink.fromJson(data);
@@ -981,8 +877,8 @@ class ApiService implements UleamMedApi {
 
   @override
   Future<CaregiverLink> rejectCaregiverLink(int linkId) async {
-    final data = await _postAuthorizedJson(
-      Uri.parse('$_baseUrl/api/v1/caregiving/links/$linkId/reject'),
+    final data = await _httpClient.postAuthorizedJson(
+      Uri.parse('${_httpClient.baseUrl}/api/v1/caregiving/links/$linkId/reject'),
       fallback: 'No se pudo rechazar la solicitud',
     );
     return CaregiverLink.fromJson(data);
@@ -990,19 +886,19 @@ class ApiService implements UleamMedApi {
 
   @override
   Future<void> revokeCaregiverLink(int linkId) {
-    return _deleteAuthorized(
-      Uri.parse('$_baseUrl/api/v1/caregiving/links/$linkId'),
+    return _httpClient.deleteAuthorized(
+      Uri.parse('${_httpClient.baseUrl}/api/v1/caregiving/links/$linkId'),
       fallback: 'No se pudo revocar el acceso',
     );
   }
 
   @override
   Future<List<CaregiverPatient>> listCaregiverPatients() async {
-    final data = await _getAuthorizedJson(
-      Uri.parse('$_baseUrl/api/v1/caregiving/patients'),
+    final data = await _httpClient.getAuthorizedJson(
+      Uri.parse('${_httpClient.baseUrl}/api/v1/caregiving/patients'),
       fallback: 'No se pudieron cargar los pacientes',
     );
-    return _decodeList(data, CaregiverPatient.fromJson);
+    return _httpClient.decodeList(data, CaregiverPatient.fromJson);
   }
 
   @override
@@ -1013,15 +909,15 @@ class ApiService implements UleamMedApi {
       patientId,
     );
     try {
-      final data = await _getAuthorizedJson(
+      final data = await _httpClient.getAuthorizedJson(
         Uri.parse(
-          '$_baseUrl/api/v1/caregiving/patients/$patientId/medications',
+          '${_httpClient.baseUrl}/api/v1/caregiving/patients/$patientId/medications',
         ),
         fallback: 'No se pudieron cargar los medicamentos',
       );
       final backendItems = await _cacheCaregiverPatientMedicationPhotos(
         patientId,
-        _decodeList(data, MedicationItem.fromJson),
+        _httpClient.decodeList(data, MedicationItem.fromJson),
       );
       final merged = _mergeMedications(localItems, backendItems);
       await _localStore.saveCaregiverPatientMedications(patientId, merged);
@@ -1051,7 +947,7 @@ class ApiService implements UleamMedApi {
     );
     await _localStore.upsertSyncAction(
       _syncActionForMedication(
-        operationType: _isPersistedBackendId(medication.id)
+        operationType: isPersistedBackendId(medication.id)
             ? SyncActionType.updateMedication
             : SyncActionType.createMedication,
         medication: localPending,
@@ -1071,7 +967,7 @@ class ApiService implements UleamMedApi {
           clientMedicationId: clientMedicationId,
         ) ??
         localPending;
-    if (_isPersistedBackendId(result.id)) {
+    if (isPersistedBackendId(result.id)) {
       result = await _syncCaregiverPatientMedicationPhoto(
         patientId: patientId,
         saved: result,
@@ -1147,7 +1043,7 @@ class ApiService implements UleamMedApi {
           'snoozed_until': snoozedUntil?.toUtc().toIso8601String(),
         },
         clientMedicationId: medication?.clientMedicationId ?? medicationId,
-        serverMedicationId: _isPersistedBackendId(medicationId)
+        serverMedicationId: isPersistedBackendId(medicationId)
             ? medicationId
             : null,
         patientId: patientId,
@@ -1162,13 +1058,13 @@ class ApiService implements UleamMedApi {
     int patientId,
   ) async {
     try {
-      final data = await _getAuthorizedJson(
+      final data = await _httpClient.getAuthorizedJson(
         Uri.parse(
-          '$_baseUrl/api/v1/caregiving/patients/$patientId/medications/trash',
+          '${_httpClient.baseUrl}/api/v1/caregiving/patients/$patientId/medications/trash',
         ),
         fallback: 'No se pudo cargar la papelera',
       );
-      return _decodeList(data, MedicationItem.fromJson);
+      return _httpClient.decodeList(data, MedicationItem.fromJson);
     } catch (_) {
       return const [];
     }
@@ -1179,9 +1075,9 @@ class ApiService implements UleamMedApi {
     int patientId,
     String medicationId,
   ) async {
-    final data = await _postAuthorizedJson(
+    final data = await _httpClient.postAuthorizedJson(
       Uri.parse(
-        '$_baseUrl/api/v1/caregiving/patients/$patientId/medications/$medicationId/restore',
+        '${_httpClient.baseUrl}/api/v1/caregiving/patients/$patientId/medications/$medicationId/restore',
       ),
       fallback: 'No se pudo restaurar el medicamento',
     );
@@ -1194,11 +1090,11 @@ class ApiService implements UleamMedApi {
   Future<List<Appointment>> listCaregiverPatientAppointments(
     int patientId,
   ) async {
-    final data = await _getAuthorizedJson(
-      Uri.parse('$_baseUrl/api/v1/caregiving/patients/$patientId/appointments'),
+    final data = await _httpClient.getAuthorizedJson(
+      Uri.parse('${_httpClient.baseUrl}/api/v1/caregiving/patients/$patientId/appointments'),
       fallback: 'No se pudieron cargar las consultas',
     );
-    return _decodeList(data, Appointment.fromBackendJson);
+    return _httpClient.decodeList(data, Appointment.fromBackendJson);
   }
 
   @override
@@ -1206,23 +1102,23 @@ class ApiService implements UleamMedApi {
     int patientId,
     Appointment appointment,
   ) async {
-    final isBackendId = _isPersistedBackendId(appointment.id);
+    final isBackendId = isPersistedBackendId(appointment.id);
     final uri = isBackendId
         ? Uri.parse(
-            '$_baseUrl/api/v1/caregiving/patients/$patientId/appointments/${appointment.id}',
+            '${_httpClient.baseUrl}/api/v1/caregiving/patients/$patientId/appointments/${appointment.id}',
           )
         : Uri.parse(
-            '$_baseUrl/api/v1/caregiving/patients/$patientId/appointments',
+            '${_httpClient.baseUrl}/api/v1/caregiving/patients/$patientId/appointments',
           );
     final body = _appointmentPayload(appointment);
     try {
       final data = isBackendId
-          ? await _patchAuthorizedJson(
+          ? await _httpClient.patchAuthorizedJson(
               uri,
               body: body,
               fallback: 'No se pudo actualizar la consulta',
             )
-          : await _postAuthorizedJson(
+          : await _httpClient.postAuthorizedJson(
               uri,
               body: body,
               fallback: 'No se pudo crear la consulta',
@@ -1245,12 +1141,12 @@ class ApiService implements UleamMedApi {
     int patientId,
     String appointmentId,
   ) async {
-    if (!_isPersistedBackendId(appointmentId)) {
+    if (!isPersistedBackendId(appointmentId)) {
       return;
     }
-    await _deleteAuthorized(
+    await _httpClient.deleteAuthorized(
       Uri.parse(
-        '$_baseUrl/api/v1/caregiving/patients/$patientId/appointments/$appointmentId',
+        '${_httpClient.baseUrl}/api/v1/caregiving/patients/$patientId/appointments/$appointmentId',
       ),
       fallback: 'No se pudo eliminar la consulta',
     );
@@ -1260,13 +1156,13 @@ class ApiService implements UleamMedApi {
   Future<List<HealthEntry>> listCaregiverPatientHealthEntries(
     int patientId,
   ) async {
-    final data = await _getAuthorizedJson(
+    final data = await _httpClient.getAuthorizedJson(
       Uri.parse(
-        '$_baseUrl/api/v1/caregiving/patients/$patientId/health-entries',
+        '${_httpClient.baseUrl}/api/v1/caregiving/patients/$patientId/health-entries',
       ),
       fallback: 'No se pudieron cargar las condiciones',
     );
-    return _decodeList(data, HealthEntry.fromBackendJson);
+    return _httpClient.decodeList(data, HealthEntry.fromBackendJson);
   }
 
   @override
@@ -1274,22 +1170,22 @@ class ApiService implements UleamMedApi {
     int patientId,
     HealthEntry entry,
   ) async {
-    final isBackendId = _isPersistedBackendId(entry.id);
+    final isBackendId = isPersistedBackendId(entry.id);
     final uri = isBackendId
         ? Uri.parse(
-            '$_baseUrl/api/v1/caregiving/patients/$patientId/health-entries/${entry.id}',
+            '${_httpClient.baseUrl}/api/v1/caregiving/patients/$patientId/health-entries/${entry.id}',
           )
         : Uri.parse(
-            '$_baseUrl/api/v1/caregiving/patients/$patientId/health-entries',
+            '${_httpClient.baseUrl}/api/v1/caregiving/patients/$patientId/health-entries',
           );
     final body = _healthEntryPayload(entry);
     final data = isBackendId
-        ? await _patchAuthorizedJson(
+        ? await _httpClient.patchAuthorizedJson(
             uri,
             body: body,
             fallback: 'No se pudo actualizar el registro',
           )
-        : await _postAuthorizedJson(
+        : await _httpClient.postAuthorizedJson(
             uri,
             body: body,
             fallback: 'No se pudo crear el registro',
@@ -1302,12 +1198,12 @@ class ApiService implements UleamMedApi {
     int patientId,
     String entryId,
   ) async {
-    if (!_isPersistedBackendId(entryId)) {
+    if (!isPersistedBackendId(entryId)) {
       return;
     }
-    await _deleteAuthorized(
+    await _httpClient.deleteAuthorized(
       Uri.parse(
-        '$_baseUrl/api/v1/caregiving/patients/$patientId/health-entries/$entryId',
+        '${_httpClient.baseUrl}/api/v1/caregiving/patients/$patientId/health-entries/$entryId',
       ),
       fallback: 'No se pudo eliminar el registro',
     );
@@ -1317,9 +1213,9 @@ class ApiService implements UleamMedApi {
   Future<MedicalProfile> loadCaregiverPatientMedicalProfile(
     int patientId,
   ) async {
-    final data = await _getAuthorizedJson(
+    final data = await _httpClient.getAuthorizedJson(
       Uri.parse(
-        '$_baseUrl/api/v1/caregiving/patients/$patientId/medical-profile',
+        '${_httpClient.baseUrl}/api/v1/caregiving/patients/$patientId/medical-profile',
       ),
       fallback: 'No se pudo cargar el perfil medico',
     );
@@ -1330,21 +1226,21 @@ class ApiService implements UleamMedApi {
   Future<List<EmergencyContact>> listCaregiverPatientEmergencyContacts(
     int patientId,
   ) async {
-    final data = await _getAuthorizedJson(
+    final data = await _httpClient.getAuthorizedJson(
       Uri.parse(
-        '$_baseUrl/api/v1/caregiving/patients/$patientId/emergency-contacts',
+        '${_httpClient.baseUrl}/api/v1/caregiving/patients/$patientId/emergency-contacts',
       ),
       fallback: 'No se pudieron cargar los contactos',
     );
-    return _decodeList(data, EmergencyContact.fromBackendJson);
+    return _httpClient.decodeList(data, EmergencyContact.fromBackendJson);
   }
 
   @override
   Future<int> clearDoseHistory({DateTime? before}) async {
     final uri = before == null
-        ? Uri.parse('$_baseUrl/api/v1/medications/dose-events')
+        ? Uri.parse('${_httpClient.baseUrl}/api/v1/medications/dose-events')
         : Uri.parse(
-            '$_baseUrl/api/v1/medications/dose-events?before=${Uri.encodeComponent(before.toUtc().toIso8601String())}',
+            '${_httpClient.baseUrl}/api/v1/medications/dose-events?before=${Uri.encodeComponent(before.toUtc().toIso8601String())}',
           );
     final data = await _deleteAuthorizedJson(
       uri,
@@ -1360,10 +1256,10 @@ class ApiService implements UleamMedApi {
   }) async {
     final uri = before == null
         ? Uri.parse(
-            '$_baseUrl/api/v1/caregiving/patients/$patientId/medications/dose-events',
+            '${_httpClient.baseUrl}/api/v1/caregiving/patients/$patientId/medications/dose-events',
           )
         : Uri.parse(
-            '$_baseUrl/api/v1/caregiving/patients/$patientId/medications/dose-events?before=${Uri.encodeComponent(before.toUtc().toIso8601String())}',
+            '${_httpClient.baseUrl}/api/v1/caregiving/patients/$patientId/medications/dose-events?before=${Uri.encodeComponent(before.toUtc().toIso8601String())}',
           );
     final data = await _deleteAuthorizedJson(
       uri,
@@ -1434,9 +1330,9 @@ class ApiService implements UleamMedApi {
     int patientId,
     String medicationId,
   ) async {
-    await _deleteAuthorized(
+    await _httpClient.deleteAuthorized(
       Uri.parse(
-        '$_baseUrl/api/v1/caregiving/patients/$patientId/medications/$medicationId/photo',
+        '${_httpClient.baseUrl}/api/v1/caregiving/patients/$patientId/medications/$medicationId/photo',
       ),
       fallback: 'No se pudo eliminar la foto',
     );
@@ -1446,9 +1342,9 @@ class ApiService implements UleamMedApi {
   Future<List<DoseConfirmation>> listCaregiverPatientDoseEvents(
     int patientId,
   ) async {
-    final data = await _getAuthorizedList(
+    final data = await _httpClient.getAuthorizedList(
       Uri.parse(
-        '$_baseUrl/api/v1/caregiving/patients/$patientId/medications/dose-events',
+        '${_httpClient.baseUrl}/api/v1/caregiving/patients/$patientId/medications/dose-events',
       ),
       fallback: 'No se pudo cargar el historial del paciente',
     );
@@ -1471,7 +1367,7 @@ class ApiService implements UleamMedApi {
       final request = http.MultipartRequest(
         'POST',
         Uri.parse(
-          '$_baseUrl/api/v1/caregiving/patients/$patientId/medications/$medicationId/photo',
+          '${_httpClient.baseUrl}/api/v1/caregiving/patients/$patientId/medications/$medicationId/photo',
         ),
       );
       request.headers['Authorization'] = 'Bearer $token';
@@ -1482,14 +1378,14 @@ class ApiService implements UleamMedApi {
           contentType: _photoContentType(path),
         ),
       );
-      return _client.send(request);
+      return _httpClient.client.send(request);
     }
 
-    final token = await _ensureAccessToken();
+    final token = await _httpClient.ensureAccessToken();
     var response = await send(token);
     if (response.statusCode == 401 &&
-        await _refreshAccessToken(staleToken: token)) {
-      response = await send(await _ensureAccessToken());
+        await _httpClient.refreshAccessToken(staleToken: token)) {
+      response = await send(await _httpClient.ensureAccessToken());
     }
     final body = await response.stream.bytesToString();
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -1518,7 +1414,7 @@ class ApiService implements UleamMedApi {
         .toList();
     if (patientActions.isNotEmpty) {
       processed += await _syncActionBatch(
-        Uri.parse('$_baseUrl/api/v1/medications/sync'),
+        Uri.parse('${_httpClient.baseUrl}/api/v1/medications/sync'),
         patientActions,
       );
     }
@@ -1533,7 +1429,7 @@ class ApiService implements UleamMedApi {
           .toList();
       processed += await _syncActionBatch(
         Uri.parse(
-          '$_baseUrl/api/v1/caregiving/patients/$patientId/medications/sync',
+          '${_httpClient.baseUrl}/api/v1/caregiving/patients/$patientId/medications/sync',
         ),
         caregiverActions,
         caregiverPatientId: patientId,
@@ -1545,7 +1441,7 @@ class ApiService implements UleamMedApi {
       processed: processed,
       pending: pending,
       message: pending == 0
-          ? 'Todo está sincronizado.'
+          ? 'Todo est? sincronizado.'
           : 'Quedan $pending cambios por sincronizar.',
     );
   }
@@ -1564,7 +1460,7 @@ class ApiService implements UleamMedApi {
       );
     }
     try {
-      final data = await _postAuthorizedJson(
+      final data = await _httpClient.postAuthorizedJson(
         uri,
         body: {'actions': actions.map((item) => item.toApiJson()).toList()},
         fallback: 'No se pudieron sincronizar los medicamentos',
@@ -1679,7 +1575,7 @@ class ApiService implements UleamMedApi {
         await _localStore.deleteMedication(current.id);
       }
       await _localStore.upsertMedication(withLocalPhoto);
-      if (_isPersistedBackendId(withLocalPhoto.id) &&
+      if (isPersistedBackendId(withLocalPhoto.id) &&
           (withLocalPhoto.photoPath.isNotEmpty ||
               existingBeforeSync?.photoAvailable == true)) {
         await _syncMedicationPhoto(
@@ -1699,7 +1595,7 @@ class ApiService implements UleamMedApi {
         caregiverPatientId,
         withLocalPhoto,
       );
-      if (_isPersistedBackendId(withLocalPhoto.id) &&
+      if (isPersistedBackendId(withLocalPhoto.id) &&
           (withLocalPhoto.photoPath.isNotEmpty ||
               existingBeforeSync?.photoAvailable == true)) {
         final synced = await _syncCaregiverPatientMedicationPhoto(
@@ -1759,22 +1655,9 @@ class ApiService implements UleamMedApi {
     }
   }
 
-  Future<AppSession> _finalizeSession(AppSession session) async {
-    final userId = session.user.id.toString();
-    final previousUserId = await _localStore.readActiveUserId();
-    if (previousUserId != null && previousUserId != userId) {
-      _localStore.scopeToUser(previousUserId);
-      await _localStore.clearUserData();
-    }
-    _localStore.scopeToUser(userId);
-    await _localStore.saveActiveUserId(userId);
-
-    return session;
-  }
-
   Future<List<MedicationItem>> _loadBackendMedications() async {
-    final data = await _getAuthorizedJson(
-      Uri.parse('$_baseUrl/api/v1/medications'),
+    final data = await _httpClient.getAuthorizedJson(
+      Uri.parse('${_httpClient.baseUrl}/api/v1/medications'),
       fallback: 'No se pudieron cargar los medicamentos',
     );
 
@@ -1795,8 +1678,8 @@ class ApiService implements UleamMedApi {
 
   Future<List<MedicationItem>>
   _loadBackendMedicationConflictPlaceholders() async {
-    final data = await _getAuthorizedJson(
-      Uri.parse('$_baseUrl/api/v1/medications/sync-conflicts'),
+    final data = await _httpClient.getAuthorizedJson(
+      Uri.parse('${_httpClient.baseUrl}/api/v1/medications/sync-conflicts'),
       fallback: 'No se pudieron cargar los conflictos',
     );
     final items = data['items'];
@@ -1947,10 +1830,10 @@ class ApiService implements UleamMedApi {
     Uri uri, {
     required String fallback,
   }) {
-    return _authorizedJson(
-      request: (token) => _client.delete(
+    return _httpClient.authorizedJson(
+      request: (token) => _httpClient.client.delete(
         uri,
-        headers: _authorizedHeaders(token),
+        headers: _httpClient.authorizedHeaders(token),
       ),
       fallback: fallback,
     );
@@ -1975,7 +1858,7 @@ class ApiService implements UleamMedApi {
       }
       try {
         final bytes = await _getAuthorizedBytes(
-          Uri.parse('$_baseUrl/api/v1/medications/${medication.id}/photo'),
+          Uri.parse('${_httpClient.baseUrl}/api/v1/medications/${medication.id}/photo'),
         );
         final file = await _writeMedicationPhotoFile(
           scope: scope,
@@ -2013,7 +1896,7 @@ class ApiService implements UleamMedApi {
       try {
         final bytes = await _getAuthorizedBytes(
           Uri.parse(
-            '$_baseUrl/api/v1/caregiving/patients/$patientId/medications/${medication.id}/photo',
+            '${_httpClient.baseUrl}/api/v1/caregiving/patients/$patientId/medications/${medication.id}/photo',
           ),
         );
         final file = await _writeMedicationPhotoFile(
@@ -2101,7 +1984,7 @@ class ApiService implements UleamMedApi {
     Future<http.StreamedResponse> send(String token) async {
       final request = http.MultipartRequest(
         'POST',
-        Uri.parse('$_baseUrl/api/v1/medications/$medicationId/photo'),
+        Uri.parse('${_httpClient.baseUrl}/api/v1/medications/$medicationId/photo'),
       );
       request.headers['Authorization'] = 'Bearer $token';
       request.files.add(
@@ -2111,14 +1994,14 @@ class ApiService implements UleamMedApi {
           contentType: _photoContentType(path),
         ),
       );
-      return _client.send(request);
+      return _httpClient.client.send(request);
     }
 
-    final token = await _ensureAccessToken();
+    final token = await _httpClient.ensureAccessToken();
     var response = await send(token);
     if (response.statusCode == 401 &&
-        await _refreshAccessToken(staleToken: token)) {
-      response = await send(await _ensureAccessToken());
+        await _httpClient.refreshAccessToken(staleToken: token)) {
+      response = await send(await _httpClient.ensureAccessToken());
     }
     final body = await response.stream.bytesToString();
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -2138,16 +2021,16 @@ class ApiService implements UleamMedApi {
   }
 
   Future<List<int>> _getAuthorizedBytes(Uri uri) async {
-    final token = await _ensureAccessToken();
-    var response = await _client.get(
+    final token = await _httpClient.ensureAccessToken();
+    var response = await _httpClient.client.get(
       uri,
-      headers: _authorizedHeaders(token),
+      headers: _httpClient.authorizedHeaders(token),
     );
     if (response.statusCode == 401 &&
-        await _refreshAccessToken(staleToken: token)) {
-      response = await _client.get(
+        await _httpClient.refreshAccessToken(staleToken: token)) {
+      response = await _httpClient.client.get(
         uri,
-        headers: _authorizedHeaders(await _ensureAccessToken()),
+        headers: _httpClient.authorizedHeaders(await _httpClient.ensureAccessToken()),
       );
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -2173,496 +2056,4 @@ class ApiService implements UleamMedApi {
     );
   }
 
-  Future<String> _ensureAccessToken() async {
-    if (_accessToken != null) {
-      return _accessToken!;
-    }
-
-    final tokens = await _tokenStore.read();
-    if (tokens != null) {
-      _setTokensInMemory(tokens);
-      return tokens.accessToken;
-    }
-
-    throw const ApiException('Sesion no iniciada', 401);
-  }
-
-  Future<AuthTokens> _loginUser({
-    required String email,
-    required String password,
-  }) async {
-    final response = await _client.post(
-      Uri.parse('$_baseUrl/api/v1/auth/login'),
-      headers: _jsonHeaders,
-      body: jsonEncode({'email': email, 'password': password}),
-    );
-
-    if (response.statusCode != 200) {
-      throw ApiException(
-        _errorMessageFromResponse(response, 'No se pudo iniciar sesion'),
-        response.statusCode,
-      );
-    }
-
-    return AuthTokens.fromJson(_decodeObject(response));
-  }
-
-  Future<void> _persistTokens(AuthTokens tokens) async {
-    _setTokensInMemory(tokens);
-    await _tokenStore.save(tokens);
-  }
-
-  void _setTokensInMemory(AuthTokens tokens) {
-    _accessToken = tokens.accessToken;
-    _refreshToken = tokens.refreshToken;
-  }
-
-  /// Error tras un 401 cuando el refresh no pudo recuperar la sesion.
-  ///
-  /// Si [_performTokenRefresh] ya cerro la sesion (refresh invalido), se reporta
-  /// 401. Si el refresh fallo por red/5xx, se conserva la sesion y se reporta
-  /// 503 para que la app siga con cache local.
-  ApiException _sessionRefreshFailure() {
-    final sessionStillAlive = _accessToken != null || _refreshToken != null;
-    if (sessionStillAlive) {
-      return const ApiException(
-        'No se pudo renovar la sesion. Intenta de nuevo.',
-        503,
-      );
-    }
-    return const ApiException(
-      'Sesion expirada, inicia sesion nuevamente',
-      401,
-    );
-  }
-
-  /// Renueva el access token colapsando llamadas concurrentes.
-  ///
-  /// Varias peticiones en paralelo (por ejemplo `listMedications()` y
-  /// `listDoseConfirmations()` en la misma pantalla) pueden recibir 401 a la
-  /// vez. Sin este control, cada una dispararia su propio POST /auth/refresh.
-  ///
-  /// [staleToken] es el access token con el que fallo la peticion. Si para
-  /// cuando llegamos aqui el token en memoria ya es otro, significa que otra
-  /// peticion renovo con exito y basta con reintentar.
-  Future<bool> _refreshAccessToken({String? staleToken}) {
-    final currentToken = _accessToken;
-    if (staleToken != null &&
-        currentToken != null &&
-        currentToken != staleToken) {
-      return Future<bool>.value(true);
-    }
-
-    return _refreshInFlight ??= _performTokenRefresh().whenComplete(() {
-      _refreshInFlight = null;
-    });
-  }
-
-  /// Ejecuta el refresh real. Solo debe invocarse desde [_refreshAccessToken].
-  ///
-  /// Politica de cierre de sesion: solo se cierra ante 401/403, que significan
-  /// refresh token invalido o revocado. Un 5xx, un timeout o la falta de red
-  /// NO cierran la sesion: la app queda operando con su cache local.
-  Future<bool> _performTokenRefresh() async {
-    var refreshToken = _refreshToken;
-    if (refreshToken == null) {
-      final stored = await _tokenStore.read();
-      if (stored == null) {
-        return false;
-      }
-      _setTokensInMemory(stored);
-      refreshToken = stored.refreshToken;
-    }
-
-    final http.Response response;
-    try {
-      response = await _client.post(
-        Uri.parse('$_baseUrl/api/v1/auth/refresh'),
-        headers: _jsonHeaders,
-        body: jsonEncode({'refresh_token': refreshToken}),
-      );
-    } on SocketException {
-      return false;
-    } on http.ClientException {
-      return false;
-    } on TimeoutException {
-      return false;
-    }
-
-    if (response.statusCode == 401 || response.statusCode == 403) {
-      await logout();
-      return false;
-    }
-
-    if (response.statusCode != 200) {
-      return false;
-    }
-
-    try {
-      final data = _decodeObject(response);
-      final accessToken = data['access_token']?.toString();
-      if (accessToken == null || accessToken.isEmpty) {
-        return false;
-      }
-      await _persistTokens(
-        AuthTokens(
-          accessToken: accessToken,
-          // El backend actual no rota el refresh token; se conserva el vigente.
-          refreshToken: data['refresh_token']?.toString() ?? refreshToken,
-        ),
-      );
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  Future<Map<String, dynamic>> _getJson(Uri uri) async {
-    final response = await _client.get(uri, headers: _jsonHeaders);
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw ApiException(
-        _errorMessageFromResponse(
-          response,
-          'La API no respondio correctamente',
-        ),
-        response.statusCode,
-      );
-    }
-
-    return _decodeObject(response);
-  }
-
-  Future<Map<String, dynamic>> _getAuthorizedJson(
-    Uri uri, {
-    required String fallback,
-  }) {
-    return _authorizedJson(
-      request: (token) => _client.get(uri, headers: _authorizedHeaders(token)),
-      fallback: fallback,
-    );
-  }
-
-  Future<List<dynamic>> _getAuthorizedList(
-    Uri uri, {
-    required String fallback,
-  }) async {
-    final token = await _ensureAccessToken();
-    var response = await _client.get(uri, headers: _authorizedHeaders(token));
-
-    if (response.statusCode == 401 &&
-        await _refreshAccessToken(staleToken: token)) {
-      response = await _client.get(
-        uri,
-        headers: _authorizedHeaders(await _ensureAccessToken()),
-      );
-    }
-
-    if (response.statusCode == 401) {
-      throw _sessionRefreshFailure();
-    }
-
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw ApiException(
-        _errorMessageFromResponse(response, fallback),
-        response.statusCode,
-      );
-    }
-
-    final decoded = jsonDecode(response.body);
-    if (decoded is! List) {
-      throw const ApiException('Respuesta inesperada del historial');
-    }
-    return decoded;
-  }
-
-  Future<Map<String, dynamic>> _postAuthorizedJson(
-    Uri uri, {
-    Object? body,
-    required String fallback,
-    bool allowEmptyJson = false,
-  }) {
-    return _authorizedJson(
-      request: (token) => _client.post(
-        uri,
-        headers: _authorizedHeaders(token),
-        body: body == null ? null : jsonEncode(body),
-      ),
-      fallback: fallback,
-      allowEmptyJson: allowEmptyJson,
-    );
-  }
-
-  Future<Map<String, dynamic>> _postPublicJson(
-    Uri uri, {
-    required Object body,
-    required String fallback,
-  }) async {
-    final response = await _client.post(
-      uri,
-      headers: _jsonHeaders,
-      body: jsonEncode(body),
-    );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw ApiException(
-        _errorMessageFromResponse(response, fallback),
-        response.statusCode,
-      );
-    }
-
-    return _decodeObject(response);
-  }
-
-  Future<Map<String, dynamic>> _patchAuthorizedJson(
-    Uri uri, {
-    required Object body,
-    required String fallback,
-  }) {
-    return _authorizedJson(
-      request: (token) => _client.patch(
-        uri,
-        headers: _authorizedHeaders(token),
-        body: jsonEncode(body),
-      ),
-      fallback: fallback,
-    );
-  }
-
-  Future<Map<String, dynamic>> _putAuthorizedJson(
-    Uri uri, {
-    required Object body,
-    required String fallback,
-  }) {
-    return _authorizedJson(
-      request: (token) => _client.put(
-        uri,
-        headers: _authorizedHeaders(token),
-        body: jsonEncode(body),
-      ),
-      fallback: fallback,
-    );
-  }
-
-  Future<void> _deleteAuthorized(Uri uri, {required String fallback}) async {
-    final token = await _ensureAccessToken();
-    var response = await _client.delete(
-      uri,
-      headers: _authorizedHeaders(token),
-    );
-
-    if (response.statusCode == 401 &&
-        await _refreshAccessToken(staleToken: token)) {
-      response = await _client.delete(
-        uri,
-        headers: _authorizedHeaders(await _ensureAccessToken()),
-      );
-    }
-
-    if (response.statusCode == 401) {
-      throw _sessionRefreshFailure();
-    }
-
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw ApiException(
-        _errorMessageFromResponse(response, fallback),
-        response.statusCode,
-      );
-    }
-  }
-
-  List<T> _decodeList<T>(
-    Map<String, dynamic> data,
-    T Function(Map<String, dynamic>) fromJson,
-  ) {
-    final items = data['items'];
-    if (items is! List) {
-      throw const ApiException('Respuesta inesperada del backend');
-    }
-    return items
-        .whereType<Map>()
-        .map((item) => fromJson(Map<String, dynamic>.from(item)))
-        .toList();
-  }
-
-  Future<Map<String, dynamic>> _authorizedJson({
-    required Future<http.Response> Function(String token) request,
-    required String fallback,
-    bool allowEmptyJson = false,
-  }) async {
-    final token = await _ensureAccessToken();
-    var response = await request(token);
-
-    if (response.statusCode == 401 &&
-        await _refreshAccessToken(staleToken: token)) {
-      response = await request(await _ensureAccessToken());
-    }
-
-    if (response.statusCode == 401) {
-      throw _sessionRefreshFailure();
-    }
-
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw ApiException(
-        _errorMessageFromResponse(response, fallback),
-        response.statusCode,
-      );
-    }
-
-    return _decodeObject(response, allowEmptyJson: allowEmptyJson);
-  }
-
-  Map<String, String> _authorizedHeaders(String token) {
-    return {..._jsonHeaders, 'Authorization': 'Bearer $token'};
-  }
-
-  Map<String, dynamic> _decodeObject(
-    http.Response response, {
-    bool allowEmptyJson = false,
-  }) {
-    final body = response.body.trim();
-    if (allowEmptyJson && (body.isEmpty || body == 'null')) {
-      return {};
-    }
-    final decoded = jsonDecode(body);
-    if (decoded is Map<String, dynamic>) {
-      return decoded;
-    }
-
-    throw const ApiException('Respuesta inesperada del backend');
-  }
-
-  String _errorMessageFromResponse(http.Response response, String fallback) {
-    try {
-      final decoded = jsonDecode(response.body);
-      if (decoded is Map<String, dynamic>) {
-        final detail = decoded['detail'];
-        if (detail is String && detail.trim().isNotEmpty) {
-          return detail;
-        }
-        if (detail is List && detail.isNotEmpty) {
-          return 'Revisa los datos ingresados';
-        }
-      }
-    } catch (_) {
-      return fallback;
-    }
-
-    return fallback;
-  }
-
-  static const _jsonHeaders = {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
-  };
-}
-
-class AuthTokens {
-  const AuthTokens({required this.accessToken, required this.refreshToken});
-
-  factory AuthTokens.fromJson(Map<String, dynamic> json) {
-    return AuthTokens(
-      accessToken: json['access_token'].toString(),
-      refreshToken: json['refresh_token'].toString(),
-    );
-  }
-
-  final String accessToken;
-  final String refreshToken;
-}
-
-abstract class TokenStore {
-  Future<AuthTokens?> read();
-  Future<void> save(AuthTokens tokens);
-  Future<void> clear();
-}
-
-class SecureTokenStore implements TokenStore {
-  SecureTokenStore({FlutterSecureStorage? storage})
-    : _storage = storage ?? const FlutterSecureStorage();
-
-  final FlutterSecureStorage _storage;
-
-  static const _accessTokenKey = 'uleammed_access_token';
-  static const _refreshTokenKey = 'uleammed_refresh_token';
-
-  @override
-  Future<AuthTokens?> read() async {
-    final accessToken = await _storage.read(key: _accessTokenKey);
-    final refreshToken = await _storage.read(key: _refreshTokenKey);
-    if (accessToken == null || refreshToken == null) {
-      return null;
-    }
-
-    return AuthTokens(accessToken: accessToken, refreshToken: refreshToken);
-  }
-
-  @override
-  Future<void> save(AuthTokens tokens) async {
-    await _storage.write(key: _accessTokenKey, value: tokens.accessToken);
-    await _storage.write(key: _refreshTokenKey, value: tokens.refreshToken);
-  }
-
-  @override
-  Future<void> clear() async {
-    await _storage.delete(key: _accessTokenKey);
-    await _storage.delete(key: _refreshTokenKey);
-  }
-}
-
-class AppSession {
-  const AppSession({
-    required this.apiUrl,
-    required this.environment,
-    required this.user,
-  });
-
-  final String apiUrl;
-  final String environment;
-  final AppUser user;
-}
-
-class AppUser {
-  const AppUser({
-    required this.id,
-    required this.email,
-    required this.fullName,
-    required this.isActive,
-    required this.role,
-  });
-
-  factory AppUser.fromJson(Map<String, dynamic> json) {
-    return AppUser(
-      id: json['id'] as int,
-      email: json['email'].toString(),
-      fullName: json['full_name']?.toString() ?? 'Usuario',
-      isActive: json['is_active'] == true,
-      role: AppRole.fromJson(json['role']),
-    );
-  }
-
-  final int id;
-  final String email;
-  final String fullName;
-  final bool isActive;
-  final AppRole role;
-}
-
-bool _isPersistedBackendId(String id) {
-  final parsed = int.tryParse(id);
-  return parsed != null && parsed > 0 && id == parsed.toString();
-}
-
-class ApiException implements Exception {
-  const ApiException(this.message, [this.statusCode]);
-
-  final String message;
-  final int? statusCode;
-
-  @override
-  String toString() {
-    if (statusCode == null) {
-      return message;
-    }
-
-    return '$message (HTTP $statusCode)';
-  }
 }
