@@ -628,6 +628,97 @@ void main() {
       expect(appointments.first.doctor, 'Dra. Lopez');
     });
   });
+
+  group('ApiService token refresh', () {
+    test('varios 401 simultaneos comparten un unico refresh', () async {
+      var refreshCalls = 0;
+      var rejectedProfileCalls = 0;
+      final tokenStore = _MemoryTokenStore(
+        const AuthTokens(
+          accessToken: 'access-vencido',
+          refreshToken: 'refresh-ok',
+        ),
+      );
+      final api = ApiService(
+        baseUrl: 'http://localhost:8000',
+        tokenStore: tokenStore,
+        localStore: LocalStore(jsonStore: _MemoryJsonStore()),
+        client: MockClient((request) async {
+          if (request.url.path == '/health') {
+            return _jsonResponse({'environment': 'test'});
+          }
+          if (request.url.path == '/api/v1/auth/refresh') {
+            refreshCalls++;
+            // Latencia para que ambas peticiones coincidan en el mismo refresh.
+            await Future<void>.delayed(const Duration(milliseconds: 30));
+            return _jsonResponse({'access_token': 'access-nuevo'});
+          }
+          if (request.url.path == '/api/v1/users/me') {
+            if (request.headers['authorization'] == 'Bearer access-vencido') {
+              rejectedProfileCalls++;
+              return _jsonResponse(
+                {'detail': 'Token expirado'},
+                statusCode: 401,
+              );
+            }
+            return _jsonResponse(_userJson(fullName: 'Roberto Andrade'));
+          }
+          return _jsonResponse({'detail': 'No encontrado'}, statusCode: 404);
+        }),
+      );
+
+      final sessions = await Future.wait([
+        api.loadAppSession(),
+        api.loadAppSession(),
+      ]);
+
+      expect(sessions, hasLength(2));
+      expect(rejectedProfileCalls, 2);
+      expect(
+        refreshCalls,
+        1,
+        reason: 'el single-flight debe colapsar los refresh concurrentes',
+      );
+      expect(tokenStore.tokens?.accessToken, 'access-nuevo');
+      expect(tokenStore.wasCleared, isFalse);
+    });
+
+    test('un 503 al renovar no cierra la sesion del usuario', () async {
+      final tokenStore = _MemoryTokenStore(
+        const AuthTokens(
+          accessToken: 'access-vencido',
+          refreshToken: 'refresh-ok',
+        ),
+      );
+      final api = ApiService(
+        baseUrl: 'http://localhost:8000',
+        tokenStore: tokenStore,
+        localStore: LocalStore(jsonStore: _MemoryJsonStore()),
+        client: MockClient((request) async {
+          if (request.url.path == '/health') {
+            return _jsonResponse({'environment': 'test'});
+          }
+          if (request.url.path == '/api/v1/auth/refresh') {
+            return _jsonResponse(
+              {'detail': 'Servicio no disponible'},
+              statusCode: 503,
+            );
+          }
+          if (request.url.path == '/api/v1/users/me') {
+            return _jsonResponse({'detail': 'Token expirado'}, statusCode: 401);
+          }
+          return _jsonResponse({'detail': 'No encontrado'}, statusCode: 404);
+        }),
+      );
+
+      await expectLater(api.loadAppSession(), throwsA(isA<ApiException>()));
+      expect(
+        tokenStore.wasCleared,
+        isFalse,
+        reason: 'una caida del backend no debe borrar los tokens del paciente',
+      );
+    });
+  });
 }
 
 http.Response _jsonResponse(Map<String, dynamic> body, {int statusCode = 200}) {

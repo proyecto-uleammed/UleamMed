@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:alarm/alarm.dart';
+import 'core/app_scope.dart';
 import 'models/app_role.dart';
 import 'screens/auth_screen.dart';
 import 'screens/lock_screen.dart';
@@ -20,8 +21,29 @@ import 'theme/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Alarm.init();
-  runApp(const UleamMedApp());
+  final alarmPluginReady = await _initializeAlarmPlugin();
+  runApp(UleamMedApp(alarmPluginReady: alarmPluginReady));
+}
+
+/// Inicializa el plugin de alarmas sin tumbar el arranque si falla.
+///
+/// Una excepcion no capturada aqui deja al usuario ante una pantalla negra. En
+/// una app de recordatorios medicos preferimos arrancar degradados y avisar.
+Future<bool> _initializeAlarmPlugin() async {
+  try {
+    await Alarm.init();
+    return true;
+  } catch (error, stackTrace) {
+    FlutterError.reportError(
+      FlutterErrorDetails(
+        exception: error,
+        stack: stackTrace,
+        library: 'uleam_med',
+        context: ErrorDescription('inicializando el plugin de alarmas'),
+      ),
+    );
+    return false;
+  }
 }
 
 class UleamMedApp extends StatefulWidget {
@@ -32,6 +54,7 @@ class UleamMedApp extends StatefulWidget {
     this.lockService,
     this.permissionService,
     this.notificationScheduler,
+    this.alarmPluginReady = true,
   });
 
   final UleamMedApi? api;
@@ -39,20 +62,31 @@ class UleamMedApp extends StatefulWidget {
   final LockService? lockService;
   final PermissionService? permissionService;
   final NotificationScheduler? notificationScheduler;
+  final bool alarmPluginReady;
 
   @override
   State<UleamMedApp> createState() => _UleamMedAppState();
 }
 
 class _UleamMedAppState extends State<UleamMedApp> with WidgetsBindingObserver {
-  late final UleamMedApi _api = widget.api ?? ApiService();
-  late final AppSettingsController _settings =
-      widget.settingsController ?? AppSettingsController(AppSettingsService());
-  late final LockService _lock = widget.lockService ?? LockService();
-  late final PermissionService _permissions =
-      widget.permissionService ?? AndroidPermissionService();
-  late final NotificationScheduler _scheduler =
-      widget.notificationScheduler ?? NotificationScheduler();
+  late final AppDependencies _dependencies = AppDependencies(
+    api: widget.api ?? ApiService(),
+    settings:
+        widget.settingsController ??
+        AppSettingsController(AppSettingsService()),
+    lock: widget.lockService ?? LockService(),
+    permissions: widget.permissionService ?? AndroidPermissionService(),
+    scheduler: widget.notificationScheduler ?? NotificationScheduler(),
+    alarmPluginReady: widget.alarmPluginReady,
+  );
+
+  // Getters de compatibilidad: el resto del archivo no cambia.
+  UleamMedApi get _api => _dependencies.api;
+  AppSettingsController get _settings => _dependencies.settings;
+  LockService get _lock => _dependencies.lock;
+  PermissionService get _permissions => _dependencies.permissions;
+  NotificationScheduler get _scheduler => _dependencies.scheduler;
+
   AppSession? _session;
   bool _isRestoringSession = true;
   bool _permissionsChecked = false;
@@ -74,27 +108,125 @@ class _UleamMedAppState extends State<UleamMedApp> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _dependencies.dispose();
     super.dispose();
   }
 
+  /// Arranque por etapas. Ninguna etapa puede impedir que la app se muestre.
   Future<void> _bootstrap() async {
     await _settings.load();
-    final openedFromReminder = await _scheduler.initialize(
-      onOpenMedications: _openMedications,
-      onAlarmRinging: _showMedicationAlarm,
-    );
-    if (openedFromReminder) {
-      _patientInitialTab = 0;
-    }
+    await _initializeScheduler();
     await _restoreSession();
     await _preparePatientPermissions();
-    if (_session != null &&
-        _settings.value.appLockEnabled &&
-        await _lock.hasPin()) {
+    await _applyLockIfNeeded();
+    if (!_dependencies.alarmPluginReady) {
+      _warnAlarmsUnavailable();
+    }
+  }
+
+  Future<void> _initializeScheduler() async {
+    if (!_dependencies.alarmPluginReady) {
+      return;
+    }
+    try {
+      final openedFromReminder = await _scheduler.initialize(
+        onOpenMedications: _openMedications,
+        onAlarmRinging: _showMedicationAlarm,
+      );
+      if (openedFromReminder) {
+        _patientInitialTab = 0;
+      }
+    } catch (error, stackTrace) {
+      _reportError(error, stackTrace, 'inicializando el programador de alarmas');
+    }
+  }
+
+  /// Vuelve a programar las alarmas. Si no hay red, se reintenta al reanudar.
+  Future<void> _reconcileReminders() async {
+    try {
+      final medications = await _api.listMedications();
+      await _scheduler.reconcile(medications);
+    } catch (error, stackTrace) {
+      _reportError(error, stackTrace, 'reprogramando alarmas de medicamentos');
+    }
+  }
+
+  /// Comprueba los permisos del paciente.
+  ///
+  /// `_permissionsChecked` DEBE quedar en `true` en toda ruta de salida: si no,
+  /// la app se queda colgada en la pantalla "Validando sesion..." para siempre.
+  Future<void> _preparePatientPermissions() async {
+    if (_session?.user.role != AppRole.patient) {
+      return;
+    }
+
+    var isReady = false;
+    try {
+      final snapshot = await _permissions.check();
+      isReady = snapshot.isReady;
+      if (isReady) {
+        await _reconcileReminders();
+      }
+    } catch (error, stackTrace) {
+      _reportError(error, stackTrace, 'preparando permisos del paciente');
+    } finally {
       if (mounted) {
-        setState(() => _locked = true);
+        setState(() {
+          _permissionsChecked = true;
+          _permissionsReady = isReady;
+        });
       }
     }
+  }
+
+  Future<void> _applyLockIfNeeded() async {
+    if (_session == null || !_settings.value.appLockEnabled) {
+      return;
+    }
+    try {
+      if (await _lock.hasPin() && mounted) {
+        setState(() => _locked = true);
+      }
+    } catch (error, stackTrace) {
+      _reportError(error, stackTrace, 'verificando el bloqueo con PIN');
+    }
+  }
+
+  void _reportError(Object error, StackTrace stackTrace, String stage) {
+    FlutterError.reportError(
+      FlutterErrorDetails(
+        exception: error,
+        stack: stackTrace,
+        library: 'uleam_med',
+        context: ErrorDescription(stage),
+      ),
+    );
+  }
+
+  /// Avisa que las alarmas no funcionaran. El paciente debe saberlo.
+  void _warnAlarmsUnavailable() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final navigatorContext = _navigatorKey.currentContext;
+      if (!mounted || navigatorContext == null) {
+        return;
+      }
+      final messenger = ScaffoldMessenger.of(navigatorContext);
+      messenger.showMaterialBanner(
+        MaterialBanner(
+          leading: const Icon(Icons.alarm_off, color: Color(0xFFC62828)),
+          content: const Text(
+            'Las alarmas de medicamentos no estan disponibles en este '
+            'telefono. Revisa tus medicinas manualmente.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: messenger.hideCurrentMaterialBanner,
+              child: const Text('Entendido'),
+            ),
+          ],
+        ),
+      );
+    });
   }
 
   @override
@@ -138,8 +270,7 @@ class _UleamMedAppState extends State<UleamMedApp> with WidgetsBindingObserver {
       _permissionsReady = snapshot.isReady;
     });
     if (snapshot.isReady) {
-      final medications = await _api.listMedications();
-      await _scheduler.reconcile(medications);
+      await _reconcileReminders();
     }
   }
 
@@ -213,24 +344,6 @@ class _UleamMedAppState extends State<UleamMedApp> with WidgetsBindingObserver {
     });
   }
 
-  Future<void> _preparePatientPermissions() async {
-    if (_session?.user.role != AppRole.patient) {
-      return;
-    }
-    final snapshot = await _permissions.check();
-    if (snapshot.isReady) {
-      final medications = await _api.listMedications();
-      await _scheduler.reconcile(medications);
-    }
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _permissionsChecked = true;
-      _permissionsReady = snapshot.isReady;
-    });
-  }
-
   void _completePermissionSetup() {
     setState(() {
       _permissionsChecked = true;
@@ -292,36 +405,39 @@ class _UleamMedAppState extends State<UleamMedApp> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _settings,
-      builder: (context, _) {
-        return MaterialApp(
-          navigatorKey: _navigatorKey,
-          title: 'UleamMed',
-          debugShowCheckedModeBanner: false,
-          locale: const Locale('es', 'ES'),
-          supportedLocales: const [
-            Locale('es', 'ES'),
-            Locale('en', 'US'),
-          ],
-          localizationsDelegates: const [
-            GlobalMaterialLocalizations.delegate,
-            GlobalWidgetsLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate,
-          ],
-          theme: buildAppTheme(),
-          builder: (context, child) {
-            final mediaQuery = MediaQuery.of(context);
-            return MediaQuery(
-              data: mediaQuery.copyWith(
-                textScaler: TextScaler.linear(_textScaleFactor()),
-              ),
-              child: child ?? const SizedBox.shrink(),
-            );
-          },
-          home: _buildHome(),
-        );
-      },
+    return AppScope(
+      dependencies: _dependencies,
+      child: AnimatedBuilder(
+        animation: _settings,
+        builder: (context, _) {
+          return MaterialApp(
+            navigatorKey: _navigatorKey,
+            title: 'UleamMed',
+            debugShowCheckedModeBanner: false,
+            locale: const Locale('es', 'ES'),
+            supportedLocales: const [
+              Locale('es', 'ES'),
+              Locale('en', 'US'),
+            ],
+            localizationsDelegates: const [
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            theme: buildAppTheme(),
+            builder: (context, child) {
+              final mediaQuery = MediaQuery.of(context);
+              return MediaQuery(
+                data: mediaQuery.copyWith(
+                  textScaler: TextScaler.linear(_textScaleFactor()),
+                ),
+                child: child ?? const SizedBox.shrink(),
+              );
+            },
+            home: _buildHome(),
+          );
+        },
+      ),
     );
   }
 

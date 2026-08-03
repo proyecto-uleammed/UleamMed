@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/app_scope.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/form_inputs.dart';
@@ -18,7 +19,7 @@ class EmergencyScreen extends StatefulWidget {
 }
 
 class _EmergencyScreenState extends State<EmergencyScreen> {
-  late final UleamMedApi _api = widget.api ?? ApiService();
+  late final UleamMedApi _api = widget.api ?? AppScope.of(context).api;
   late Future<_EmergencyData> _data = _loadData();
 
   Future<_EmergencyData> _loadData() async {

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../core/app_scope.dart';
 import '../services/api_service.dart';
 import '../services/app_settings.dart';
 import '../services/notification_scheduler.dart';
@@ -38,7 +39,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  late final UleamMedApi _api = widget.api ?? ApiService();
+  late final UleamMedApi _api = widget.api ?? AppScope.of(context).api;
   late Future<AppSession> _session = _api.loadAppSession();
   late Future<List<MedicationItem>> _medicationSummary = _api.listMedications();
 

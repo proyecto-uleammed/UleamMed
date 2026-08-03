@@ -155,6 +155,9 @@ class _FakeApi implements UleamMedApi {
   AppSession? restoredSession;
   AppSession? currentSession;
   bool didLogout = false;
+
+  @override
+  void dispose() {}
   MedicalProfile medicalProfile = const MedicalProfile();
   final List<DoseConfirmation> confirmations = [];
   final List<MedicationItem> medications = [

@@ -132,6 +132,10 @@ abstract class UleamMedApi {
   });
   Future<int> pendingSyncCount();
   Future<SyncSummary> synchronizePendingChanges();
+
+  /// Libera recursos propios (por ejemplo el `http.Client`).
+  /// Implementacion opcional: los dobles de prueba no necesitan sobreescribirlo.
+  void dispose() {}
 }
 
 class ApiService implements UleamMedApi {
@@ -151,6 +155,7 @@ class ApiService implements UleamMedApi {
   final LocalStore _localStore;
   String? _accessToken;
   String? _refreshToken;
+  Future<bool>? _refreshInFlight;
   static const _productionBaseUrl = 'https://d18ajxqltdcc9k.cloudfront.net';
 
   static String get _defaultBaseUrl {
@@ -296,10 +301,16 @@ class ApiService implements UleamMedApi {
   }
 
   @override
+  void dispose() {
+    _client.close();
+  }
+
+  @override
   Future<void> logout() async {
     final activeUserId = await _localStore.readActiveUserId();
     _accessToken = null;
     _refreshToken = null;
+    _refreshInFlight = null;
     await _tokenStore.clear();
     await _localStore.clearUserData();
     await _localStore.clearActiveUserId();
@@ -1474,8 +1485,10 @@ class ApiService implements UleamMedApi {
       return _client.send(request);
     }
 
-    var response = await send(await _ensureAccessToken());
-    if (response.statusCode == 401 && await _refreshAccessToken()) {
+    final token = await _ensureAccessToken();
+    var response = await send(token);
+    if (response.statusCode == 401 &&
+        await _refreshAccessToken(staleToken: token)) {
       response = await send(await _ensureAccessToken());
     }
     final body = await response.stream.bytesToString();
@@ -2101,8 +2114,10 @@ class ApiService implements UleamMedApi {
       return _client.send(request);
     }
 
-    var response = await send(await _ensureAccessToken());
-    if (response.statusCode == 401 && await _refreshAccessToken()) {
+    final token = await _ensureAccessToken();
+    var response = await send(token);
+    if (response.statusCode == 401 &&
+        await _refreshAccessToken(staleToken: token)) {
       response = await send(await _ensureAccessToken());
     }
     final body = await response.stream.bytesToString();
@@ -2123,11 +2138,13 @@ class ApiService implements UleamMedApi {
   }
 
   Future<List<int>> _getAuthorizedBytes(Uri uri) async {
+    final token = await _ensureAccessToken();
     var response = await _client.get(
       uri,
-      headers: _authorizedHeaders(await _ensureAccessToken()),
+      headers: _authorizedHeaders(token),
     );
-    if (response.statusCode == 401 && await _refreshAccessToken()) {
+    if (response.statusCode == 401 &&
+        await _refreshAccessToken(staleToken: token)) {
       response = await _client.get(
         uri,
         headers: _authorizedHeaders(await _ensureAccessToken()),
@@ -2200,7 +2217,53 @@ class ApiService implements UleamMedApi {
     _refreshToken = tokens.refreshToken;
   }
 
-  Future<bool> _refreshAccessToken() async {
+  /// Error tras un 401 cuando el refresh no pudo recuperar la sesion.
+  ///
+  /// Si [_performTokenRefresh] ya cerro la sesion (refresh invalido), se reporta
+  /// 401. Si el refresh fallo por red/5xx, se conserva la sesion y se reporta
+  /// 503 para que la app siga con cache local.
+  ApiException _sessionRefreshFailure() {
+    final sessionStillAlive = _accessToken != null || _refreshToken != null;
+    if (sessionStillAlive) {
+      return const ApiException(
+        'No se pudo renovar la sesion. Intenta de nuevo.',
+        503,
+      );
+    }
+    return const ApiException(
+      'Sesion expirada, inicia sesion nuevamente',
+      401,
+    );
+  }
+
+  /// Renueva el access token colapsando llamadas concurrentes.
+  ///
+  /// Varias peticiones en paralelo (por ejemplo `listMedications()` y
+  /// `listDoseConfirmations()` en la misma pantalla) pueden recibir 401 a la
+  /// vez. Sin este control, cada una dispararia su propio POST /auth/refresh.
+  ///
+  /// [staleToken] es el access token con el que fallo la peticion. Si para
+  /// cuando llegamos aqui el token en memoria ya es otro, significa que otra
+  /// peticion renovo con exito y basta con reintentar.
+  Future<bool> _refreshAccessToken({String? staleToken}) {
+    final currentToken = _accessToken;
+    if (staleToken != null &&
+        currentToken != null &&
+        currentToken != staleToken) {
+      return Future<bool>.value(true);
+    }
+
+    return _refreshInFlight ??= _performTokenRefresh().whenComplete(() {
+      _refreshInFlight = null;
+    });
+  }
+
+  /// Ejecuta el refresh real. Solo debe invocarse desde [_refreshAccessToken].
+  ///
+  /// Politica de cierre de sesion: solo se cierra ante 401/403, que significan
+  /// refresh token invalido o revocado. Un 5xx, un timeout o la falta de red
+  /// NO cierran la sesion: la app queda operando con su cache local.
+  Future<bool> _performTokenRefresh() async {
     var refreshToken = _refreshToken;
     if (refreshToken == null) {
       final stored = await _tokenStore.read();
@@ -2211,24 +2274,47 @@ class ApiService implements UleamMedApi {
       refreshToken = stored.refreshToken;
     }
 
-    final response = await _client.post(
-      Uri.parse('$_baseUrl/api/v1/auth/refresh'),
-      headers: _jsonHeaders,
-      body: jsonEncode({'refresh_token': refreshToken}),
-    );
+    final http.Response response;
+    try {
+      response = await _client.post(
+        Uri.parse('$_baseUrl/api/v1/auth/refresh'),
+        headers: _jsonHeaders,
+        body: jsonEncode({'refresh_token': refreshToken}),
+      );
+    } on SocketException {
+      return false;
+    } on http.ClientException {
+      return false;
+    } on TimeoutException {
+      return false;
+    }
 
-    if (response.statusCode != 200) {
+    if (response.statusCode == 401 || response.statusCode == 403) {
       await logout();
       return false;
     }
 
-    final data = _decodeObject(response);
-    final refreshedTokens = AuthTokens(
-      accessToken: data['access_token'].toString(),
-      refreshToken: refreshToken,
-    );
-    await _persistTokens(refreshedTokens);
-    return true;
+    if (response.statusCode != 200) {
+      return false;
+    }
+
+    try {
+      final data = _decodeObject(response);
+      final accessToken = data['access_token']?.toString();
+      if (accessToken == null || accessToken.isEmpty) {
+        return false;
+      }
+      await _persistTokens(
+        AuthTokens(
+          accessToken: accessToken,
+          // El backend actual no rota el refresh token; se conserva el vigente.
+          refreshToken: data['refresh_token']?.toString() ?? refreshToken,
+        ),
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<Map<String, dynamic>> _getJson(Uri uri) async {
@@ -2263,7 +2349,8 @@ class ApiService implements UleamMedApi {
     final token = await _ensureAccessToken();
     var response = await _client.get(uri, headers: _authorizedHeaders(token));
 
-    if (response.statusCode == 401 && await _refreshAccessToken()) {
+    if (response.statusCode == 401 &&
+        await _refreshAccessToken(staleToken: token)) {
       response = await _client.get(
         uri,
         headers: _authorizedHeaders(await _ensureAccessToken()),
@@ -2271,11 +2358,7 @@ class ApiService implements UleamMedApi {
     }
 
     if (response.statusCode == 401) {
-      await logout();
-      throw const ApiException(
-        'Sesion expirada, inicia sesion nuevamente',
-        401,
-      );
+      throw _sessionRefreshFailure();
     }
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -2366,7 +2449,8 @@ class ApiService implements UleamMedApi {
       headers: _authorizedHeaders(token),
     );
 
-    if (response.statusCode == 401 && await _refreshAccessToken()) {
+    if (response.statusCode == 401 &&
+        await _refreshAccessToken(staleToken: token)) {
       response = await _client.delete(
         uri,
         headers: _authorizedHeaders(await _ensureAccessToken()),
@@ -2374,11 +2458,7 @@ class ApiService implements UleamMedApi {
     }
 
     if (response.statusCode == 401) {
-      await logout();
-      throw const ApiException(
-        'Sesion expirada, inicia sesion nuevamente',
-        401,
-      );
+      throw _sessionRefreshFailure();
     }
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -2411,16 +2491,13 @@ class ApiService implements UleamMedApi {
     final token = await _ensureAccessToken();
     var response = await request(token);
 
-    if (response.statusCode == 401 && await _refreshAccessToken()) {
+    if (response.statusCode == 401 &&
+        await _refreshAccessToken(staleToken: token)) {
       response = await request(await _ensureAccessToken());
     }
 
     if (response.statusCode == 401) {
-      await logout();
-      throw const ApiException(
-        'Sesion expirada, inicia sesion nuevamente',
-        401,
-      );
+      throw _sessionRefreshFailure();
     }
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
