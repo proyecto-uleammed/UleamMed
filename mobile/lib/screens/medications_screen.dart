@@ -9,11 +9,16 @@ import 'package:path_provider/path_provider.dart';
 import 'medication_trash_screen.dart';
 import '../services/api_service.dart';
 import '../services/notification_scheduler.dart';
+import '../services/app_settings.dart';
+import '../services/permission_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/form_inputs.dart';
 import '../utils/time_picker_utils.dart';
 import '../widgets/app_states.dart';
 import '../widgets/role_shell_scaffold.dart';
+import '../widgets/upcoming_doses.dart';
+import 'emergency_screen.dart';
+import 'settings_screen.dart';
 
 class MedicationsScreen extends StatefulWidget {
   const MedicationsScreen({
@@ -21,11 +26,19 @@ class MedicationsScreen extends StatefulWidget {
     this.api,
     this.notificationScheduler,
     this.shellTabIndex,
+    this.readOnly = false,
+    this.settings,
+    this.permissionService,
+    this.onLogout,
   });
 
   final UleamMedApi? api;
   final NotificationScheduler? notificationScheduler;
   final int? shellTabIndex;
+  final bool readOnly;
+  final AppSettingsController? settings;
+  final PermissionService? permissionService;
+  final Future<void> Function()? onLogout;
 
   @override
   State<MedicationsScreen> createState() => _MedicationsScreenState();
@@ -287,29 +300,69 @@ class _MedicationsScreenState extends State<MedicationsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final readOnly = widget.readOnly;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Medicamentos'),
+        title: Text(readOnly ? 'Mis medicamentos' : 'Medicamentos'),
         actions: [
-          IconButton(
-            tooltip: 'Papelera',
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (context) => MedicationTrashScreen(api: _api),
-                ),
-              );
-            },
-            icon: const Icon(Icons.delete_outline),
-          ),
+          if (readOnly) ...[
+            IconButton(
+              tooltip: 'Emergencia',
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => EmergencyScreen(api: _api),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.emergency),
+            ),
+            if (widget.settings != null)
+              IconButton(
+                tooltip: 'Ajustes y accesibilidad',
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => SettingsScreen(
+                        settings: widget.settings!,
+                        api: _api,
+                        permissionService: widget.permissionService,
+                        notificationScheduler: widget.notificationScheduler,
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.settings),
+              ),
+            if (widget.onLogout != null)
+              IconButton(
+                tooltip: 'Cerrar sesion',
+                onPressed: widget.onLogout,
+                icon: const Icon(Icons.logout),
+              ),
+          ] else
+            IconButton(
+              tooltip: 'Papelera',
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (context) => MedicationTrashScreen(api: _api),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.delete_outline),
+            ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        heroTag: 'fab-medications',
-        onPressed: () => _openMedicationForm(),
-        icon: const Icon(Icons.add),
-        label: const Text('Agregar'),
-      ),
+      floatingActionButton: readOnly
+          ? null
+          : FloatingActionButton.extended(
+              heroTag: 'fab-medications',
+              onPressed: () => _openMedicationForm(),
+              icon: const Icon(Icons.add),
+              label: const Text('Agregar'),
+            ),
       body: FutureBuilder<_MedicationData>(
         future: _data,
         builder: (context, snapshot) {
@@ -338,18 +391,30 @@ class _MedicationsScreenState extends State<MedicationsScreen> {
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
               children: [
+                if (readOnly) ...[
+                  UpcomingDoses(
+                    api: _api,
+                    onChanged: _reload,
+                  ),
+                  const SizedBox(height: 16),
+                ],
                 _MedicationSummary(
                   totalCount: data.medications.length,
                   takenCount: takenCount,
                 ),
                 const SizedBox(height: 16),
                 if (data.medications.isEmpty)
-                  const _EmptyMedications()
+                  _EmptyMedications(readOnly: readOnly)
                 else
                   ...data.medications.map(
                     (medication) => _MedicationCard(
                       medication: medication,
                       isSaving: _savingIds.contains(medication.id),
+                      readOnly: readOnly,
+                      onView: () => showMedicationDetailSheet(
+                        context,
+                        medication,
+                      ),
                       onEdit: () => _openMedicationForm(medication),
                       onDelete: () => _deleteMedication(medication),
                       onTaken: () =>
@@ -362,8 +427,10 @@ class _MedicationsScreenState extends State<MedicationsScreen> {
                           _resolveConflict(medication, resolution),
                     ),
                   ),
-                const SizedBox(height: 20),
-                _ConfirmationHistory(confirmations: data.confirmations),
+                if (!readOnly) ...[
+                  const SizedBox(height: 20),
+                  _ConfirmationHistory(confirmations: data.confirmations),
+                ],
               ],
             ),
           );
@@ -432,7 +499,9 @@ class _MedicationSummary extends StatelessWidget {
 }
 
 class _EmptyMedications extends StatelessWidget {
-  const _EmptyMedications();
+  const _EmptyMedications({this.readOnly = false});
+
+  final bool readOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -447,14 +516,19 @@ class _EmptyMedications extends StatelessWidget {
           const Icon(Icons.medication, color: AppColors.primary, size: 42),
           const SizedBox(height: 10),
           Text(
-            'Agrega tu primer medicamento',
+            readOnly
+                ? 'Aun no hay medicamentos'
+                : 'Agrega tu primer medicamento',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: 6),
           Text(
-            'Aqui apareceran tus medicamentos con su dosis, horario y foto. '
-            'Toca el boton + para agregar el primero.',
+            readOnly
+                ? 'Tu cuidador agregara tus medicamentos. '
+                    'Apareceran aqui con su dosis, horario y foto.'
+                : 'Aqui apareceran tus medicamentos con su dosis, horario y foto. '
+                    'Toca el boton + para agregar el primero.',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodyMedium,
           ),
@@ -468,6 +542,8 @@ class _MedicationCard extends StatelessWidget {
   const _MedicationCard({
     required this.medication,
     required this.isSaving,
+    required this.readOnly,
+    required this.onView,
     required this.onEdit,
     required this.onDelete,
     required this.onTaken,
@@ -478,6 +554,8 @@ class _MedicationCard extends StatelessWidget {
 
   final MedicationItem medication;
   final bool isSaving;
+  final bool readOnly;
+  final VoidCallback onView;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
   final VoidCallback onTaken;
@@ -487,9 +565,7 @@ class _MedicationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
+    final content = Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -540,21 +616,28 @@ class _MedicationCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      tooltip: 'Editar',
-                      onPressed: isSaving ? null : onEdit,
-                      icon: const Icon(Icons.edit),
-                    ),
-                    IconButton(
-                      tooltip: 'Eliminar',
-                      onPressed: isSaving ? null : onDelete,
-                      icon: const Icon(Icons.delete_outline),
-                    ),
-                  ],
-                ),
+                if (!readOnly)
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        tooltip: 'Editar',
+                        onPressed: isSaving ? null : onEdit,
+                        icon: const Icon(Icons.edit),
+                      ),
+                      IconButton(
+                        tooltip: 'Eliminar',
+                        onPressed: isSaving ? null : onDelete,
+                        icon: const Icon(Icons.delete_outline),
+                      ),
+                    ],
+                  )
+                else
+                  IconButton(
+                    tooltip: 'Ver detalle',
+                    onPressed: onView,
+                    icon: const Icon(Icons.info_outline, size: 28),
+                  ),
               ],
             ),
             const SizedBox(height: 14),
@@ -562,37 +645,44 @@ class _MedicationCard extends StatelessWidget {
               spacing: 8,
               runSpacing: 8,
               children: medication.syncStatus == SyncStatus.conflict
-                  ? [
-                      FilledButton.icon(
-                        onPressed: isSaving
-                            ? null
-                            : () => onResolveConflict('merge'),
-                        icon: isSaving
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.call_merge),
-                        label: const Text('Fusionar'),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed: isSaving
-                            ? null
-                            : () => onResolveConflict('create_separate'),
-                        icon: const Icon(Icons.call_split),
-                        label: const Text('Crear aparte'),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed: isSaving
-                            ? null
-                            : () => onResolveConflict('reject'),
-                        icon: const Icon(Icons.close),
-                        label: const Text('Descartar'),
-                      ),
-                    ]
+                  ? readOnly
+                      ? [
+                          Text(
+                            'Tu cuidador debe revisar este duplicado.',
+                            style: Theme.of(context).textTheme.bodyLarge,
+                          ),
+                        ]
+                      : [
+                          FilledButton.icon(
+                            onPressed: isSaving
+                                ? null
+                                : () => onResolveConflict('merge'),
+                            icon: isSaving
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.call_merge),
+                            label: const Text('Fusionar'),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: isSaving
+                                ? null
+                                : () => onResolveConflict('create_separate'),
+                            icon: const Icon(Icons.call_split),
+                            label: const Text('Crear aparte'),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: isSaving
+                                ? null
+                                : () => onResolveConflict('reject'),
+                            icon: const Icon(Icons.close),
+                            label: const Text('Descartar'),
+                          ),
+                        ]
                   : [
                       FilledButton.icon(
                         onPressed: isSaving || medication.taken
@@ -627,7 +717,17 @@ class _MedicationCard extends StatelessWidget {
             ),
           ],
         ),
-      ),
+      );
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: readOnly
+          ? InkWell(
+              onTap: onView,
+              borderRadius: BorderRadius.circular(12),
+              child: content,
+            )
+          : content,
     );
   }
 }
@@ -775,6 +875,96 @@ class _ConfirmationHistory extends StatelessWidget {
     final hour = date.hour.toString().padLeft(2, '0');
     final minute = date.minute.toString().padLeft(2, '0');
     return '${date.day}/${date.month}/${date.year} $hour:$minute';
+  }
+}
+
+Future<void> showMedicationDetailSheet(
+  BuildContext context,
+  MedicationItem medication,
+) async {
+  await showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    builder: (context) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                _MedicationAvatar(medication: medication),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Text(
+                    medication.name,
+                    style: Theme.of(context).textTheme.headlineMedium,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            _MedicationDetailRow(label: 'Dosis', value: medication.dose),
+            _MedicationDetailRow(label: 'Horario', value: medication.time),
+            if (medication.frequency.isNotEmpty)
+              _MedicationDetailRow(
+                label: 'Frecuencia',
+                value: medication.frequency,
+              ),
+            if (medication.duration.isNotEmpty)
+              _MedicationDetailRow(
+                label: 'Duracion',
+                value: medication.duration,
+              ),
+            if (medication.instructions.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
+                'Indicaciones',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                medication.instructions,
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
+            ],
+            const SizedBox(height: 12),
+            _MedicationDetailRow(
+              label: 'Estado hoy',
+              value: medication.taken ? 'Tomado' : 'Pendiente',
+            ),
+          ],
+        ),
+      );
+    },
+  );
+}
+
+class _MedicationDetailRow extends StatelessWidget {
+  const _MedicationDetailRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(label, style: Theme.of(context).textTheme.titleMedium),
+          ),
+          Expanded(
+            child: Text(value, style: Theme.of(context).textTheme.bodyLarge),
+          ),
+        ],
+      ),
+    );
   }
 }
 

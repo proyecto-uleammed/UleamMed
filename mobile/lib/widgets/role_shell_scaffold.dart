@@ -15,6 +15,7 @@ class RoleShellScaffold extends StatefulWidget {
     required this.destinations,
     required this.tabs,
     this.initialIndex = 0,
+    this.patientMode = false,
   });
 
   final UleamMedApi api;
@@ -22,6 +23,7 @@ class RoleShellScaffold extends StatefulWidget {
   final List<NavigationDestination> destinations;
   final List<Widget> tabs;
   final int initialIndex;
+  final bool patientMode;
 
   @override
   State<RoleShellScaffold> createState() => _RoleShellScaffoldState();
@@ -82,6 +84,10 @@ class _RoleShellScaffoldState extends State<RoleShellScaffold> {
     return Scaffold(
       body: IndexedStack(index: _index, children: tabs),
       bottomNavigationBar: NavigationBar(
+        height: widget.patientMode ? 76 : null,
+        labelBehavior: widget.patientMode
+            ? NavigationDestinationLabelBehavior.alwaysShow
+            : NavigationDestinationLabelBehavior.onlyShowSelected,
         selectedIndex: _index,
         onDestinationSelected: _goTo,
         destinations: widget.destinations,
