@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'medication_trash_screen.dart';
+import '../core/app_scope.dart';
 import '../services/api_service.dart';
 import '../services/notification_scheduler.dart';
 import '../services/app_settings.dart';
@@ -45,7 +46,7 @@ class MedicationsScreen extends StatefulWidget {
 }
 
 class _MedicationsScreenState extends State<MedicationsScreen> {
-  late final UleamMedApi _api = widget.api ?? ApiService();
+  late final UleamMedApi _api = widget.api ?? AppScope.of(context).api;
   late Future<_MedicationData> _data = _loadData();
   final Set<String> _savingIds = {};
   int? _lastShellTabIndex;

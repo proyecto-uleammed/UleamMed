@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/app_scope.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/form_inputs.dart';
@@ -25,7 +26,7 @@ class ConditionsScreen extends StatefulWidget {
 }
 
 class _ConditionsScreenState extends State<ConditionsScreen> {
-  late final UleamMedApi _api = widget.api ?? ApiService();
+  late final UleamMedApi _api = widget.api ?? AppScope.of(context).api;
   late Future<_ConditionsData> _data = _loadData();
   bool _notShared = false;
 

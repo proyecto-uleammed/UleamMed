@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../core/app_scope.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_states.dart';
@@ -20,7 +21,7 @@ class PatientHealthHistoryScreen extends StatefulWidget {
 }
 
 class _PatientHealthHistoryScreenState extends State<PatientHealthHistoryScreen> {
-  late final UleamMedApi _api = widget.api ?? ApiService();
+  late final UleamMedApi _api = widget.api ?? AppScope.of(context).api;
   late Future<_HealthHistoryData> _data = _load();
 
   Future<_HealthHistoryData> _load() async {

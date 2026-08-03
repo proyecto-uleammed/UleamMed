@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../core/app_scope.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/form_inputs.dart';
@@ -59,7 +60,7 @@ class AppointmentsScreen extends StatefulWidget {
 
 class _AppointmentsScreenState extends State<AppointmentsScreen>
     with SingleTickerProviderStateMixin {
-  late final UleamMedApi _api = widget.api ?? ApiService();
+  late final UleamMedApi _api = widget.api ?? AppScope.of(context).api;
   late Future<List<Appointment>> _appointments = _loadAppointments();
   int? _lastShellTabIndex;
   late final TabController _tabController =
