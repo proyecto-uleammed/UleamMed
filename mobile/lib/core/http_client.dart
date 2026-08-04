@@ -257,6 +257,27 @@ class ApiHttpClient {
     return decoded;
   }
 
+  /// Descarga binaria autorizada (fotos de medicamentos). Comparte el mismo
+  /// patron de reintento-tras-401 que el resto de los helpers `*Authorized*`.
+  Future<List<int>> getAuthorizedBytes(Uri uri) async {
+    final token = await ensureAccessToken();
+    var response = await client.get(uri, headers: authorizedHeaders(token));
+    if (response.statusCode == 401 &&
+        await refreshAccessToken(staleToken: token)) {
+      response = await client.get(
+        uri,
+        headers: authorizedHeaders(await ensureAccessToken()),
+      );
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw ApiException('No se pudo descargar la foto', response.statusCode);
+    }
+    if (response.statusCode == 204 || response.bodyBytes.isEmpty) {
+      throw ApiException('Sin foto disponible', 204);
+    }
+    return response.bodyBytes;
+  }
+
   Future<Map<String, dynamic>> postAuthorizedJson(
     Uri uri, {
     Object? body,
