@@ -12,6 +12,7 @@ import '../models/caregiving_models.dart';
 import '../models/local_models.dart';
 import 'auth_api.dart';
 import 'local_store.dart';
+import 'sync_api.dart';
 
 export '../core/http_client.dart';
 export '../models/local_models.dart';
@@ -157,11 +158,17 @@ class ApiService implements UleamMedApi {
       localStore: _localStore,
       clearPhotoCache: _clearPhotoCache,
     );
+    _syncApi = SyncApi(
+      httpClient: _httpClient,
+      localStore: _localStore,
+      applySyncResults: _applySyncResults,
+    );
   }
 
   final ApiHttpClient _httpClient;
   final LocalStore _localStore;
   late final AuthApi _authApi;
+  late final SyncApi _syncApi;
 
   @override
   Future<AppSession?> restoreSession() => _authApi.restoreSession();
@@ -1396,95 +1403,11 @@ class ApiService implements UleamMedApi {
   }
 
   @override
-  Future<int> pendingSyncCount() {
-    return _localStore.pendingSyncCount();
-  }
+  Future<int> pendingSyncCount() => _syncApi.pendingSyncCount();
 
   @override
-  Future<SyncSummary> synchronizePendingChanges() async {
-    var processed = 0;
-    final actions =
-        (await _localStore.readSyncActions())
-            .where((item) => item.syncStatus == SyncStatus.pending)
-            .toList()
-          ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
-
-    final patientActions = actions
-        .where((item) => item.patientId == null)
-        .toList();
-    if (patientActions.isNotEmpty) {
-      processed += await _syncActionBatch(
-        Uri.parse('${_httpClient.baseUrl}/api/v1/medications/sync'),
-        patientActions,
-      );
-    }
-
-    final caregiverPatientIds = {
-      for (final action in actions)
-        if (action.patientId != null) action.patientId!,
-    };
-    for (final patientId in caregiverPatientIds) {
-      final caregiverActions = actions
-          .where((item) => item.patientId == patientId)
-          .toList();
-      processed += await _syncActionBatch(
-        Uri.parse(
-          '${_httpClient.baseUrl}/api/v1/caregiving/patients/$patientId/medications/sync',
-        ),
-        caregiverActions,
-        caregiverPatientId: patientId,
-      );
-    }
-
-    final pending = await _localStore.pendingSyncCount();
-    return SyncSummary(
-      processed: processed,
-      pending: pending,
-      message: pending == 0
-          ? 'Todo est? sincronizado.'
-          : 'Quedan $pending cambios por sincronizar.',
-    );
-  }
-
-  Future<int> _syncActionBatch(
-    Uri uri,
-    List<PendingSyncAction> actions, {
-    int? caregiverPatientId,
-  }) async {
-    if (actions.isEmpty) {
-      return 0;
-    }
-    for (final action in actions) {
-      await _localStore.upsertSyncAction(
-        action.copyWith(syncStatus: SyncStatus.syncing),
-      );
-    }
-    try {
-      final data = await _httpClient.postAuthorizedJson(
-        uri,
-        body: {'actions': actions.map((item) => item.toApiJson()).toList()},
-        fallback: 'No se pudieron sincronizar los medicamentos',
-      );
-      return _applySyncResults(
-        data,
-        actions,
-        caregiverPatientId: caregiverPatientId,
-      );
-    } catch (error) {
-      for (final action in actions) {
-        await _localStore.upsertSyncAction(
-          action.copyWith(
-            syncStatus: SyncStatus.pending,
-            retryCount: action.retryCount + 1,
-            lastError: error is ApiException
-                ? error.message
-                : 'No se pudo sincronizar',
-          ),
-        );
-      }
-      return 0;
-    }
-  }
+  Future<SyncSummary> synchronizePendingChanges() =>
+      _syncApi.synchronizePendingChanges();
 
   Future<int> _applySyncResults(
     Map<String, dynamic> data,
