@@ -31,6 +31,7 @@ jobs:
     name: Publicar imagen backend en ECR
     runs-on: ubuntu-latest
     needs: validacion_previa
+    if: github.ref == 'refs/heads/main'
 
     steps:
       - name: Descargar codigo
