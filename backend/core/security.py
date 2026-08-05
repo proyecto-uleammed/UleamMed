@@ -1,12 +1,11 @@
-from datetime import UTC, datetime, timedelta
 import hashlib
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import bcrypt
 from jose import JWTError, jwt
 
 from backend.core.config import settings
-
 
 # Prefijo para reconocer hashes generados por esta implementacion.
 HASH_PREFIX = "bcrypt-sha256$"

@@ -8,7 +8,6 @@ from backend.core.security import decode_token
 from backend.models.user import User
 from backend.services.auth_service import get_user_by_id
 
-
 # FastAPI usa esta configuracion para leer el token Bearer del header Authorization.
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 

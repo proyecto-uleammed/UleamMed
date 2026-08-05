@@ -6,7 +6,6 @@ from backend.core.database import get_db
 from backend.models.user import User
 from backend.schemas.user import UserRead, UserUpdate
 
-
 # Todas las rutas de este archivo quedan bajo /api/v1/users.
 router = APIRouter(prefix="/users", tags=["users"])
 

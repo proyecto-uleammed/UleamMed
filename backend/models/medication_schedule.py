@@ -47,4 +47,4 @@ class MedicationScheduleTime(Base):
     schedule: Mapped[MedicationSchedule] = relationship(back_populates="times")
 
 
-from backend.models.medication import Medication  # noqa: E402
+from backend.models.medication import Medication

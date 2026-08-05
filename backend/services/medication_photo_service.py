@@ -8,7 +8,6 @@ from supabase import Client, create_client
 
 from backend.core.config import settings
 
-
 ALLOWED_PHOTO_TYPES = {
     "image/jpeg": ".jpg",
     "image/png": ".png",

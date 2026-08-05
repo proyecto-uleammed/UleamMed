@@ -1,11 +1,20 @@
+import logging
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Response,
+    UploadFile,
+    status,
+)
 from sqlalchemy.orm import Session
 
 from backend.api.deps import (
-    get_current_caregiving_user,
     get_current_caregiver,
+    get_current_caregiving_user,
     get_current_patient,
 )
 from backend.core.database import get_db
@@ -48,8 +57,8 @@ from backend.services.caregiving_service import (
     InvalidInvitationCodeError,
     approve_link,
     cancel_invitation,
-    create_invitation,
     clear_linked_patient_dose_events,
+    create_invitation,
     create_linked_patient_appointment,
     create_linked_patient_health_entry,
     create_linked_patient_medication,
@@ -60,10 +69,10 @@ from backend.services.caregiving_service import (
     get_linked_patient_medication,
     list_caregiver_patients,
     list_linked_patient_appointments,
-    list_linked_patient_emergency_contacts,
-    list_linked_patient_health_entries,
     list_linked_patient_deleted_medications,
     list_linked_patient_dose_events,
+    list_linked_patient_emergency_contacts,
+    list_linked_patient_health_entries,
     list_linked_patient_medications,
     list_links,
     record_linked_patient_dose_event,
@@ -76,7 +85,6 @@ from backend.services.caregiving_service import (
     update_linked_patient_health_entry,
     update_linked_patient_medication,
 )
-from backend.services.user_medical_profile_service import patient_shares_health_data
 from backend.services.medication_photo_service import (
     MAX_PHOTO_BYTES,
     MedicationPhotoConfigurationError,
@@ -86,9 +94,10 @@ from backend.services.medication_photo_service import (
     upload_medication_photo,
 )
 from backend.services.medication_service import medication_to_read
-
+from backend.services.user_medical_profile_service import patient_shares_health_data
 
 router = APIRouter(prefix="/caregiving", tags=["caregiving"])
+logger = logging.getLogger(__name__)
 
 
 @router.post(
@@ -467,7 +476,10 @@ def delete_patient_medication(
         try:
             delete_medication_photo(medication.photo_path)
         except Exception:
-            pass
+            logger.exception(
+                "No se pudo borrar la foto del medicamento %s",
+                medication_id,
+            )
     removed = delete_linked_patient_medication(
         db,
         caregiver.id,
@@ -520,7 +532,10 @@ def upload_patient_medication_photo(
     try:
         delete_medication_photo(previous_path)
     except Exception:
-        pass
+        logger.exception(
+            "No se pudo borrar la foto anterior del medicamento %s",
+            medication_id,
+        )
     return medication_to_read(db, patient_id, medication.id)
 
 

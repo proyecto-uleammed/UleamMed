@@ -3,7 +3,6 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
 from backend.core.security import decode_token
 from backend.websockets.manager import manager
 
-
 # Todas las rutas de este archivo quedan bajo /api/v1.
 router = APIRouter(tags=["realtime"])
 
