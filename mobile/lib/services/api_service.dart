@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
@@ -10,6 +9,7 @@ import '../models/app_role.dart';
 import '../models/caregiving_models.dart';
 import '../models/local_models.dart';
 import 'auth_api.dart';
+import 'caregiving_api.dart';
 import 'health_api.dart';
 import 'local_store.dart';
 import 'medication_api.dart';
@@ -170,6 +170,13 @@ class ApiService implements UleamMedApi {
       localStore: _localStore,
       synchronizePendingChanges: _syncApi.synchronizePendingChanges,
     );
+    _caregivingApi = CaregivingApi(
+      httpClient: _httpClient,
+      localStore: _localStore,
+      medicationApi: _medicationApi,
+      healthApi: _healthApi,
+      synchronizePendingChanges: _syncApi.synchronizePendingChanges,
+    );
   }
 
   final ApiHttpClient _httpClient;
@@ -178,6 +185,7 @@ class ApiService implements UleamMedApi {
   late final SyncApi _syncApi;
   late final HealthApi _healthApi;
   late final MedicationApi _medicationApi;
+  late final CaregivingApi _caregivingApi;
 
   @override
   Future<AppSession?> restoreSession() => _authApi.restoreSession();
@@ -290,23 +298,6 @@ class ApiService implements UleamMedApi {
   Future<MedicationItem> saveMedication(MedicationItem medication) =>
       _medicationApi.saveMedication(medication);
 
-  Future<MedicationItem?> _findLocalCaregiverMedication(
-    int patientId, {
-    required String id,
-    String? clientMedicationId,
-  }) async {
-    for (final item in await _localStore.readCaregiverPatientMedications(
-      patientId,
-    )) {
-      if (item.id == id ||
-          (clientMedicationId != null &&
-              item.clientMedicationId == clientMedicationId)) {
-        return item;
-      }
-    }
-    return null;
-  }
-
   @override
   Future<void> deleteMedication(String medicationId) =>
       _medicationApi.deleteMedication(medicationId);
@@ -372,177 +363,53 @@ class ApiService implements UleamMedApi {
       _healthApi.deleteHealthEntry(entryId);
 
   @override
-  Future<CaregiverInvitation> createCaregiverInvitation() async {
-    final data = await _httpClient.postAuthorizedJson(
-      Uri.parse('${_httpClient.baseUrl}/api/v1/caregiving/invitations'),
-      fallback: 'No se pudo generar el codigo',
-    );
-    return CaregiverInvitation.fromJson(data);
-  }
+  Future<CaregiverInvitation> createCaregiverInvitation() =>
+      _caregivingApi.createCaregiverInvitation();
 
   @override
-  Future<void> cancelCaregiverInvitation(int invitationId) {
-    return _httpClient.deleteAuthorized(
-      Uri.parse('${_httpClient.baseUrl}/api/v1/caregiving/invitations/$invitationId'),
-      fallback: 'No se pudo cancelar el codigo',
-    );
-  }
+  Future<void> cancelCaregiverInvitation(int invitationId) =>
+      _caregivingApi.cancelCaregiverInvitation(invitationId);
 
   @override
-  Future<CaregiverLink> redeemCaregiverInvitation(String code) async {
-    final data = await _httpClient.postAuthorizedJson(
-      Uri.parse('${_httpClient.baseUrl}/api/v1/caregiving/invitations/redeem'),
-      body: {'code': code.trim()},
-      fallback: 'No se pudo enviar la solicitud',
-    );
-    return CaregiverLink.fromJson(data);
-  }
+  Future<CaregiverLink> redeemCaregiverInvitation(String code) =>
+      _caregivingApi.redeemCaregiverInvitation(code);
 
   @override
-  Future<List<CaregiverLink>> listCaregivingLinks() async {
-    final data = await _httpClient.getAuthorizedJson(
-      Uri.parse('${_httpClient.baseUrl}/api/v1/caregiving/links'),
-      fallback: 'No se pudieron cargar los vinculos',
-    );
-    return _httpClient.decodeList(data, CaregiverLink.fromJson);
-  }
+  Future<List<CaregiverLink>> listCaregivingLinks() =>
+      _caregivingApi.listCaregivingLinks();
 
   @override
-  Future<CaregiverLink> approveCaregiverLink(int linkId) async {
-    final data = await _httpClient.postAuthorizedJson(
-      Uri.parse('${_httpClient.baseUrl}/api/v1/caregiving/links/$linkId/approve'),
-      fallback: 'No se pudo aprobar al cuidador',
-    );
-    return CaregiverLink.fromJson(data);
-  }
+  Future<CaregiverLink> approveCaregiverLink(int linkId) =>
+      _caregivingApi.approveCaregiverLink(linkId);
 
   @override
-  Future<CaregiverLink> rejectCaregiverLink(int linkId) async {
-    final data = await _httpClient.postAuthorizedJson(
-      Uri.parse('${_httpClient.baseUrl}/api/v1/caregiving/links/$linkId/reject'),
-      fallback: 'No se pudo rechazar la solicitud',
-    );
-    return CaregiverLink.fromJson(data);
-  }
+  Future<CaregiverLink> rejectCaregiverLink(int linkId) =>
+      _caregivingApi.rejectCaregiverLink(linkId);
 
   @override
-  Future<void> revokeCaregiverLink(int linkId) {
-    return _httpClient.deleteAuthorized(
-      Uri.parse('${_httpClient.baseUrl}/api/v1/caregiving/links/$linkId'),
-      fallback: 'No se pudo revocar el acceso',
-    );
-  }
+  Future<void> revokeCaregiverLink(int linkId) =>
+      _caregivingApi.revokeCaregiverLink(linkId);
 
   @override
-  Future<List<CaregiverPatient>> listCaregiverPatients() async {
-    final data = await _httpClient.getAuthorizedJson(
-      Uri.parse('${_httpClient.baseUrl}/api/v1/caregiving/patients'),
-      fallback: 'No se pudieron cargar los pacientes',
-    );
-    return _httpClient.decodeList(data, CaregiverPatient.fromJson);
-  }
+  Future<List<CaregiverPatient>> listCaregiverPatients() =>
+      _caregivingApi.listCaregiverPatients();
 
   @override
   Future<List<MedicationItem>> listCaregiverPatientMedications(
     int patientId,
-  ) async {
-    final localItems = await _localStore.readCaregiverPatientMedications(
-      patientId,
-    );
-    try {
-      final data = await _httpClient.getAuthorizedJson(
-        Uri.parse(
-          '${_httpClient.baseUrl}/api/v1/caregiving/patients/$patientId/medications',
-        ),
-        fallback: 'No se pudieron cargar los medicamentos',
-      );
-      final backendItems = await _cacheCaregiverPatientMedicationPhotos(
-        patientId,
-        _httpClient.decodeList(data, MedicationItem.fromJson),
-      );
-      final merged = _medicationApi.mergeMedications(localItems, backendItems);
-      await _localStore.saveCaregiverPatientMedications(patientId, merged);
-      return merged;
-    } catch (_) {
-      return localItems;
-    }
-  }
+  ) => _caregivingApi.listCaregiverPatientMedications(patientId);
 
   @override
   Future<MedicationItem> saveCaregiverPatientMedication(
     int patientId,
     MedicationItem medication,
-  ) async {
-    final clientMedicationId = medication.clientMedicationId ?? medication.id;
-    final existing = await _findLocalCaregiverMedication(
-      patientId,
-      id: medication.id,
-      clientMedicationId: clientMedicationId,
-    );
-    final localPending = await _localStore.upsertCaregiverPatientMedication(
-      patientId,
-      medication.copyWith(
-        syncStatus: SyncStatus.pending,
-        clientMedicationId: clientMedicationId,
-      ),
-    );
-    await _localStore.upsertSyncAction(
-      _medicationApi.syncActionForMedication(
-        operationType: isPersistedBackendId(medication.id)
-            ? SyncActionType.updateMedication
-            : SyncActionType.createMedication,
-        medication: localPending,
-        patientId: patientId,
-        actorRole: 'caregiver',
-      ),
-    );
-    try {
-      await synchronizePendingChanges();
-    } catch (_) {
-      // Conserva el cambio local del cuidador hasta recuperar conexion.
-    }
-    var result =
-        await _findLocalCaregiverMedication(
-          patientId,
-          id: localPending.id,
-          clientMedicationId: clientMedicationId,
-        ) ??
-        localPending;
-    if (isPersistedBackendId(result.id)) {
-      result = await _syncCaregiverPatientMedicationPhoto(
-        patientId: patientId,
-        saved: result,
-        medication: localPending,
-        existing: existing,
-      );
-      await _localStore.upsertCaregiverPatientMedication(patientId, result);
-    }
-    return result;
-  }
+  ) => _caregivingApi.saveCaregiverPatientMedication(patientId, medication);
 
   @override
   Future<void> deleteCaregiverPatientMedication(
     int patientId,
     String medicationId,
-  ) async {
-    final existing = await _findLocalCaregiverMedication(
-      patientId,
-      id: medicationId,
-    );
-    await _localStore.deleteCaregiverPatientMedication(patientId, medicationId);
-    if (existing == null) {
-      return;
-    }
-    await _localStore.upsertSyncAction(
-      _medicationApi.syncActionForMedication(
-        operationType: SyncActionType.deleteMedication,
-        medication: existing,
-        patientId: patientId,
-        actorRole: 'caregiver',
-      ),
-    );
-    unawaited(synchronizePendingChanges());
-  }
+  ) => _caregivingApi.deleteCaregiverPatientMedication(patientId, medicationId);
 
   @override
   Future<void> recordCaregiverPatientDoseEvent({
@@ -552,229 +419,73 @@ class ApiService implements UleamMedApi {
     required DateTime scheduledAt,
     required int sequenceNumber,
     DateTime? snoozedUntil,
-  }) async {
-    final recordedAt = DateTime.now();
-    final medication = await _findLocalCaregiverMedication(
-      patientId,
-      id: medicationId,
-    );
-    final confirmation = DoseConfirmation(
-      id: 'caregiver-$patientId-$medicationId-${scheduledAt.toUtc().millisecondsSinceEpoch}',
-      medicationId: medicationId,
-      medicationName: medication?.name ?? 'Medicamento',
-      status: status,
-      recordedAt: recordedAt,
-      scheduledAt: scheduledAt,
-      sequenceNumber: sequenceNumber,
-      snoozedUntil: snoozedUntil,
-    );
-    await _localStore.upsertDoseConfirmation(confirmation);
-    await _localStore.upsertSyncAction(
-      PendingSyncAction(
-        clientOperationId: confirmation.id,
-        operationType: SyncActionType.doseEvent,
-        createdAt: recordedAt,
-        payload: {
-          'client_event_id':
-              'caregiver-$medicationId-${scheduledAt.toUtc().millisecondsSinceEpoch}',
-          'scheduled_at': scheduledAt.toUtc().toIso8601String(),
-          'sequence_number': sequenceNumber,
-          'status': status.name,
-          'acted_at': recordedAt.toUtc().toIso8601String(),
-          'snoozed_until': snoozedUntil?.toUtc().toIso8601String(),
-        },
-        clientMedicationId: medication?.clientMedicationId ?? medicationId,
-        serverMedicationId: isPersistedBackendId(medicationId)
-            ? medicationId
-            : null,
-        patientId: patientId,
-        actorRole: 'caregiver',
-      ),
-    );
-    unawaited(synchronizePendingChanges());
-  }
+  }) => _caregivingApi.recordCaregiverPatientDoseEvent(
+    patientId: patientId,
+    medicationId: medicationId,
+    status: status,
+    scheduledAt: scheduledAt,
+    sequenceNumber: sequenceNumber,
+    snoozedUntil: snoozedUntil,
+  );
 
   @override
   Future<List<MedicationItem>> listCaregiverPatientDeletedMedications(
     int patientId,
-  ) async {
-    try {
-      final data = await _httpClient.getAuthorizedJson(
-        Uri.parse(
-          '${_httpClient.baseUrl}/api/v1/caregiving/patients/$patientId/medications/trash',
-        ),
-        fallback: 'No se pudo cargar la papelera',
-      );
-      return _httpClient.decodeList(data, MedicationItem.fromJson);
-    } catch (_) {
-      return const [];
-    }
-  }
+  ) => _caregivingApi.listCaregiverPatientDeletedMedications(patientId);
 
   @override
   Future<MedicationItem> restoreCaregiverPatientMedication(
     int patientId,
     String medicationId,
-  ) async {
-    final data = await _httpClient.postAuthorizedJson(
-      Uri.parse(
-        '${_httpClient.baseUrl}/api/v1/caregiving/patients/$patientId/medications/$medicationId/restore',
-      ),
-      fallback: 'No se pudo restaurar el medicamento',
-    );
-    return MedicationItem.fromJson(
-      data,
-    ).copyWith(syncStatus: SyncStatus.synced);
-  }
+  ) => _caregivingApi.restoreCaregiverPatientMedication(
+    patientId,
+    medicationId,
+  );
 
   @override
-  Future<List<Appointment>> listCaregiverPatientAppointments(
-    int patientId,
-  ) async {
-    final data = await _httpClient.getAuthorizedJson(
-      Uri.parse('${_httpClient.baseUrl}/api/v1/caregiving/patients/$patientId/appointments'),
-      fallback: 'No se pudieron cargar las consultas',
-    );
-    return _httpClient.decodeList(data, Appointment.fromBackendJson);
-  }
+  Future<List<Appointment>> listCaregiverPatientAppointments(int patientId) =>
+      _caregivingApi.listCaregiverPatientAppointments(patientId);
 
   @override
   Future<Appointment> saveCaregiverPatientAppointment(
     int patientId,
     Appointment appointment,
-  ) async {
-    final isBackendId = isPersistedBackendId(appointment.id);
-    final uri = isBackendId
-        ? Uri.parse(
-            '${_httpClient.baseUrl}/api/v1/caregiving/patients/$patientId/appointments/${appointment.id}',
-          )
-        : Uri.parse(
-            '${_httpClient.baseUrl}/api/v1/caregiving/patients/$patientId/appointments',
-          );
-    final body = _healthApi.appointmentPayload(appointment);
-    try {
-      final data = isBackendId
-          ? await _httpClient.patchAuthorizedJson(
-              uri,
-              body: body,
-              fallback: 'No se pudo actualizar la consulta',
-            )
-          : await _httpClient.postAuthorizedJson(
-              uri,
-              body: body,
-              fallback: 'No se pudo crear la consulta',
-            );
-      return Appointment.fromBackendJson(data);
-    } on ApiException catch (error) {
-      if (error.statusCode == 405 || error.statusCode == 404) {
-        throw ApiException(
-          'El backend no tiene habilitadas las consultas para cuidadores. '
-          'Despliega la rama Frontend-backend en ECS o usa el backend local en modo debug.',
-          error.statusCode,
-        );
-      }
-      rethrow;
-    }
-  }
+  ) => _caregivingApi.saveCaregiverPatientAppointment(patientId, appointment);
 
   @override
   Future<void> deleteCaregiverPatientAppointment(
     int patientId,
     String appointmentId,
-  ) async {
-    if (!isPersistedBackendId(appointmentId)) {
-      return;
-    }
-    await _httpClient.deleteAuthorized(
-      Uri.parse(
-        '${_httpClient.baseUrl}/api/v1/caregiving/patients/$patientId/appointments/$appointmentId',
-      ),
-      fallback: 'No se pudo eliminar la consulta',
-    );
-  }
+  ) => _caregivingApi.deleteCaregiverPatientAppointment(
+    patientId,
+    appointmentId,
+  );
 
   @override
   Future<List<HealthEntry>> listCaregiverPatientHealthEntries(
     int patientId,
-  ) async {
-    final data = await _httpClient.getAuthorizedJson(
-      Uri.parse(
-        '${_httpClient.baseUrl}/api/v1/caregiving/patients/$patientId/health-entries',
-      ),
-      fallback: 'No se pudieron cargar las condiciones',
-    );
-    return _httpClient.decodeList(data, HealthEntry.fromBackendJson);
-  }
+  ) => _caregivingApi.listCaregiverPatientHealthEntries(patientId);
 
   @override
   Future<HealthEntry> saveCaregiverPatientHealthEntry(
     int patientId,
     HealthEntry entry,
-  ) async {
-    final isBackendId = isPersistedBackendId(entry.id);
-    final uri = isBackendId
-        ? Uri.parse(
-            '${_httpClient.baseUrl}/api/v1/caregiving/patients/$patientId/health-entries/${entry.id}',
-          )
-        : Uri.parse(
-            '${_httpClient.baseUrl}/api/v1/caregiving/patients/$patientId/health-entries',
-          );
-    final body = _healthApi.healthEntryPayload(entry);
-    final data = isBackendId
-        ? await _httpClient.patchAuthorizedJson(
-            uri,
-            body: body,
-            fallback: 'No se pudo actualizar el registro',
-          )
-        : await _httpClient.postAuthorizedJson(
-            uri,
-            body: body,
-            fallback: 'No se pudo crear el registro',
-          );
-    return HealthEntry.fromBackendJson(data);
-  }
+  ) => _caregivingApi.saveCaregiverPatientHealthEntry(patientId, entry);
 
   @override
   Future<void> deleteCaregiverPatientHealthEntry(
     int patientId,
     String entryId,
-  ) async {
-    if (!isPersistedBackendId(entryId)) {
-      return;
-    }
-    await _httpClient.deleteAuthorized(
-      Uri.parse(
-        '${_httpClient.baseUrl}/api/v1/caregiving/patients/$patientId/health-entries/$entryId',
-      ),
-      fallback: 'No se pudo eliminar el registro',
-    );
-  }
+  ) => _caregivingApi.deleteCaregiverPatientHealthEntry(patientId, entryId);
 
   @override
-  Future<MedicalProfile> loadCaregiverPatientMedicalProfile(
-    int patientId,
-  ) async {
-    final data = await _httpClient.getAuthorizedJson(
-      Uri.parse(
-        '${_httpClient.baseUrl}/api/v1/caregiving/patients/$patientId/medical-profile',
-      ),
-      fallback: 'No se pudo cargar el perfil medico',
-    );
-    return MedicalProfile.fromBackendJson(data);
-  }
+  Future<MedicalProfile> loadCaregiverPatientMedicalProfile(int patientId) =>
+      _caregivingApi.loadCaregiverPatientMedicalProfile(patientId);
 
   @override
   Future<List<EmergencyContact>> listCaregiverPatientEmergencyContacts(
     int patientId,
-  ) async {
-    final data = await _httpClient.getAuthorizedJson(
-      Uri.parse(
-        '${_httpClient.baseUrl}/api/v1/caregiving/patients/$patientId/emergency-contacts',
-      ),
-      fallback: 'No se pudieron cargar los contactos',
-    );
-    return _httpClient.decodeList(data, EmergencyContact.fromBackendJson);
-  }
+  ) => _caregivingApi.listCaregiverPatientEmergencyContacts(patientId);
 
   @override
   Future<int> clearDoseHistory({DateTime? before}) =>
@@ -784,147 +495,15 @@ class ApiService implements UleamMedApi {
   Future<int> clearCaregiverPatientDoseHistory(
     int patientId, {
     DateTime? before,
-  }) async {
-    final uri = before == null
-        ? Uri.parse(
-            '${_httpClient.baseUrl}/api/v1/caregiving/patients/$patientId/medications/dose-events',
-          )
-        : Uri.parse(
-            '${_httpClient.baseUrl}/api/v1/caregiving/patients/$patientId/medications/dose-events?before=${Uri.encodeComponent(before.toUtc().toIso8601String())}',
-          );
-    final data = await _deleteAuthorizedJson(
-      uri,
-      fallback: 'No se pudo limpiar el historial',
-    );
-    return data['deleted'] as int? ?? 0;
-  }
-
-  Future<MedicationItem> _syncCaregiverPatientMedicationPhoto({
-    required int patientId,
-    required MedicationItem saved,
-    required MedicationItem medication,
-    MedicationItem? existing,
-  }) async {
-    final scope = 'caregiver/$patientId';
-    try {
-      final removedPhoto =
-          medication.photoPath.isEmpty &&
-          (existing?.photoAvailable == true || saved.photoAvailable);
-      if (removedPhoto) {
-        await _deleteCaregiverPatientMedicationPhoto(patientId, saved.id);
-        await _medicationApi.purgeMedicationPhotoCache(scope, saved.id);
-        final cleared = saved.copyWith(photoAvailable: false, photoPath: '');
-        await _localStore.upsertCaregiverPatientMedication(patientId, cleared);
-        return cleared;
-      }
-
-      final shouldUpload =
-          medication.photoPath.isNotEmpty &&
-          File(medication.photoPath).existsSync() &&
-          _medicationApi.shouldUploadMedicationPhoto(
-            localPhotoPath: medication.photoPath,
-            hadPhotoAvailable: existing?.photoAvailable ?? saved.photoAvailable,
-          );
-      if (!shouldUpload) {
-        await _localStore.upsertCaregiverPatientMedication(patientId, saved);
-        return saved;
-      }
-
-      final photoData = await _uploadCaregiverPatientMedicationPhoto(
-        patientId,
-        saved.id,
-        medication.photoPath,
-      );
-      final cachedFile = await _medicationApi.writeMedicationPhotoFile(
-        scope: scope,
-        medicationId: saved.id,
-        bytes: await File(medication.photoPath).readAsBytes(),
-      );
-      final synced = MedicationItem.fromJson(photoData).copyWith(
-        syncStatus: SyncStatus.synced,
-        photoPath: cachedFile.path,
-        photoAvailable: true,
-      );
-      await _localStore.upsertCaregiverPatientMedication(patientId, synced);
-      return synced;
-    } catch (_) {
-      final pending = saved.copyWith(
-        syncStatus: SyncStatus.pending,
-        photoPath: medication.photoPath,
-      );
-      await _localStore.upsertCaregiverPatientMedication(patientId, pending);
-      return pending;
-    }
-  }
-
-  Future<void> _deleteCaregiverPatientMedicationPhoto(
-    int patientId,
-    String medicationId,
-  ) async {
-    await _httpClient.deleteAuthorized(
-      Uri.parse(
-        '${_httpClient.baseUrl}/api/v1/caregiving/patients/$patientId/medications/$medicationId/photo',
-      ),
-      fallback: 'No se pudo eliminar la foto',
-    );
-  }
+  }) => _caregivingApi.clearCaregiverPatientDoseHistory(
+    patientId,
+    before: before,
+  );
 
   @override
   Future<List<DoseConfirmation>> listCaregiverPatientDoseEvents(
     int patientId,
-  ) async {
-    final data = await _httpClient.getAuthorizedList(
-      Uri.parse(
-        '${_httpClient.baseUrl}/api/v1/caregiving/patients/$patientId/medications/dose-events',
-      ),
-      fallback: 'No se pudo cargar el historial del paciente',
-    );
-    return data
-        .whereType<Map>()
-        .map(
-          (json) => DoseConfirmation.fromBackendEvent(
-            Map<String, dynamic>.from(json),
-          ),
-        )
-        .toList();
-  }
-
-  Future<Map<String, dynamic>> _uploadCaregiverPatientMedicationPhoto(
-    int patientId,
-    String medicationId,
-    String path,
-  ) async {
-    Future<http.StreamedResponse> send(String token) async {
-      final request = http.MultipartRequest(
-        'POST',
-        Uri.parse(
-          '${_httpClient.baseUrl}/api/v1/caregiving/patients/$patientId/medications/$medicationId/photo',
-        ),
-      );
-      request.headers['Authorization'] = 'Bearer $token';
-      request.files.add(
-        await http.MultipartFile.fromPath(
-          'photo',
-          path,
-          contentType: _medicationApi.photoContentType(path),
-        ),
-      );
-      return _httpClient.client.send(request);
-    }
-
-    final token = await _httpClient.ensureAccessToken();
-    var response = await send(token);
-    if (response.statusCode == 401 &&
-        await _httpClient.refreshAccessToken(staleToken: token)) {
-      response = await send(await _httpClient.ensureAccessToken());
-    }
-    final body = await response.stream.bytesToString();
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw ApiException('No se pudo subir la foto', response.statusCode);
-    }
-    final decoded = jsonDecode(body);
-    return Map<String, dynamic>.from(decoded as Map);
-  }
+  ) => _caregivingApi.listCaregiverPatientDoseEvents(patientId);
 
   @override
   Future<int> pendingSyncCount() => _syncApi.pendingSyncCount();
@@ -1009,7 +588,7 @@ class ApiService implements UleamMedApi {
             id: saved.id,
             clientMedicationId: action.clientMedicationId,
           )
-        : await _findLocalCaregiverMedication(
+        : await _caregivingApi.findLocalCaregiverMedication(
             caregiverPatientId,
             id: saved.id,
             clientMedicationId: action.clientMedicationId,
@@ -1045,7 +624,7 @@ class ApiService implements UleamMedApi {
       if (isPersistedBackendId(withLocalPhoto.id) &&
           (withLocalPhoto.photoPath.isNotEmpty ||
               existingBeforeSync?.photoAvailable == true)) {
-        final synced = await _syncCaregiverPatientMedicationPhoto(
+        final synced = await _caregivingApi.syncCaregiverPatientMedicationPhoto(
           patientId: caregiverPatientId,
           saved: withLocalPhoto,
           medication: withLocalPhoto,
@@ -1085,7 +664,7 @@ class ApiService implements UleamMedApi {
       }
       return;
     }
-    final current = await _findLocalCaregiverMedication(
+    final current = await _caregivingApi.findLocalCaregiverMedication(
       caregiverPatientId,
       id: action.clientMedicationId ?? '',
       clientMedicationId: action.clientMedicationId,
@@ -1113,58 +692,6 @@ class ApiService implements UleamMedApi {
       'emergencyContactPhone': profile.emergencyContactPhone,
       'shareWithCaregivers': profile.shareWithCaregivers,
     };
-  }
-
-  Future<Map<String, dynamic>> _deleteAuthorizedJson(
-    Uri uri, {
-    required String fallback,
-  }) {
-    return _httpClient.authorizedJson(
-      request: (token) => _httpClient.client.delete(
-        uri,
-        headers: _httpClient.authorizedHeaders(token),
-      ),
-      fallback: fallback,
-    );
-  }
-
-  Future<List<MedicationItem>> _cacheCaregiverPatientMedicationPhotos(
-    int patientId,
-    List<MedicationItem> medications,
-  ) async {
-    final scope = 'caregiver/$patientId';
-    final result = <MedicationItem>[];
-    for (final medication in medications) {
-      if (medication.photoPath.isNotEmpty &&
-          File(medication.photoPath).existsSync() &&
-          !_medicationApi.isManagedMedicationPhotoPath(medication.photoPath)) {
-        result.add(medication);
-        continue;
-      }
-      if (!medication.photoAvailable) {
-        await _medicationApi.purgeMedicationPhotoCache(scope, medication.id);
-        result.add(medication.copyWith(photoPath: ''));
-        continue;
-      }
-      try {
-        final bytes = await _httpClient.getAuthorizedBytes(
-          Uri.parse(
-            '${_httpClient.baseUrl}/api/v1/caregiving/patients/$patientId/medications/${medication.id}/photo',
-          ),
-        );
-        final file = await _medicationApi.writeMedicationPhotoFile(
-          scope: scope,
-          medicationId: medication.id,
-          bytes: bytes,
-        );
-        result.add(medication.copyWith(photoPath: file.path));
-      } catch (_) {
-        result.add(
-          medication.copyWith(photoPath: '', photoAvailable: false),
-        );
-      }
-    }
-    return result;
   }
 
   Future<void> _clearPhotoCache(String userId) async {
