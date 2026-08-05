@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from backend.core.config import settings
 from backend.core.database import get_db
 from backend.core.security import create_access_token, decode_token
 from backend.schemas.user import (
@@ -14,11 +15,6 @@ from backend.schemas.user import (
     UserCreate,
     UserRead,
 )
-from backend.services.email_service import (
-    send_password_reset_email,
-    send_password_updated_email,
-    send_welcome_email,
-)
 from backend.services.auth_service import (
     authenticate_user,
     create_password_reset_code,
@@ -28,8 +24,11 @@ from backend.services.auth_service import (
     get_user_by_id,
     reset_password_with_code,
 )
-from backend.core.config import settings
-
+from backend.services.email_service import (
+    send_password_reset_email,
+    send_password_updated_email,
+    send_welcome_email,
+)
 
 # Todas las rutas de este archivo quedan bajo /api/v1/auth.
 router = APIRouter(prefix="/auth", tags=["auth"])

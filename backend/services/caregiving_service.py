@@ -1,8 +1,8 @@
-from datetime import UTC, datetime, timedelta
 import hashlib
 import hmac
 import secrets
 import string
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -14,23 +14,22 @@ from backend.models.caregiver_invitation import CaregiverInvitation
 from backend.models.caregiver_join_attempt import CaregiverJoinAttempt
 from backend.models.patient_caregiver_link import PatientCaregiverLink
 from backend.models.user import User
-from backend.schemas.caregiving import (
-    CaregiverInvitationRead,
-    CaregiverLinkRead,
-    CaregiverPatientRead,
-)
 from backend.schemas.appointment import (
     AppointmentCreate,
     AppointmentRead,
     AppointmentUpdate,
 )
+from backend.schemas.caregiving import (
+    CaregiverInvitationRead,
+    CaregiverLinkRead,
+    CaregiverPatientRead,
+)
+from backend.schemas.emergency_contact import EmergencyContactRead
 from backend.schemas.health_entry import (
     HealthEntryCreate,
     HealthEntryRead,
     HealthEntryUpdate,
 )
-from backend.schemas.emergency_contact import EmergencyContactRead
-from backend.schemas.user_medical_profile import UserMedicalProfileRead
 from backend.schemas.medication import (
     MedicationCreate,
     MedicationDoseEventCreate,
@@ -40,6 +39,7 @@ from backend.schemas.medication import (
     MedicationSyncResponse,
     MedicationUpdate,
 )
+from backend.schemas.user_medical_profile import UserMedicalProfileRead
 from backend.services.appointment_service import (
     create_user_appointment,
     delete_user_appointment,
@@ -55,24 +55,23 @@ from backend.services.health_entry_service import (
     list_user_health_entries,
     update_user_health_entry,
 )
-from backend.services.user_medical_profile_service import (
-    get_user_medical_profile,
-    patient_shares_health_data,
-)
 from backend.services.medication_service import (
+    clear_user_dose_events,
     create_user_medication,
     delete_user_medication,
     get_user_medication_model,
     list_deleted_user_medications,
     list_dose_events,
     list_user_medications,
-    clear_user_dose_events,
     record_dose_event,
     restore_user_medication,
     sync_user_medication_actions,
     update_user_medication,
 )
-
+from backend.services.user_medical_profile_service import (
+    get_user_medical_profile,
+    patient_shares_health_data,
+)
 
 _CODE_ALPHABET = string.ascii_uppercase.replace("I", "").replace("O", "") + "23456789"
 

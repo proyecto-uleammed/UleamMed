@@ -1,14 +1,17 @@
-from datetime import UTC, date, datetime, time
+import unicodedata
+from datetime import UTC, datetime, time
 from decimal import Decimal
 from difflib import SequenceMatcher
-import unicodedata
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from backend.models.medication import Medication
 from backend.models.medication_dose_event import MedicationDoseEvent
-from backend.models.medication_schedule import MedicationSchedule, MedicationScheduleTime
+from backend.models.medication_schedule import (
+    MedicationSchedule,
+    MedicationScheduleTime,
+)
 from backend.models.medication_sync_conflict import MedicationSyncConflict
 from backend.models.medication_sync_operation import MedicationSyncOperation
 from backend.schemas.medication import (
@@ -807,7 +810,7 @@ def _legacy_schedule(value: str | None) -> MedicationSchedulePayload:
         mode=MedicationScheduleMode.fixed_times,
         times=[value],
         weekdays=[1, 2, 3, 4, 5, 6, 7],
-        start_date=date.today(),
+        start_date=datetime.now(UTC).date(),
     )
 
 

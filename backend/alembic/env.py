@@ -1,28 +1,28 @@
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
-
 from alembic import context
+from sqlalchemy import engine_from_config, pool
+
 from backend.core.config import settings
 from backend.core.database import Base
-from backend.models import emergency_contact as emergency_contact_model
-from backend.models import health_entry as health_entry_model
-from backend.models import user_medical_profile as user_medical_profile_model
 from backend.models import appointment as appointment_model
 from backend.models import caregiver as caregiver_model
 from backend.models import caregiver_invitation as caregiver_invitation_model
 from backend.models import caregiver_join_attempt as caregiver_join_attempt_model
 from backend.models import caregiver_older_adult as caregiver_older_adult_model
+from backend.models import emergency_contact as emergency_contact_model
 from backend.models import exam_detail as exam_detail_model
 from backend.models import exam_parameter as exam_parameter_model
 from backend.models import fcm_token as fcm_token_model
 from backend.models import guardian as guardian_model
+from backend.models import health_entry as health_entry_model
 from backend.models import medical_exam as medical_exam_model
 from backend.models import medical_history as medical_history_model
 from backend.models import medical_profile as medical_profile_model
 from backend.models import medication as medication_model
-from backend.models import medication_adherence_record as medication_adherence_record_model
+from backend.models import (
+    medication_adherence_record as medication_adherence_record_model,
+)
 from backend.models import medication_catalog as medication_catalog_model
 from backend.models import medication_dose_event as medication_dose_event_model
 from backend.models import medication_schedule as medication_schedule_model
@@ -36,6 +36,7 @@ from backend.models import patient_caregiver_link as patient_caregiver_link_mode
 from backend.models import treatment as treatment_model
 from backend.models import treatment_medication as treatment_medication_model
 from backend.models import user as user_model
+from backend.models import user_medical_profile as user_medical_profile_model
 
 _MODEL_MODULES = (
     appointment_model,
@@ -93,9 +94,7 @@ LEGACY_SPANISH_TABLES = {
 
 def include_object(object_, name, type_, reflected, compare_to):
     """Avoid accidental drops while legacy Spanish tables are being phased out."""
-    if type_ == "table" and reflected and compare_to is None and name in LEGACY_SPANISH_TABLES:
-        return False
-    return True
+    return not (type_ == "table" and reflected and compare_to is None and name in LEGACY_SPANISH_TABLES)
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

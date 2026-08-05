@@ -4,7 +4,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.api.v1.router import api_router
 from backend.core.config import settings
 
-
 # Crea la aplicacion principal de FastAPI.
 # Desde aqui se configura el nombre, la version y la documentacion automatica.
 app = FastAPI(

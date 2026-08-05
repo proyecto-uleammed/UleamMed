@@ -8,13 +8,16 @@ from fastapi import APIRouter, Depends
 
 from backend.api.deps import get_current_user
 from backend.models.user import User
-from backend.schemas.device import DeviceDeleteResponse, DeviceTokenCreate, DeviceTokenRead
+from backend.schemas.device import (
+    DeviceDeleteResponse,
+    DeviceTokenCreate,
+    DeviceTokenRead,
+)
 from backend.services.notification_service import (
     delete_device_token,
     list_user_tokens,
     register_device_token,
 )
-
 
 # Todas las rutas de este archivo quedan bajo /api/v1/devices.
 router = APIRouter(prefix="/devices", tags=["devices"])

@@ -1,6 +1,15 @@
+import logging
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Response,
+    UploadFile,
+    status,
+)
 from sqlalchemy.orm import Session
 
 from backend.api.deps import get_current_patient
@@ -10,32 +19,14 @@ from backend.schemas.medication import (
     MedicationCreate,
     MedicationDoseEventCreate,
     MedicationDoseEventRead,
-    MedicationSyncConflictListResponse,
-    MedicationSyncConflictResolve,
     MedicationListResponse,
     MedicationMarkResponse,
     MedicationRead,
+    MedicationSyncConflictListResponse,
+    MedicationSyncConflictResolve,
     MedicationSyncRequest,
     MedicationSyncResponse,
     MedicationUpdate,
-)
-from backend.services.medication_service import (
-    count_taken_medications,
-    create_user_medication,
-    delete_user_medication,
-    get_user_medication_model,
-    list_deleted_user_medications,
-    list_dose_events,
-    list_user_medications,
-    list_user_medication_sync_conflicts,
-    clear_user_dose_events,
-    mark_user_medication_taken,
-    medication_to_read,
-    record_dose_event,
-    resolve_user_medication_sync_conflict,
-    restore_user_medication,
-    sync_user_medication_actions,
-    update_user_medication,
 )
 from backend.services.medication_photo_service import (
     MAX_PHOTO_BYTES,
@@ -45,9 +36,27 @@ from backend.services.medication_photo_service import (
     download_medication_photo,
     upload_medication_photo,
 )
-
+from backend.services.medication_service import (
+    clear_user_dose_events,
+    count_taken_medications,
+    create_user_medication,
+    delete_user_medication,
+    get_user_medication_model,
+    list_deleted_user_medications,
+    list_dose_events,
+    list_user_medication_sync_conflicts,
+    list_user_medications,
+    mark_user_medication_taken,
+    medication_to_read,
+    record_dose_event,
+    resolve_user_medication_sync_conflict,
+    restore_user_medication,
+    sync_user_medication_actions,
+    update_user_medication,
+)
 
 router = APIRouter(prefix="/medications", tags=["medications"])
+logger = logging.getLogger(__name__)
 
 
 @router.get("", response_model=MedicationListResponse)
@@ -193,7 +202,10 @@ def delete_my_medication(
         try:
             delete_medication_photo(medication.photo_path)
         except Exception:
-            pass
+            logger.exception(
+                "No se pudo borrar la foto del medicamento %s",
+                medication_id,
+            )
     removed = delete_user_medication(db, current_user.id, medication_id)
     if not removed:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Medicamento no encontrado")
@@ -228,7 +240,10 @@ def upload_my_medication_photo(
     try:
         delete_medication_photo(previous_path)
     except Exception:
-        pass
+        logger.exception(
+            "No se pudo borrar la foto anterior del medicamento %s",
+            medication_id,
+        )
     return medication_to_read(db, current_user.id, medication.id)
 
 

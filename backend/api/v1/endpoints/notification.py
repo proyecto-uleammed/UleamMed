@@ -18,7 +18,6 @@ from backend.services.notification_service import (
     send_demo_notification,
 )
 
-
 # Todas las rutas de este archivo quedan bajo /api/v1/notifications.
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 

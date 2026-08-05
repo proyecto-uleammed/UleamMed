@@ -1,10 +1,9 @@
-from email.message import EmailMessage
 import logging
 import smtplib
+from email.message import EmailMessage
 
 from backend.core.config import settings
 from backend.models.user import User
-
 
 logger = logging.getLogger(__name__)
 
