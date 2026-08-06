@@ -123,6 +123,49 @@ jobs:
             --cluster "${ECS_CLUSTER}" \
             --services "${ECS_SERVICE}"
 
+      - name: Diagnostico si el despliegue falla
+        if: failure()
+        run: |
+          echo "::group::Eventos recientes del servicio ECS"
+          aws ecs describe-services \
+            --cluster "${ECS_CLUSTER}" \
+            --services "${ECS_SERVICE}" \
+            --query 'services[0].events[:15].[createdAt,message]' \
+            --output table
+          echo "::endgroup::"
+
+          echo "::group::Motivo de parada de la tarea mas reciente"
+          TASK_ARN="$(aws ecs list-tasks \
+            --cluster "${ECS_CLUSTER}" \
+            --service-name "${ECS_SERVICE}" \
+            --desired-status STOPPED \
+            --query 'taskArns[0]' --output text)"
+          if [ -n "${TASK_ARN}" ] && [ "${TASK_ARN}" != "None" ]; then
+            aws ecs describe-tasks \
+              --cluster "${ECS_CLUSTER}" \
+              --tasks "${TASK_ARN}" \
+              --query 'tasks[0].{stoppedReason:stoppedReason,containers:containers[*].{reason:reason,exitCode:exitCode}}'
+          else
+            echo "No se encontro ninguna tarea detenida todavia."
+          fi
+          echo "::endgroup::"
+
+          echo "::group::Ultimas lineas de log del contenedor"
+          STREAM="$(aws logs describe-log-streams \
+            --log-group-name "/ecs/uleammed-backend-demo" \
+            --order-by LastEventTime --descending --limit 1 \
+            --query 'logStreams[0].logStreamName' --output text 2>/dev/null || true)"
+          if [ -n "${STREAM}" ] && [ "${STREAM}" != "None" ]; then
+            aws logs get-log-events \
+              --log-group-name "/ecs/uleammed-backend-demo" \
+              --log-stream-name "${STREAM}" \
+              --limit 50 \
+              --query 'events[*].message' --output text
+          else
+            echo "No se encontro ningun log stream todavia."
+          fi
+          echo "::endgroup::"
+
       - name: Publicar resumen
         run: |
           echo "Despliegue completado en ECS." >> "$GITHUB_STEP_SUMMARY"
