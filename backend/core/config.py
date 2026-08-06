@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -18,6 +18,24 @@ class Settings(BaseSettings):
         default="postgresql+psycopg://user:pass@localhost:5432/uleammed",
         description="Cadena de conexion de PostgreSQL utilizada por SQLAlchemy.",
     )
+
+    @field_validator("DATABASE_URL")
+    @classmethod
+    def _usar_driver_psycopg3(cls, value: str) -> str:
+        """Normaliza el esquema para usar el driver psycopg (v3).
+
+        Supabase y otros proveedores entregan el connection string como
+        `postgresql://...` o el esquema legado `postgres://...`. SQLAlchemy
+        interpreta ambos con el driver psycopg2 por defecto, que este
+        proyecto no instala (usa `psycopg[binary]`, la version 3). Sin esta
+        normalizacion, el backend crashea al arrancar con
+        "ModuleNotFoundError: No module named 'psycopg2'".
+        """
+        if value.startswith("postgresql://"):
+            return value.replace("postgresql://", "postgresql+psycopg://", 1)
+        if value.startswith("postgres://"):
+            return value.replace("postgres://", "postgresql+psycopg://", 1)
+        return value
 
     # Valores usados para firmar y configurar los tokens JWT.
     SECRET_KEY: str = Field(
