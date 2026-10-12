@@ -31,7 +31,7 @@ class ApiHttpClient {
   /// fotos, etc.). Si nadie lo registra, se hace un clear minimo de tokens.
   Future<void> Function()? onSessionExpired;
 
-  static const _productionBaseUrl = 'https://d18ajxqltdcc9k.cloudfront.net';
+  static const _productionBaseUrl = 'https://d1xgof8mj2jcgx.cloudfront.net';
 
   static String get _defaultBaseUrl {
     const configuredUrl = String.fromEnvironment('ULEAMMED_API_URL');

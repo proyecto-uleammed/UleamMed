@@ -97,13 +97,13 @@ Requieren internet o endpoints futuros:
 
 Por defecto:
 
-- Produccion: `https://d18ajxqltdcc9k.cloudfront.net`
+- Produccion: `https://d1xgof8mj2jcgx.cloudfront.net`
 - Modo debug sin `ULEAMMED_API_URL`: backend local (`127.0.0.1:8000` o `10.0.2.2:8000`)
 
 Tambien se puede configurar manualmente:
 
 ```bash
-flutter run --dart-define=ULEAMMED_API_URL=https://d18ajxqltdcc9k.cloudfront.net
+flutter run --dart-define=ULEAMMED_API_URL=https://d1xgof8mj2jcgx.cloudfront.net
 ```
 
 Para desarrollo local (ejemplos):
