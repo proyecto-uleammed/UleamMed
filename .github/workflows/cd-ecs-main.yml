@@ -26,6 +26,13 @@ env:
   SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
   SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
   SECRET_KEY: ${{ secrets.SECRET_KEY }}
+  SMTP_HOST: ${{ vars.SMTP_HOST }}
+  SMTP_PORT: ${{ vars.SMTP_PORT }}
+  SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+  SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+  SMTP_FROM_EMAIL: ${{ vars.SMTP_FROM_EMAIL }}
+  SMTP_FROM_NAME: ${{ vars.SMTP_FROM_NAME }}
+  SMTP_USE_TLS: ${{ vars.SMTP_USE_TLS }}
 
 jobs:
   desplegar_ecs:
@@ -47,6 +54,13 @@ jobs:
           test -n "${ECS_SERVICE}" || (echo "Falta variable AWS_ECS_SERVICE." && exit 1)
           test -n "${SUPABASE_DATABASE_URL}" || (echo "Falta secreto SUPABASE_DATABASE_URL." && exit 1)
           test -n "${SECRET_KEY}" || (echo "Falta secreto SECRET_KEY." && exit 1)
+          test -n "${SMTP_HOST}" || (echo "Falta variable SMTP_HOST." && exit 1)
+          test -n "${SMTP_PORT}" || (echo "Falta variable SMTP_PORT." && exit 1)
+          test -n "${SMTP_USERNAME}" || (echo "Falta secreto SMTP_USERNAME." && exit 1)
+          test -n "${SMTP_PASSWORD}" || (echo "Falta secreto SMTP_PASSWORD." && exit 1)
+          test -n "${SMTP_FROM_EMAIL}" || (echo "Falta variable SMTP_FROM_EMAIL." && exit 1)
+          test -n "${SMTP_FROM_NAME}" || (echo "Falta variable SMTP_FROM_NAME." && exit 1)
+          test -n "${SMTP_USE_TLS}" || (echo "Falta variable SMTP_USE_TLS." && exit 1)
 
       - name: Configurar credenciales AWS por OIDC
         uses: aws-actions/configure-aws-credentials@v4
@@ -54,11 +68,12 @@ jobs:
           role-to-assume: ${{ env.ROL_IAM_OIDC }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Registrar task definition ECS para Supabase
+      - name: Registrar task definition ECS para Supabase y SMTP
         id: registrar_taskdef
         run: |
           ACCOUNT_ID="$(aws sts get-caller-identity --query 'Account' --output text)"
           IMAGEN="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${REPOSITORIO_ECR}:latest"
+          SMTP_PASSWORD_NORMALIZED="$(printf '%s' "${SMTP_PASSWORD}" | tr -d '[:space:]')"
 
           TASKDEF_ARN_ACTUAL="$(aws ecs describe-services --cluster "${ECS_CLUSTER}" --services "${ECS_SERVICE}" --query 'services[0].taskDefinition' --output text)"
           aws ecs describe-task-definition --task-definition "${TASKDEF_ARN_ACTUAL}" --query 'taskDefinition' > taskdef_base.json
@@ -71,6 +86,13 @@ jobs:
             --arg secret_key "${SECRET_KEY}" \
             --arg supabase_url "${SUPABASE_URL}" \
             --arg supabase_service_role_key "${SUPABASE_SERVICE_ROLE_KEY}" \
+            --arg smtp_host "${SMTP_HOST}" \
+            --arg smtp_port "${SMTP_PORT}" \
+            --arg smtp_username "${SMTP_USERNAME}" \
+            --arg smtp_password "${SMTP_PASSWORD_NORMALIZED}" \
+            --arg smtp_from_email "${SMTP_FROM_EMAIL}" \
+            --arg smtp_from_name "${SMTP_FROM_NAME}" \
+            --arg smtp_use_tls "${SMTP_USE_TLS}" \
             --arg aws_region "${AWS_REGION}" \
             --arg comando_backend "${COMANDO_BACKEND}" \
             '
@@ -88,7 +110,14 @@ jobs:
                       { name: "DATABASE_URL", value: $database_url },
                       { name: "SECRET_KEY", value: $secret_key },
                       { name: "CORS_ORIGINS", value: "*" },
-                      { name: "ENVIRONMENT", value: "production" }
+                      { name: "ENVIRONMENT", value: "production" },
+                      { name: "SMTP_HOST", value: $smtp_host },
+                      { name: "SMTP_PORT", value: $smtp_port },
+                      { name: "SMTP_USERNAME", value: $smtp_username },
+                      { name: "SMTP_PASSWORD", value: $smtp_password },
+                      { name: "SMTP_FROM_EMAIL", value: $smtp_from_email },
+                      { name: "SMTP_FROM_NAME", value: $smtp_from_name },
+                      { name: "SMTP_USE_TLS", value: $smtp_use_tls }
                     ]
                     + (if ($supabase_url | length) > 0 then [{ name: "SUPABASE_URL", value: $supabase_url }] else [] end)
                     + (if ($supabase_service_role_key | length) > 0 then [{ name: "SUPABASE_SERVICE_ROLE_KEY", value: $supabase_service_role_key }] else [] end)
